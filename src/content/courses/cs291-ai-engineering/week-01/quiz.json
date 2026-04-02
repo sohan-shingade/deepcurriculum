@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 1: LLM Foundations",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the transformer's multi-head attention mechanism with d_model = 512 and h = 8 heads, what is the dimensionality d_k of each head's query and key projections?",
+      "options": [
+        "512 — each head uses the full model dimension",
+        "64 — d_model is divided equally among heads (512 / 8 = 64)",
+        "8 — one dimension per head",
+        "4096 — d_model × h for each head"
+      ],
+      "correct": 1,
+      "explanation": "In multi-head attention, the model dimension is split equally among heads: d_k = d_model / h = 512 / 8 = 64. Each head projects into a lower-dimensional subspace, computes attention independently, and the results are concatenated back to d_model dimensions. This is computationally equivalent to a single attention with d_k = d_model but allows different heads to learn different types of attention patterns (syntactic, semantic, positional, etc.)."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Hoffmann et al. (2022) — the Chinchilla paper — demonstrated that for a fixed compute budget, most existing LLMs were:",
+      "options": [
+        "Over-trained: they used too many training tokens relative to their parameter count",
+        "Under-trained: they had too many parameters and not enough training tokens",
+        "Optimally trained: the existing balance of parameters and data was close to ideal",
+        "Under-parameterized: they needed more parameters for the available data"
+      ],
+      "correct": 1,
+      "explanation": "The Chinchilla paper showed that compute-optimal training scales parameters and training tokens roughly equally (both proportional to the square root of compute). Before Chinchilla, models like Gopher (280B params, 300B tokens) were dramatically undertrained — they had far more parameters than their training data justified. Chinchilla (70B params, 1.4T tokens) outperformed Gopher despite being 4x smaller, because it was trained on 4.7x more data. The practical implication: don't just make models bigger — train them longer on more data."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why do LLMs hallucinate (generate factually incorrect information)?",
+      "options": [
+        "Insufficient training data causes the model to make random guesses",
+        "The model is fundamentally a statistical pattern matcher that samples from learned probability distributions — it has no mechanism to verify factual accuracy and generates plausible-sounding completions regardless of truth",
+        "Hallucination is a bug that will be fixed in future model versions through better fine-tuning",
+        "The model intentionally generates false information to test the user's critical thinking"
+      ],
+      "correct": 1,
+      "explanation": "Hallucination is an inherent property of autoregressive language models, not a bug. The model generates each token by sampling from p(x_t | x_{<t}) — a probability distribution learned from training data. This distribution captures statistical patterns, not truth values. When the model generates 'The capital of Australia is Sydney,' it's producing a statistically plausible completion based on the frequent co-occurrence of 'Australia' and 'Sydney' in training data. The model has no fact-checking mechanism, no grounded world model, and no way to distinguish between a confident correct answer and a confident incorrect one. Mitigation requires external mechanisms: retrieval (RAG), citations, structured verification."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Setting temperature T = 0.1 when sampling from an LLM will:",
+      "options": [
+        "Make the output completely random, sampling uniformly from the vocabulary",
+        "Sharpen the probability distribution dramatically, making the model almost always choose the highest-probability token (near-greedy)",
+        "Have no effect because temperature only applies during training",
+        "Increase the diversity and creativity of the output"
+      ],
+      "correct": 1,
+      "explanation": "Temperature scales logits before softmax: p_i = exp(z_i / T) / Σ exp(z_j / T). When T is very small (like 0.1), it amplifies differences between logits. If the top logit is 5.0 and the second is 4.5, at T=1.0 their probability ratio is exp(0.5) ≈ 1.65. At T=0.1, the ratio is exp(5.0) ≈ 148 — the top token gets almost all the probability mass. This produces deterministic, predictable output. T > 1 does the opposite: it flattens the distribution toward uniform, increasing randomness. For most production tasks (classification, extraction, structured output), low temperature (0-0.3) is preferred."
+    },
+    {
+      "id": "q5",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does this code print?\n\n```python\nimport numpy as np\nlogits = np.array([2.0, 1.0, 0.0])\nT = 0.5\nscaled = logits / T\nprobs = np.exp(scaled) / np.exp(scaled).sum()\nprint(f'{probs[0]:.3f}')\n```",
+      "options": [
+        "0.333",
+        "0.506",
+        "0.867",
+        "0.665"
+      ],
+      "correct": 2,
+      "explanation": "Let's trace through step by step. scaled = [2.0/0.5, 1.0/0.5, 0.0/0.5] = [4.0, 2.0, 0.0]. exp(scaled) = [e^4, e^2, e^0] = [54.598, 7.389, 1.0]. Sum = 54.598 + 7.389 + 1.0 = 62.987. probs[0] = 54.598 / 62.987 = 0.867. The low temperature (0.5) sharpened the distribution: at T=1.0, the same logits would give probs ≈ [0.506, 0.307, 0.187]. At T=0.5, the top token jumps from 50.6% to 86.7% probability. This demonstrates why low temperature produces more deterministic outputs — it amplifies the gap between high and low probability tokens."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a production system, you're seeing 429 (rate limit) errors from your LLM API. Which retry strategy is most appropriate?",
+      "options": [
+        "Retry immediately with no delay — speed matters most",
+        "Wait exactly 60 seconds between each retry — fixed backoff",
+        "Exponential backoff with jitter — increasing delays with randomness to avoid thundering herd",
+        "Switch to a different API provider after the first 429 error"
+      ],
+      "correct": 2,
+      "explanation": "Exponential backoff with jitter is the correct strategy for rate limit errors. Immediate retries (option A) will hit the rate limit again instantly, wasting quota and potentially getting you throttled harder. Fixed delays (option B) work but are inefficient — too short and you keep hitting limits, too long and you waste time. Exponential backoff (base_delay × 2^attempt) gives the service time to recover, and jitter (randomizing within the delay window) prevents the 'thundering herd' problem where many clients retry at exactly the same time. Switching providers (option D) is a last resort, not a retry strategy — and a single 429 doesn't mean the service is down."
+    },
+    {
+      "id": "q7",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does this code print?\n\n```python\ndef bpe_step(tokens, pair):\n    result = []\n    i = 0\n    while i < len(tokens):\n        if i < len(tokens) - 1 and tokens[i] == pair[0] and tokens[i+1] == pair[1]:\n            result.append(pair[0] + pair[1])\n            i += 2\n        else:\n            result.append(tokens[i])\n            i += 1\n    return result\n\ntokens = ['l', 'o', 'w', 'e', 'r']\ntokens = bpe_step(tokens, ('l', 'o'))\ntokens = bpe_step(tokens, ('lo', 'w'))\nprint(tokens)\n```",
+      "options": [
+        "['l', 'o', 'w', 'e', 'r']",
+        "['lo', 'w', 'e', 'r']",
+        "['low', 'e', 'r']",
+        "['lower']"
+      ],
+      "correct": 2,
+      "explanation": "Let's trace through step by step. Initial tokens: ['l', 'o', 'w', 'e', 'r']. After bpe_step with pair ('l', 'o'): we scan left to right. At i=0, tokens[0]='l' and tokens[1]='o' match the pair, so we append 'lo' and skip to i=2. Then tokens[2]='w', tokens[3]='e', tokens[4]='r' are appended individually. Result: ['lo', 'w', 'e', 'r']. After bpe_step with pair ('lo', 'w'): at i=0, tokens[0]='lo' and tokens[1]='w' match the pair, so we append 'low' and skip to i=2. Then 'e' and 'r' are appended. Final result: ['low', 'e', 'r']. This demonstrates how BPE builds up subword tokens incrementally — each merge combines two adjacent tokens into one."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You're estimating costs for a RAG application. Each request sends 2,000 input tokens (system prompt + retrieved documents) and receives 300 output tokens. At 5,000 requests per day using a model that costs $3/1M input tokens and $15/1M output tokens, what is the approximate monthly cost?",
+      "options": [
+        "$90 input + $67.50 output = $157.50/month",
+        "$900 input + $675 output = $1,575/month",
+        "$9,000 input + $6,750 output = $15,750/month",
+        "$300 input + $225 output = $525/month"
+      ],
+      "correct": 1,
+      "explanation": "Monthly requests: 5,000 × 30 = 150,000. Total input tokens: 150,000 × 2,000 = 300,000,000 = 300M. Input cost: (300M / 1M) × $3 = $900. Total output tokens: 150,000 × 300 = 45,000,000 = 45M. Output cost: (45M / 1M) × $15 = $675. Total: $900 + $675 = $1,575/month. Notice that output costs $675 despite being only 45M tokens, while input costs $900 for 300M tokens — output is 5× more expensive per token. This is why controlling output length (e.g., asking for concise responses, setting max_tokens appropriately) is one of the most effective cost optimization strategies."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A circuit breaker is in the 'half_open' state. A test request is sent and succeeds. What happens next?",
+      "options": [
+        "The circuit stays half_open and waits for more successful requests before closing",
+        "The circuit transitions to 'closed' (normal operation), resetting the failure count",
+        "The circuit transitions to 'open' because half_open requests are always treated as failures",
+        "The circuit remains half_open for the remainder of the recovery timeout"
+      ],
+      "correct": 1,
+      "explanation": "The half_open state exists specifically to test whether the downstream service has recovered. When a single test request succeeds, it's evidence that the service is healthy again, so the circuit breaker transitions back to 'closed' and resets its failure count. This is the recovery path: open → (timeout) → half_open → (success) → closed. If the test request had failed, the circuit would return to 'open' for another timeout period. This provides a balance between protecting against known failures and detecting recovery without flooding the recovering service with traffic."
+    },
+    {
+      "id": "q10",
+      "type": "fill_code",
+      "points": 10,
+      "question": "Complete the line to compute the softmax probability of the i-th token given logits z and temperature T.\n\n```python\nimport numpy as np\n\ndef token_probability(z: np.ndarray, i: int, T: float) -> float:\n    \"\"\"Compute softmax probability of token i with temperature T.\"\"\"\n    scaled = z / T\n    scaled -= scaled.max()  # numerical stability\n    exp_scaled = np.exp(scaled)\n    return _______________\n```",
+      "options": [
+        "exp_scaled[i]",
+        "exp_scaled[i] / exp_scaled.sum()",
+        "exp_scaled[i] / len(z)",
+        "np.log(exp_scaled[i]) / exp_scaled.sum()"
+      ],
+      "correct": 1,
+      "explanation": "Softmax converts logits to a probability distribution: p_i = exp(z_i) / Σ_j exp(z_j). After temperature scaling (z/T) and the stability shift (subtracting max), we compute exp of each scaled logit. The probability of token i is its exponential divided by the sum of all exponentials: exp_scaled[i] / exp_scaled.sum(). Option A (just exp_scaled[i]) doesn't normalize — the values won't sum to 1. Option C divides by the vocabulary size (uniform distribution, ignoring the logits entirely). Option D takes a log, which would undo the exp and produce log-probabilities, not probabilities."
+    }
+  ]
+}

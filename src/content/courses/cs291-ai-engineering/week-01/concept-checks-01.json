@@ -1,0 +1,52 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In scaled dot-product attention, why do we divide by √d_k before applying softmax?",
+      "options": [
+        "To normalize the output vectors to unit length",
+        "To prevent dot products from growing large in magnitude, which would push softmax into saturated regions with vanishing gradients",
+        "To make the attention weights sum to 1",
+        "To reduce the computational cost from O(n²) to O(n log n)"
+      ],
+      "correct": 1,
+      "explanation": "When the dimension d_k is large, the dot product q·k = Σ(q_i * k_i) has variance proportional to d_k (assuming components have unit variance). Large dot products push the softmax into regions where the gradient is nearly zero, making training unstable. Dividing by √d_k normalizes the variance of the dot products back to 1, keeping the softmax in a well-behaved range. The softmax already ensures weights sum to 1 (option C) — that's a property of softmax itself, not of the scaling. Option D is wrong because the scaling does not change the asymptotic complexity."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A language model is trained with cross-entropy loss on next-token prediction. If the vocabulary size is 50,000 and the model assigns equal probability to all tokens at every position, what is the per-token loss?",
+      "options": [
+        "ln(50000) ≈ 10.82",
+        "log₂(50000) ≈ 15.61",
+        "1 / 50000 ≈ 0.00002",
+        "50000"
+      ],
+      "correct": 0,
+      "explanation": "Cross-entropy loss is L = -log p(correct token). If the model assigns equal probability 1/|V| to every token, then p(correct) = 1/50000, and the loss is -ln(1/50000) = ln(50000) ≈ 10.82 nats. This is the worst a model can do while still being a valid probability distribution — it has learned nothing and is maximally uncertain. As training progresses, this loss decreases. A well-trained LLM achieves loss around 1.5-2.5 nats on held-out text. Option B uses log base 2 (bits), but standard cross-entropy loss uses the natural logarithm."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In BPE tokenization, the word 'unhappiness' might be tokenized as ['un', 'happiness'] or ['un', 'happ', 'iness']. What determines which segmentation is used?",
+      "options": [
+        "The segmentation that produces the fewest tokens is always chosen",
+        "The segmentation is random to add regularization",
+        "The merge rules learned during training are applied greedily in the order they were learned — the specific merges depend on the frequency statistics of the training corpus",
+        "A neural network scores all possible segmentations and picks the best one"
+      ],
+      "correct": 2,
+      "explanation": "BPE applies its merge rules in a fixed order determined during training: the most frequent pair is merged first, then the second most frequent, and so on. At encoding time, the rules are applied greedily in this learned priority order. The segmentation of 'unhappiness' depends entirely on which character pairs were most frequent in the training corpus and therefore which merges were learned. If 'ha' was merged before 'pp', you get a different segmentation than if 'pp' was merged first. This is not a shortest-segmentation algorithm (option A) — it's a deterministic application of learned merge rules."
+    },
+    {
+      "id": "cc-4",
+      "type": "fill_code",
+      "question": "Complete the function to compute the KV-cache memory (in GB) for a single sequence. The formula is: memory = num_layers × 2 × seq_len × num_kv_heads × head_dim × bytes_per_element / (1024³).",
+      "starterCode": "def kv_cache_memory_gb(\n    num_layers: int,\n    seq_len: int,\n    num_kv_heads: int,\n    head_dim: int,\n    dtype_bytes: int = 2  # FP16\n) -> float:\n    \"\"\"Compute KV-cache memory in GB.\"\"\"\n    # TODO: implement the formula\n    pass",
+      "solution": "def kv_cache_memory_gb(\n    num_layers: int,\n    seq_len: int,\n    num_kv_heads: int,\n    head_dim: int,\n    dtype_bytes: int = 2  # FP16\n) -> float:\n    \"\"\"Compute KV-cache memory in GB.\"\"\"\n    # Factor of 2 for K and V caches\n    total_bytes = num_layers * 2 * seq_len * num_kv_heads * head_dim * dtype_bytes\n    return total_bytes / (1024 ** 3)",
+      "correct": -1,
+      "explanation": "The KV-cache stores both key and value projections (hence the factor of 2) for every layer, every position in the sequence, and every KV-head. For a Llama 2 70B model (80 layers, 8 KV-heads, head_dim=128) with a 128K context at FP16, this is 80 × 2 × 128000 × 8 × 128 × 2 bytes ≈ 41.9 GB. This is why long-context inference is expensive and why techniques like GQA (reducing KV-heads) and KV-cache quantization are critical."
+    }
+  ]
+}

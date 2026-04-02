@@ -1,0 +1,54 @@
+{
+  "readings": [
+    {
+      "id": "r1",
+      "title": "RAGAS: Automated Evaluation of Retrieval Augmented Generation",
+      "authors": "Shahul Es, Jithin James, Luis Espinosa-Anke, Steven Schockaert",
+      "year": 2023,
+      "type": "paper",
+      "url": "https://arxiv.org/abs/2309.15217",
+      "description": "The foundational paper for RAGAS, which introduces component-level metrics for RAG pipelines: faithfulness, answer relevancy, context precision, and context recall. The key insight is decomposing end-to-end quality into retrieval-specific and generation-specific metrics, enabling targeted debugging. Essential reading for anyone building or evaluating RAG systems.",
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "r2",
+      "title": "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
+      "authors": "Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, Ion Stoica",
+      "year": 2023,
+      "type": "paper",
+      "url": "https://arxiv.org/abs/2306.05685",
+      "description": "Establishes the methodology and validity of using LLMs as evaluators. Introduces MT-Bench (a multi-turn benchmark) and the Chatbot Arena (crowdsourced pairwise comparisons). Analyzes biases in LLM judges: position bias, verbosity bias, self-enhancement bias. Demonstrates that strong LLM judges achieve >80% agreement with human preferences, comparable to inter-human agreement. Critical reading for designing automated evaluation.",
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "r3",
+      "title": "OpenTelemetry GenAI Semantic Conventions",
+      "authors": "OpenTelemetry Community",
+      "year": 2024,
+      "type": "documentation",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
+      "description": "The evolving OpenTelemetry specification for instrumenting generative AI systems. Defines standard span attributes for LLM calls (model, token counts, temperature, finish reason), embedding operations, and tool calls. Understanding these conventions is essential for building vendor-neutral observability that works across different AI providers and observability backends.",
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "r4",
+      "title": "Your AI Product Needs Evals",
+      "authors": "Hamel Husain, Eugene Yan, Jason Liu, Shreya Shankar",
+      "year": 2024,
+      "type": "blog",
+      "url": "https://hamel.dev/blog/posts/evals/",
+      "description": "A practitioner-focused guide to building evaluation suites for AI products. Covers the progression from ad hoc testing to systematic evaluation: starting with assertions, adding LLM-as-judge, building eval datasets from production failures, and integrating evals into CI/CD. The authors draw from extensive industry experience to provide concrete, actionable advice rather than academic abstractions.",
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "r5",
+      "title": "Langfuse: Open Source LLM Engineering Platform",
+      "authors": "Langfuse Team",
+      "year": 2024,
+      "type": "documentation",
+      "url": "https://langfuse.com/docs",
+      "description": "Documentation for Langfuse, an open-source observability and evaluation platform for LLM applications. Covers trace collection, prompt management, evaluation scoring, and dataset curation. Studying the architecture of a production-grade LLMOps tool provides practical context for the concepts covered in this week's lectures — how traces are structured, how evals are run asynchronously, and how cost tracking is implemented.",
+      "estimatedMinutes": 30
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "The Elements of Computing Systems (Nand2Tetris) — Chapter 2: Boolean Arithmetic",
+      "authors": "Noam Nisan and Shimon Schocken",
+      "url": "https://www.nand2tetris.org/course",
+      "note": "Covers binary number representation, two's complement arithmetic, half adders, full adders, and the Hack ALU design. The Hack ALU uses just 6 control bits to implement 18 operations — an elegant demonstration of how far minimalist design can go. Read alongside Problem Set 2."
+    },
+    {
+      "title": "IEEE Standard 754-2019 for Floating-Point Arithmetic",
+      "authors": "IEEE Computer Society",
+      "url": "https://en.wikipedia.org/wiki/IEEE_754",
+      "note": "The definitive reference for floating-point representation. The Wikipedia article provides an excellent overview of single/double precision formats, special values (NaN, infinity, denormals, signed zero), and rounding modes. Understanding IEEE 754 is essential for anyone writing numerical software — floating-point surprises (like 0.1 + 0.2 != 0.3) are among the most common bugs in production systems."
+    },
+    {
+      "title": "Carry-Lookahead Adder and Prefix Adders",
+      "authors": "USC EE 457 Course Notes",
+      "url": "https://ee.usc.edu/~redekopp/ee457/slides/EE457Unit2b_FastAdders.pdf",
+      "note": "Detailed slides covering the derivation of CLA equations, the transition from flat CLA to hierarchical prefix adders (Kogge-Stone, Brent-Kung, Han-Carlson), and the area-depth tradeoffs between different prefix structures. Includes gate-level diagrams and delay analysis."
+    },
+    {
+      "title": "Booth's Multiplication Algorithm",
+      "authors": "Wikipedia (with references to Booth 1951)",
+      "url": "https://en.wikipedia.org/wiki/Booth%27s_multiplication_algorithm",
+      "note": "Covers both standard Booth's (radix-2) and modified Booth's (radix-4) algorithms with worked examples. The radix-4 variant halves the number of partial products and is the standard in modern hardware multiplier implementations. Pay attention to how the algorithm naturally handles signed numbers without special cases."
+    },
+    {
+      "title": "Computer Organization and Design: RISC-V Edition — Chapter 3: Arithmetic for Computers",
+      "authors": "David A. Patterson and John L. Hennessy",
+      "url": "https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6",
+      "note": "The standard textbook treatment of ALU design, overflow detection, and floating-point arithmetic in the context of a real processor architecture (RISC-V). Covers how the ALU connects to the processor datapath — context we will build on in Weeks 5-6."
+    }
+  ]
+}

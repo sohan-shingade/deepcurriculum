@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In GitHub Copilot's prompt construction, why does the prefix context (code before the cursor) receive roughly 50% of the total token budget?",
+      "options": [
+        "Because prefix code is syntactically more complex and requires more tokens to represent",
+        "Because empirical analysis shows code immediately before the cursor is the strongest predictor of what comes next",
+        "Because the model was fine-tuned exclusively on prefix-to-completion tasks",
+        "Because suffix context (code after the cursor) is always empty during real-time editing"
+      ],
+      "correct": 1,
+      "explanation": "The token budget allocation in Copilot-style systems is driven by empirical analysis of completion quality. Code immediately preceding the cursor has the highest predictive power for what the user will type next, due to locality of reference in programming. Suffix context, import context, and neighboring file context all contribute, but the prefix dominates. This is not because the model architecture requires it — it is because the statistical relationship between prefix code and next tokens is the strongest signal available."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "What is the primary architectural advantage of Cursor's diff-based editing approach compared to generating complete file replacements?",
+      "options": [
+        "Diff-based edits are always syntactically correct, eliminating parse errors",
+        "Diff-based edits produce shorter model output, reducing latency and cost while enabling user review of exact changes",
+        "Diff-based edits allow the model to use a smaller context window",
+        "Diff-based edits bypass the need for a codebase index entirely"
+      ],
+      "correct": 1,
+      "explanation": "Diff-based editing has three compounding advantages: (1) the model output is shorter because it only specifies changes, reducing both latency and token cost; (2) the user can review exactly what changed, building trust and enabling efficient acceptance/rejection; (3) the system can apply edits to large files without regenerating unchanged portions. It does not guarantee syntactic correctness — the model can still generate invalid diffs. And it still requires the codebase index for context retrieval. The key insight is that generating changes is both cheaper and more useful than generating complete files."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "ChatGPT's persistent memory system is architecturally most similar to which pattern?",
+      "options": [
+        "A traditional relational database with SQL queries",
+        "A fine-tuned model that has learned user preferences during training",
+        "A specialized RAG system where the 'documents' are extracted facts and the 'query' is the current conversation context",
+        "A key-value cache with TTL-based expiration"
+      ],
+      "correct": 2,
+      "explanation": "ChatGPT's memory system is structurally a RAG pipeline. Facts are extracted from conversations (document ingestion), stored in a per-user memory store (vector/document store), and retrieved based on relevance to the current conversation (retrieval). The key difference from traditional RAG is that the 'documents' are short extracted facts rather than long passages, and the corpus is personal to each user. It is not fine-tuning because the model weights do not change — the memories are injected via the system prompt. It is not a simple key-value cache because retrieval is semantic, not exact-match."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In the enterprise support bot architecture, why is 'defense in depth' (system prompt + output classifier + intent-based routing) necessary for compliance, rather than relying on a single strong guardrail?",
+      "options": [
+        "Because each guardrail layer adds latency, and more layers mean faster response times due to caching",
+        "Because no single layer has 100% accuracy — stacking imperfect layers with different failure modes dramatically reduces the probability of a compliance violation slipping through",
+        "Because regulatory agencies require exactly three layers of protection by law",
+        "Because each layer uses a different LLM provider, ensuring vendor diversity"
+      ],
+      "correct": 1,
+      "explanation": "Defense in depth works because different guardrail types have different failure modes. A system prompt instruction might fail when the model is distracted by complex context. An output classifier might miss violations phrased in unusual ways. Intent-based routing might misclassify an intent. But the probability that ALL three fail simultaneously on the same input is much lower than any single layer failing. If each layer independently catches 95% of violations, three layers catch 1 - (0.05)^3 = 99.9875%. This principle — stacking imperfect defenses with uncorrelated failure modes — is fundamental to building reliable systems from unreliable components."
+    }
+  ]
+}

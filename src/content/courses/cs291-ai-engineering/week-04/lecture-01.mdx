@@ -1,0 +1,508 @@
+---
+title: "Agent Architecture: From ReAct to Production"
+week: 4
+lecture: 1
+estimatedMinutes: 55
+---
+
+# Agent Architecture: From ReAct to Production
+
+The word "agent" has been abused to the point of near-meaninglessness in the AI hype cycle. Chatbots get relabeled as agents. Prompt chains become "agentic workflows." Marketing slides depict autonomous systems that bear no resemblance to the code behind them. So let us start this lecture with precision: what is an agent, formally, and what separates it from the simpler constructs we have built so far?
+
+## Formal Definition: The Perception-Reasoning-Action Loop
+
+An agent is a system that perceives its environment, reasons about what to do, and takes actions that affect that environment — in a loop. This is not a new idea. It predates large language models by decades. Russell and Norvig defined it in the first edition of *Artificial Intelligence: A Modern Approach* (1995): an agent is anything that can be viewed as perceiving its environment through sensors and acting upon that environment through actuators.
+
+What makes LLM-based agents interesting is that the "reasoning" component is now a foundation model capable of general-purpose language understanding, planning, and code generation. The loop looks like this:
+
+$$\text{Agent}: s_t \xrightarrow{\text{perceive}} o_t \xrightarrow{\text{reason}} a_t \xrightarrow{\text{act}} s_{t+1}$$
+
+Where $s_t$ is the environment state at time $t$, $o_t$ is the observation (what the agent perceives of that state), $a_t$ is the action taken, and $s_{t+1}$ is the resulting new state. The agent maintains an internal state $h_t$ that accumulates history:
+
+$$h_t = f(h_{t-1}, o_t)$$
+
+$$a_t = \pi(h_t)$$
+
+Here $f$ is the state update function and $\pi$ is the policy — the function that maps internal state to action. In an LLM agent, $f$ is "append the new observation to the context window" and $\pi$ is "call the LLM with the full context and parse its output into an action."
+
+This is deceptively simple. The power and the danger of LLM agents both come from the fact that $\pi$ is a general-purpose reasoner rather than a hand-coded decision tree. It can handle situations the developer never anticipated — and it can also hallucinate actions that make no sense.
+
+```python
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class AgentState:
+    """Minimal agent state representation."""
+    observations: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
+    thoughts: list[str] = field(default_factory=list)
+    step: int = 0
+
+    def perceive(self, observation: str) -> None:
+        """Add a new observation to the agent's history."""
+        self.observations.append(observation)
+
+    def record_action(self, action: str) -> None:
+        """Record an action taken by the agent."""
+        self.actions.append(action)
+        self.step += 1
+
+    def record_thought(self, thought: str) -> None:
+        """Record the agent's reasoning trace."""
+        self.thoughts.append(thought)
+
+    def get_context(self) -> str:
+        """Build the full context for the reasoning step."""
+        lines = []
+        for i in range(len(self.thoughts)):
+            lines.append(f"Thought {i+1}: {self.thoughts[i]}")
+            if i < len(self.actions):
+                lines.append(f"Action {i+1}: {self.actions[i]}")
+            if i + 1 < len(self.observations):
+                lines.append(f"Observation {i+1}: {self.observations[i+1]}")
+        return "\n".join(lines)
+
+# Demonstrate the state machine
+state = AgentState()
+state.perceive("User asks: What is 25 * 17?")
+state.record_thought("I need to calculate 25 * 17. I'll use the calculator tool.")
+state.record_action("calculator(25 * 17)")
+state.perceive("Result: 425")
+state.record_thought("The calculation returned 425. I can now answer the user.")
+state.record_action("respond('25 * 17 = 425')")
+
+print(state.get_context())
+print(f"\nTotal steps: {state.step}")
+```
+
+## The ReAct Paradigm
+
+The seminal paper that formalized LLM agents for the modern era is **"ReAct: Synergizing Reasoning and Acting in Language Models"** by Yao et al. (2022). The core insight is deceptively simple: instead of having the model either reason (chain-of-thought) or act (tool use), interleave them. The model produces a **Thought** (reasoning trace), then an **Action** (tool call), then receives an **Observation** (tool output), and repeats.
+
+Why does interleaving matter? Consider the alternative approaches:
+
+1. **Reasoning only (CoT)**: The model thinks through the problem but cannot access external information or execute code. It hallucinates facts when it does not know.
+2. **Acting only (tool use without reasoning)**: The model calls tools but without explicit reasoning, it makes poor decisions about which tool to call and how to interpret results.
+3. **ReAct (interleaved)**: The model reasons about what it needs, acts to get it, observes the result, and reasons about the next step. The reasoning trace is visible and debuggable.
+
+Yao et al. showed that ReAct outperforms both pure CoT and pure action approaches on tasks requiring both knowledge retrieval and multi-step reasoning. The key result: on HotpotQA, ReAct achieved 35% exact match versus 29% for CoT alone.
+
+Here is the ReAct loop in its full form:
+
+$$\text{For } t = 1, 2, \ldots, T:$$
+$$\text{Thought}_t = \text{LLM}(\text{prompt}, o_1, a_1, o_2, \ldots, o_{t-1})$$
+$$\text{Action}_t = \text{parse}(\text{Thought}_t)$$
+$$\text{Observation}_t = \text{execute}(\text{Action}_t)$$
+
+Let us build a complete ReAct agent with simulated tools:
+
+```python
+import re
+import math
+from dataclasses import dataclass, field
+
+# Define simple tools
+def calculator(expression: str) -> str:
+    """Evaluate a mathematical expression."""
+    try:
+        # Safe evaluation of math expressions
+        allowed = {"__builtins__": {}, "math": math}
+        result = eval(expression, allowed)
+        return str(result)
+    except Exception as e:
+        return f"Error: {e}"
+
+def lookup(topic: str) -> str:
+    """Simulate a knowledge lookup."""
+    knowledge = {
+        "python creator": "Guido van Rossum created Python in 1991.",
+        "transformer": "The Transformer was introduced by Vaswani et al. in 'Attention Is All You Need' (2017).",
+        "earth radius": "The mean radius of Earth is approximately 6,371 kilometers.",
+    }
+    topic_lower = topic.lower()
+    for key, value in knowledge.items():
+        if key in topic_lower:
+            return value
+    return f"No information found for: {topic}"
+
+TOOLS = {"calculator": calculator, "lookup": lookup}
+
+@dataclass
+class ReActTrace:
+    thoughts: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
+    observations: list[str] = field(default_factory=list)
+
+def simulate_react_agent(question: str, max_steps: int = 5) -> ReActTrace:
+    """
+    Simulate a ReAct agent with pre-scripted reasoning.
+    In production, the 'thought' comes from an LLM.
+    """
+    trace = ReActTrace()
+
+    # Step 1: Initial reasoning
+    trace.thoughts.append(
+        f"I need to answer: '{question}'. Let me break this down."
+    )
+
+    # Simulate a lookup
+    trace.actions.append("lookup('transformer')")
+    obs = lookup("transformer")
+    trace.observations.append(obs)
+
+    # Step 2: Reason about the observation
+    trace.thoughts.append(
+        f"I learned: {obs}. Let me calculate how many years ago that was."
+    )
+
+    trace.actions.append("calculator(2026 - 2017)")
+    obs = calculator("2026 - 2017")
+    trace.observations.append(obs)
+
+    # Step 3: Synthesize
+    trace.thoughts.append(
+        f"The Transformer paper came out {obs} years ago, in 2017. I can now answer."
+    )
+    trace.actions.append("finish('The Transformer was introduced 9 years ago in 2017.')")
+    trace.observations.append("Done")
+
+    return trace
+
+# Run it
+trace = simulate_react_agent("When was the Transformer introduced and how long ago?")
+for i in range(len(trace.thoughts)):
+    print(f"Thought {i+1}: {trace.thoughts[i]}")
+    print(f"Action {i+1}: {trace.actions[i]}")
+    print(f"Observation {i+1}: {trace.observations[i]}")
+    print()
+```
+
+<ConceptCheck id="cc-1" />
+
+## Planning Strategies: Beyond Step-by-Step
+
+The basic ReAct loop is reactive — the agent decides what to do one step at a time. For complex tasks, this is insufficient. The agent needs to plan. There are three major planning paradigms in production agent systems.
+
+### 1. Task Decomposition
+
+Before executing any tools, the agent breaks the task into subtasks. This is sometimes called "plan-then-execute." The decomposition step produces a list of subtasks, each of which may involve one or more tool calls.
+
+$$\text{Task} \xrightarrow{\text{decompose}} [\text{subtask}_1, \text{subtask}_2, \ldots, \text{subtask}_n]$$
+
+The advantage: the agent has a global view of what needs to happen before it starts acting. The disadvantage: the plan may be wrong, and replanning is expensive.
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Subtask:
+    id: int
+    description: str
+    tool: str
+    status: str = "pending"
+    result: str = ""
+
+def create_plan(task: str) -> list[Subtask]:
+    """
+    Simulate task decomposition.
+    In production, the LLM generates this plan.
+    """
+    # Simulated planning for a multi-step research task
+    return [
+        Subtask(1, "Look up the Earth's radius", "lookup"),
+        Subtask(2, "Calculate the circumference using 2*pi*r", "calculator"),
+        Subtask(3, "Convert km to miles (multiply by 0.621371)", "calculator"),
+        Subtask(4, "Synthesize final answer", "finish"),
+    ]
+
+def execute_plan(plan: list[Subtask]) -> list[Subtask]:
+    """Execute each subtask in sequence."""
+    context = {}
+    for subtask in plan:
+        if subtask.tool == "lookup":
+            subtask.result = lookup("earth radius")
+            context["radius_km"] = 6371
+        elif subtask.tool == "calculator":
+            if "circumference" in subtask.description.lower():
+                result = calculator(f"2 * {math.pi} * 6371")
+                subtask.result = result
+                context["circumference_km"] = float(result)
+            elif "miles" in subtask.description.lower():
+                circ = context.get("circumference_km", 0)
+                subtask.result = calculator(f"{circ} * 0.621371")
+        elif subtask.tool == "finish":
+            subtask.result = "Answer synthesized from previous steps."
+        subtask.status = "completed"
+    return plan
+
+plan = create_plan("What is Earth's circumference in miles?")
+executed = execute_plan(plan)
+for s in executed:
+    print(f"[{s.status}] Step {s.id}: {s.description}")
+    print(f"  Result: {s.result}")
+```
+
+### 2. Subgoal Creation with Dependency Graphs
+
+More sophisticated agents create subgoals with explicit dependencies. Subtask 3 cannot start until subtask 2 finishes, but subtasks 1 and 2 might be independent and can run in parallel.
+
+$$G = (V, E) \text{ where } V = \{\text{subtask}_i\} \text{ and } (i, j) \in E \iff \text{subtask}_j \text{ depends on } \text{subtask}_i$$
+
+This is exactly a directed acyclic graph (DAG). Topological sorting gives us a valid execution order, and independent tasks in the same topological level can execute in parallel.
+
+### 3. The LLM Compiler Pattern
+
+Kim et al. (2023) introduced the **LLM Compiler** pattern, which takes parallel execution further. Instead of generating one action at a time, the model generates a full execution plan with dependencies, and a "compiler" schedules the independent operations in parallel. This can reduce latency by 2-4x for tasks with independent subtasks.
+
+The key insight: most agent tasks have some inherent parallelism. When a user asks "Compare the weather in NYC and SF," the two weather lookups are independent and should run simultaneously.
+
+```python
+from collections import defaultdict
+
+def topological_sort(tasks: dict[str, list[str]]) -> list[list[str]]:
+    """
+    Return tasks grouped by execution level.
+    Tasks in the same level can run in parallel.
+
+    Args:
+        tasks: {task_id: [dependency_ids]}
+    """
+    in_degree = defaultdict(int)
+    graph = defaultdict(list)
+    all_tasks = set(tasks.keys())
+
+    for task, deps in tasks.items():
+        in_degree[task] = len(deps)
+        for dep in deps:
+            graph[dep].append(task)
+            all_tasks.add(dep)
+
+    # Initialize with tasks that have no dependencies
+    for t in all_tasks:
+        if t not in in_degree:
+            in_degree[t] = 0
+
+    levels = []
+    queue = [t for t in all_tasks if in_degree[t] == 0]
+
+    while queue:
+        levels.append(sorted(queue))  # sort for determinism
+        next_queue = []
+        for task in queue:
+            for dependent in graph[task]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    next_queue.append(dependent)
+        queue = next_queue
+
+    return levels
+
+# Example: comparing two cities requires independent lookups,
+# then a dependent comparison step
+task_deps = {
+    "lookup_nyc": [],
+    "lookup_sf": [],
+    "compare": ["lookup_nyc", "lookup_sf"],
+    "format_answer": ["compare"],
+}
+
+levels = topological_sort(task_deps)
+for i, level in enumerate(levels):
+    parallel_str = " || ".join(level)
+    print(f"Level {i} (parallel): {parallel_str}")
+```
+
+<ConceptCheck id="cc-2" />
+
+## Architecture Patterns in Production
+
+Let us now survey the three dominant architecture patterns you will encounter in production agent systems.
+
+### Pattern 1: ReAct (Simple Loop)
+
+The vanilla ReAct loop is the workhorse of most deployed agents. It is simple, debuggable, and sufficient for 80% of use cases.
+
+**When to use**: Single-threaded tasks that require 1-10 tool calls. Customer support, code generation, data analysis.
+
+**Structure**: While not done: Think -> Act -> Observe.
+
+**Strengths**: Simple to implement and debug. Reasoning traces are visible. Easy to add guardrails.
+
+**Weaknesses**: Sequential execution. No lookahead. Can get stuck in loops.
+
+### Pattern 2: Plan-then-Execute
+
+The agent first generates a complete plan, then executes it step by step, potentially replanning if a step fails.
+
+**When to use**: Complex multi-step tasks where the overall structure matters. Report generation, multi-file code changes, research tasks.
+
+**Structure**: Plan -> [Execute step 1 -> ... -> Execute step N] -> Verify -> (Replan if needed).
+
+**Strengths**: Global view of the task. Can estimate effort upfront. Better at avoiding dead ends.
+
+**Weaknesses**: Planning step can be wrong. Replanning is expensive. Over-planning for simple tasks.
+
+### Pattern 3: LLM Compiler (Parallel Execution)
+
+The agent generates a DAG of operations and executes independent operations in parallel.
+
+**When to use**: Tasks with inherent parallelism. Multi-entity comparison, batch processing, data gathering from multiple sources.
+
+**Structure**: Analyze -> Build DAG -> Execute levels in parallel -> Merge results.
+
+**Strengths**: Significantly lower latency for parallel tasks. Better resource utilization.
+
+**Weaknesses**: More complex to implement. Error handling across parallel branches is hard. Not all tasks have parallelism.
+
+## Failure Modes: Where Agents Break
+
+Every production agent system will encounter these failure modes. Knowing them in advance is the difference between a demo that works and a system that works.
+
+### 1. Infinite Loops
+
+The agent takes an action, gets an observation, reasons that it needs to take the same action again, and loops forever. This happens when:
+- The tool output does not change state (e.g., reading a file that does not exist)
+- The agent does not recognize that it has already tried something
+- The termination condition is never met
+
+**Mitigation**: Hard step limits. Loop detection (compare action sequences). Exponential backoff on repeated actions.
+
+### 2. Tool Misuse
+
+The agent calls a tool with incorrect arguments. A calculator gets a natural language sentence. A search API gets a SQL query. This is surprisingly common because the model is pattern-matching on the tool description, not truly understanding the API contract.
+
+**Mitigation**: Strong input validation. Clear tool descriptions with examples. Type checking on arguments.
+
+### 3. Hallucinated Tool Names
+
+The model invents tools that do not exist. It has seen many different tool APIs in training data and may generate calls to tools from a different system. "Let me call the `web_search` tool" when your system only has `google_search`.
+
+**Mitigation**: Strict tool name validation. Return clear errors for unknown tools. Include the exact tool list in the system prompt.
+
+### 4. Context Window Exhaustion
+
+Each thought-action-observation cycle adds to the context. For complex tasks, the agent may exhaust its context window before completing the task. When context is truncated, the agent loses track of what it has already done.
+
+**Mitigation**: Summarize older interactions. Use a sliding window over the conversation. Store intermediate results in external memory.
+
+```python
+def detect_action_loop(actions: list[str], window: int = 3) -> bool:
+    """
+    Detect if the agent is stuck in a loop by checking
+    if the last `window` actions repeat a pattern.
+    """
+    if len(actions) < window * 2:
+        return False
+
+    recent = actions[-window:]
+    previous = actions[-2 * window:-window]
+    return recent == previous
+
+# Test loop detection
+actions_ok = ["search('A')", "calculate(1+1)", "search('B')", "finish()"]
+actions_loop = ["search('A')", "search('B')", "search('A')", "search('B')", "search('A')", "search('B')"]
+
+print(f"Normal sequence has loop: {detect_action_loop(actions_ok)}")       # False
+print(f"Looping sequence has loop: {detect_action_loop(actions_loop)}")    # True
+```
+
+<ConceptCheck id="cc-3" />
+
+## When NOT to Use Agents
+
+This is perhaps the most important section of this lecture. Agents are powerful but expensive, slow, and unreliable compared to simpler alternatives. Here is a decision framework:
+
+**Do NOT use an agent when:**
+
+1. **A deterministic pipeline works.** If you can hard-code the sequence of operations, do that. An agent that always calls the same three tools in the same order is just a pipeline with extra latency and cost.
+
+2. **The task requires fewer than 3 decisions.** Single-turn tool use (function calling) is not an agent. It is a tool-augmented LLM call. Use it.
+
+3. **Reliability must exceed 95%.** Current agent systems achieve 60-85% success rates on complex tasks. If you need near-perfect reliability, use deterministic code with LLM components only where needed.
+
+4. **Latency matters more than flexibility.** Each agent step adds an LLM call (0.5-5 seconds). A 10-step agent task takes 5-50 seconds. A pre-compiled pipeline takes milliseconds.
+
+5. **The cost of failure is high.** Agents can take wrong actions that are difficult or impossible to undo. Sending an email, deleting a file, making a purchase — these should not be in an autonomous loop without human approval.
+
+**DO use an agent when:**
+
+1. **The task requires dynamic decision-making.** The next step depends on the result of the previous step in ways that cannot be predicted in advance.
+
+2. **The search space is large.** Debugging code, research tasks, data exploration — the agent needs to adaptively explore.
+
+3. **Human-in-the-loop is acceptable.** The agent proposes actions and the human approves. This dramatically reduces risk.
+
+4. **You can tolerate failures.** The agent is one of many approaches, and failure triggers a fallback.
+
+Let us quantify this with a cost model:
+
+```python
+def agent_cost_estimate(
+    steps: int,
+    input_tokens_per_step: int = 2000,
+    output_tokens_per_step: int = 500,
+    input_price_per_1k: float = 0.003,
+    output_price_per_1k: float = 0.015,
+    latency_per_step_sec: float = 2.0,
+) -> dict:
+    """
+    Estimate the cost and latency of an agent run.
+    Assumes context grows linearly (each step adds to history).
+    """
+    total_input_tokens = 0
+    total_output_tokens = 0
+
+    for step in range(steps):
+        # Context grows: each step sees all previous thoughts/actions/observations
+        step_input = input_tokens_per_step + step * (output_tokens_per_step + 200)
+        total_input_tokens += step_input
+        total_output_tokens += output_tokens_per_step
+
+    cost = (
+        total_input_tokens / 1000 * input_price_per_1k +
+        total_output_tokens / 1000 * output_price_per_1k
+    )
+    latency = steps * latency_per_step_sec
+
+    return {
+        "steps": steps,
+        "total_input_tokens": total_input_tokens,
+        "total_output_tokens": total_output_tokens,
+        "cost_usd": round(cost, 4),
+        "latency_seconds": latency,
+    }
+
+# Compare: simple task vs complex task
+for n_steps in [3, 5, 10, 20]:
+    result = agent_cost_estimate(n_steps)
+    print(f"{n_steps:2d} steps: ${result['cost_usd']:.4f}, "
+          f"{result['latency_seconds']:.0f}s, "
+          f"{result['total_input_tokens']:,} input tokens")
+```
+
+The cost grows quadratically with the number of steps because each step must re-read all previous context. A 20-step agent costs roughly 20x more than a 3-step one per step, and there are 7x more steps — so total cost is roughly 50-100x more. This is why the decision of "should this be an agent?" is one of the most important architectural decisions you will make.
+
+<ConceptCheck id="cc-4" />
+
+## Putting It All Together: Agent Architecture Checklist
+
+When designing a production agent system, work through this checklist:
+
+1. **Define the action space.** What tools does the agent have? What can it read, write, call? The action space determines what the agent can do.
+
+2. **Define the observation space.** What information does the agent receive after each action? Structured JSON? Free text? Error codes?
+
+3. **Choose the planning strategy.** ReAct for simple tasks. Plan-then-execute for complex sequential tasks. LLM Compiler for parallel tasks.
+
+4. **Set hard limits.** Maximum steps. Maximum tokens. Maximum cost. Maximum time. These are not optional — they are safety requirements.
+
+5. **Design the termination conditions.** How does the agent know it is done? Explicit "finish" action? All subtasks completed? User satisfaction signal?
+
+6. **Plan for failure.** What happens when a tool call fails? When the agent loops? When it exhausts its context? Every failure mode needs a recovery strategy.
+
+7. **Instrument everything.** Log every thought, action, and observation. You cannot debug what you cannot see. Agent systems are notoriously difficult to debug without full traces.
+
+The agent architectures we have discussed — ReAct, Plan-then-Execute, LLM Compiler — are not mutually exclusive. Production systems often compose them: a high-level planner decomposes a task, each subtask is handled by a ReAct agent, and independent subtasks are scheduled in parallel. The art of agent engineering is choosing the right composition for your specific use case, cost budget, and reliability requirements.
+
+In the next lecture, we will dive deep into the tool layer — how to design tools that agents can actually use reliably — and into memory systems that allow agents to maintain state across long interactions.

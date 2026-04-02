@@ -1,0 +1,52 @@
+{
+  "readings": [
+    {
+      "title": "Roofline: An Insightful Visual Performance Model for Multicore Architectures",
+      "authors": "Samuel Williams, Andrew Waterman, David Patterson",
+      "type": "paper",
+      "url": "https://dl.acm.org/doi/abs/10.1145/1498765.1498785",
+      "description": "The foundational 2009 paper introducing the Roofline model for understanding compute-bound vs. memory-bound performance. Essential for understanding why matrix multiplication is compute-bound and why tiling works. Published in Communications of the ACM.",
+      "required": true
+    },
+    {
+      "title": "Anatomy of High-Performance Matrix Multiplication",
+      "authors": "Kazushige Goto, Robert A. van de Geijn",
+      "type": "paper",
+      "url": "https://dl.acm.org/doi/10.1145/1356052.1356053",
+      "description": "The classic paper explaining how production BLAS libraries (GotoBLAS) achieve near-peak performance for GEMM through multi-level tiling, register blocking, and micro-kernels. The techniques described here are still used in OpenBLAS.",
+      "required": true
+    },
+    {
+      "title": "Intel Intrinsics Guide",
+      "authors": "Intel Corporation",
+      "type": "reference",
+      "url": "https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html",
+      "description": "Interactive reference for all x86 SIMD intrinsics (SSE, AVX, AVX-512, AMX). Searchable by operation, data type, and instruction set. Essential when writing SIMD code with intrinsics.",
+      "required": false
+    },
+    {
+      "title": "ARM SVE/SVE2 Programmer's Guide",
+      "authors": "ARM Ltd.",
+      "type": "reference",
+      "url": "https://developer.arm.com/documentation/102476/latest/",
+      "description": "Official guide to ARM's Scalable Vector Extension, covering vector-length-agnostic programming, predicate registers, and the whilelt pattern for loop control.",
+      "required": false
+    },
+    {
+      "title": "Gaussian Elimination is Not Optimal (Strassen's Original Paper)",
+      "authors": "Volker Strassen",
+      "type": "paper",
+      "url": "https://link.springer.com/article/10.1007/BF02165411",
+      "description": "The 1969 paper where Strassen proved that matrix multiplication can be done in fewer than n^3 multiplications. A landmark result in computational complexity that opened the field of fast matrix multiplication algorithms. Published in Numerische Mathematik.",
+      "required": false
+    },
+    {
+      "title": "In-Datacenter Performance Analysis of a Tensor Processing Unit",
+      "authors": "Norman P. Jouppi et al. (Google)",
+      "type": "paper",
+      "url": "https://arxiv.org/abs/1704.04760",
+      "description": "Google's paper describing the TPU v1 architecture, including its 256x256 systolic array, 8-bit integer MAC units, and performance comparison with contemporary CPUs and GPUs. Presented at ISCA 2017.",
+      "required": false
+    }
+  ]
+}

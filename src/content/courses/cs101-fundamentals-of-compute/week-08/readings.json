@@ -1,0 +1,58 @@
+{
+  "readings": [
+    {
+      "title": "Roofline: An Insightful Visual Performance Model for Multicore Architectures",
+      "authors": "Samuel Williams, Andrew Waterman, David Patterson",
+      "url": "https://dl.acm.org/doi/abs/10.1145/1498765.1498785",
+      "note": "The foundational 2009 paper introducing the Roofline model. Provides the framework for classifying kernels as compute-bound or memory-bound based on arithmetic intensity versus machine balance. Essential reading for performance analysis."
+    },
+    {
+      "title": "RISC-V Privileged Specification v1.12 (Virtual Memory Section)",
+      "authors": "RISC-V International",
+      "url": "https://five-embeddev.com/riscv-priv-isa-manual/Priv-v1.12/supervisor.html",
+      "note": "The authoritative specification for RISC-V Sv39 and Sv48 virtual memory. Defines the page table entry format, page walk algorithm, and superpage support. Reference for the Sv39 content in Lecture 2."
+    },
+    {
+      "title": "Computer Organization and Design: RISC-V Edition, Chapter 5 (Large and Fast: Exploiting Memory Hierarchy)",
+      "authors": "David A. Patterson and John L. Hennessy",
+      "url": "https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6",
+      "note": "The standard textbook treatment of caches, virtual memory, and TLBs. Chapter 5 covers direct-mapped through set-associative caches, the three C's, write policies, and multi-level hierarchies with worked examples."
+    },
+    {
+      "title": "Chips and Cheese: AMD's Zen 4 Part 2 -- Memory Subsystem and Conclusion",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/amds-zen-4-part-2-memory-subsystem-and-conclusion",
+      "note": "Detailed reverse-engineering analysis of AMD Zen 4's cache hierarchy and TLB structure. Includes measured latency data for L1, L2, L3, and V-Cache configurations. Source for the real cache specifications cited in Lecture 1."
+    },
+    {
+      "title": "A Deep Dive into Intel's Alder Lake Microarchitectures",
+      "authors": "AnandTech",
+      "url": "https://www.anandtech.com/show/16881/a-deep-dive-into-intels-alder-lake-microarchitectures/3",
+      "note": "Comprehensive analysis of Intel Golden Cove microarchitecture including cache hierarchy, TLB sizes, and pipeline details. Source for Intel cache and TLB specifications used in both lectures."
+    },
+    {
+      "title": "AMD's 7950X3D: Zen 4 Gets V-Cache",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/2023/04/23/amds-7950x3d-zen-4-gets-vcache/",
+      "note": "Analysis of AMD's 3D V-Cache technology that bonds a 64 MB SRAM chiplet on top of the CCD using TSMC SoIC stacking. Discusses the latency penalty and hit rate improvements of the expanded L3 cache."
+    },
+    {
+      "title": "Apple Silicon Memory and Internal Storage",
+      "authors": "Eclectic Light Company",
+      "url": "https://eclecticlight.co/2024/03/06/apple-silicon-memory-and-internal-storage/",
+      "note": "Overview of Apple M-series memory architecture including the System Level Cache (SLC), exclusive caching policy, and unified memory design. Explains how Apple's approach differs from x86 architectures."
+    },
+    {
+      "title": "MIT 6.S081: Virtual Memory Lecture Notes",
+      "authors": "MIT PDOS Group",
+      "url": "https://pdos.csail.mit.edu/6.828/2021/slides/6s081-lec-vm.pdf",
+      "note": "Clear, concise lecture notes on virtual memory from MIT's operating systems course. Covers page tables, TLBs, and the RISC-V Sv39 translation algorithm with excellent diagrams."
+    },
+    {
+      "title": "NERSC Roofline Model Documentation",
+      "authors": "NERSC (National Energy Research Scientific Computing Center)",
+      "url": "https://docs.nersc.gov/tools/performance/roofline/",
+      "note": "Practical guide to using the Roofline model for performance analysis on real HPC systems. Includes instructions for measuring arithmetic intensity and constructing hierarchical Roofline models."
+    }
+  ]
+}

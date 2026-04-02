@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A CPU allocates roughly 75% of its transistor budget to control logic and caches, while a GPU allocates roughly 50% to arithmetic units. If both chips have 80 billion transistors, which statement best explains the GPU's higher TFLOPS despite similar transistor counts?",
+      "options": [
+        "GPUs use faster transistors manufactured on a more advanced process node",
+        "GPUs clock their cores at higher frequencies than CPUs",
+        "GPUs dedicate far more transistors to execution units (ALUs) by eliminating complex control logic like branch predictors and out-of-order schedulers, achieving throughput through massive parallelism instead of single-thread speed",
+        "GPUs achieve higher TFLOPS because they use wider SIMD lanes than CPU vector units"
+      ],
+      "correct": 2,
+      "explanation": "The H100 GPU and a modern server CPU both use approximately 80 billion transistors on similar process nodes (4nm-class). The performance difference comes entirely from how those transistors are allocated. The CPU spends ~25% on control logic (branch prediction, OoO scheduling, register renaming) and ~50% on caches to make individual threads fast. The GPU eliminates most of this complexity, using ~50% of transistors for arithmetic units and hiding latency through thousands of concurrent threads rather than prediction and speculation. The result: the H100 achieves 60 TFLOPS FP32 from CUDA cores alone (and 1,979 TFLOPS FP16 with Tensor Cores), while a top-end CPU achieves ~4.6 TFLOPS FP64."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "The NVIDIA H100 SXM5 has 132 SMs, each with 128 FP32 CUDA cores and 4 Tensor Cores (4th gen). The B200 has 148 SMs with 128 CUDA cores and 528 Tensor Cores (5th gen). Which of the following correctly explains the B200's dual-die design?",
+      "options": [
+        "The B200 places all 148 SMs on a single die that exceeds the reticle limit using advanced lithography",
+        "The B200 uses two separate GPU packages connected via NVLink 5.0 on the motherboard",
+        "The B200 connects two reticle-limited dies (74 SMs each) via a 10 TB/s NV-HBI interconnect on the same package, appearing as a single logical GPU to software",
+        "The B200 stacks two dies vertically using 3D packaging, with through-silicon vias connecting the compute layers"
+      ],
+      "correct": 2,
+      "explanation": "The B200's 208 billion transistors cannot fit on a single reticle-limited die (~858 mm² maximum). NVIDIA's solution is a dual-die design where two dies (each with 74 enabled SMs) are connected by the NV-HBI (NVIDIA High Bandwidth Interface) at 10 TB/s on the same package. The NV-HBI bandwidth is high enough that software sees a single unified GPU with 148 SMs and 192 GB of HBM3e -- no explicit multi-GPU programming required. This is distinct from NVLink (which connects separate GPUs) and distinct from 3D stacking (which is used for HBM memory, not the compute dies themselves)."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A warp of 32 threads executes the following code:\n```\nif (threadIdx.x % 4 == 0) {\n    path_A();  // 8 threads\n} else if (threadIdx.x % 4 == 1) {\n    path_B();  // 8 threads\n} else {\n    path_C();  // 16 threads\n}\n```\nOn a pre-Volta GPU, how does this affect warp execution?",
+      "options": [
+        "All three paths execute simultaneously since different threads handle different paths",
+        "The warp executes three paths sequentially (A, then B, then C), with inactive threads masked off in each phase, reducing throughput to approximately 1/3",
+        "The compiler converts the branches into predicated instructions, so there is no performance penalty",
+        "The warp splits into three independent sub-warps that execute in parallel on different CUDA cores"
+      ],
+      "correct": 1,
+      "explanation": "On pre-Volta hardware, all threads in a warp share a single program counter. When threads diverge, the hardware serializes the divergent paths. For this 3-way divergence: first 8 threads execute path_A (active mask 0x11111111 in binary for threads 0,4,8,...,28), then 8 threads execute path_B (threads 1,5,9,...,29), then 16 threads execute path_C (remaining threads). During each phase, inactive threads are masked off. The warp takes the sum of all path execution times, not the maximum. Three divergent paths reduce throughput to roughly 1/3. On Volta+ with independent thread scheduling, the paths can be interleaved rather than strictly serialized, but the total work remains the same."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Consider the evolution of Tensor Core precision from Volta (2017) to Blackwell (2024). Volta's 1st-gen Tensor Cores supported FP16, and Blackwell's 5th-gen supports FP4. The B200 achieves 9 PFLOPS at FP4 dense (vs 4.5 PFLOPS at FP8). Why does halving the bit-width approximately double the throughput?",
+      "options": [
+        "Lower precision formats require fewer transistors, so more Tensor Cores can fit on the die",
+        "FP4 values are half the size of FP8 values, so twice as many multiply-accumulate operations can be packed into the same datapath width per cycle, and the reduced memory footprint means data can be delivered to the Tensor Cores faster",
+        "FP4 operations skip the normalization step in floating-point arithmetic, halving the cycle count per operation",
+        "The improvement is coincidental; FP4 throughput is higher because Blackwell's 5th-gen Tensor Cores have a fundamentally different microarchitecture"
+      ],
+      "correct": 1,
+      "explanation": "Tensor Cores perform matrix multiply-accumulate on fixed-width datapaths. When operands are 4 bits instead of 8 bits, twice as many operands fit in the same register/datapath width, enabling twice as many multiply-accumulate operations per cycle. Additionally, 4-bit values halve the memory footprint compared to 8-bit, meaning the memory system can deliver data to the Tensor Cores at twice the rate for the same bandwidth. The combination of higher compute density and better data delivery is why each precision halving roughly doubles throughput. The key engineering challenge is maintaining model accuracy at lower precision, which NVIDIA addresses through the Transformer Engine's dynamic per-layer precision switching and per-tensor scaling factors."
+    }
+  ]
+}

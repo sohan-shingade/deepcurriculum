@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "TLC NAND flash stores 3 bits per cell using 8 voltage levels. Compared to SLC (1 bit, 2 levels), which of the following is TRUE about TLC?",
+      "options": [
+        "TLC has higher endurance because the charge levels are more stable",
+        "TLC is faster to read because fewer voltage comparisons are needed",
+        "TLC has approximately 1,000-3,000 program/erase cycle endurance versus SLC's 50,000-100,000, and is roughly 3x slower to read",
+        "TLC and SLC have the same reliability if the same ECC is used"
+      ],
+      "correct": 2,
+      "explanation": "TLC stores 3 bits per cell by distinguishing between 8 voltage levels, compared to SLC's 2 levels. The voltage margins between adjacent levels are approximately 4x narrower, making TLC far more susceptible to read disturb, charge leakage, and programming errors. This results in TLC endurance of roughly 1,000-3,000 P/E cycles versus SLC's 50,000-100,000 -- roughly 30-50x worse. Read latency is also higher (~75 us vs ~25 us) because multiple read reference voltages must be applied to distinguish the 8 levels. TLC's advantage is cost: 3x the bits per cell means roughly 3x the density on the same die area, making it the mainstream choice for consumer SSDs."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "An SSD's Flash Translation Layer uses page-level mapping for a 2 TB drive with 4 KB pages. Approximately how much DRAM is needed to store the mapping table?",
+      "options": [
+        "256 MB",
+        "1 GB",
+        "4 GB",
+        "16 GB"
+      ],
+      "correct": 2,
+      "explanation": "The number of mapping table entries = total capacity / page size = 2 TB / 4 KB = 2^41 / 2^12 = 2^29 = ~536 million entries. Each entry stores a physical page address, requiring approximately 8 bytes (enough to address the physical NAND space). Table size = 2^29 x 8 bytes = 2^32 = 4 GB. This is why high-end SSDs include substantial DRAM -- Samsung's 990 Pro (2 TB) includes 2 GB of LPDDR4 DRAM for its mapping table (using compression and caching to fit within 2 GB). Budget 'DRAMless' SSDs use Host Memory Buffer (HMB) protocol to cache a portion of the mapping table in system RAM, with the rest stored in NAND -- leading to performance cliffs on random reads when the cached portion misses."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "If an L1 cache reference takes 1 ns, a DRAM access takes 100 ns, and an SSD random read takes 16 microseconds, what is the ratio of SSD latency to L1 latency?",
+      "options": [
+        "100x slower",
+        "1,600x slower",
+        "16,000x slower",
+        "160,000x slower"
+      ],
+      "correct": 2,
+      "explanation": "SSD random read latency is 16 microseconds = 16,000 nanoseconds. L1 cache reference is 1 nanosecond. The ratio is 16,000 / 1 = 16,000x. To put this in human terms: if L1 access were 1 second, an SSD read would take about 4.4 hours. This enormous gap is why the memory hierarchy exists and why caching strategies matter enormously. A cache miss that falls all the way to SSD is catastrophic for latency-sensitive applications. DRAM sits in between at 100 ns (100x slower than L1 but 160x faster than SSD), which is why having enough DRAM to keep your working set in memory is one of the most impactful performance optimizations in systems engineering."
+    }
+  ]
+}

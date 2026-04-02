@@ -1,0 +1,713 @@
+---
+title: "Working with LLM APIs: Engineering for Production"
+week: 1
+lecture: 2
+estimatedMinutes: 45
+---
+
+# Working with LLM APIs: Engineering for Production
+
+In the last lecture, we opened the hood and examined the transformer engine. Now we learn to drive it. This lecture covers the practical engineering of working with LLM APIs: how to call them, how to handle failure, how to control costs, and how to extract structured data. By the end, you should be able to design a production LLM integration that won't page you at 3 AM.
+
+---
+
+## 1. API Design Patterns
+
+Every major LLM provider exposes a **chat completion** endpoint. Despite surface-level differences, the core abstraction is identical: you send a list of messages with roles, and the model returns a completion. Understanding the subtle differences between providers' APIs is not pedantic — it determines whether you can switch providers in an emergency without a code rewrite, and whether your system prompt actually has the priority you think it does.
+
+The evolution of LLM APIs is worth noting. The original GPT-3 API (2020) was a simple text-in, text-out completion endpoint: you sent a prompt string and got a continuation. The chat completion format, introduced with ChatGPT, added the role-based message system that is now universal. This was not just a cosmetic change — the role system enables the model to distinguish between instructions (system), human input (user), and its own prior responses (assistant), leading to significantly better instruction following and multi-turn coherence.
+
+### 1.1 The Message Format
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Literal
+import json
+
+@dataclass
+class Message:
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+@dataclass
+class ChatRequest:
+    model: str
+    messages: List[Message]
+    temperature: float = 1.0
+    max_tokens: int = 1024
+    top_p: float = 1.0
+
+    def to_openai_format(self) -> dict:
+        return {
+            "model": self.model,
+            "messages": [{"role": m.role, "content": m.content} for m in self.messages],
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+        }
+
+    def to_anthropic_format(self) -> dict:
+        system_msg = next((m.content for m in self.messages if m.role == "system"), "")
+        non_system = [{"role": m.role, "content": m.content}
+                      for m in self.messages if m.role != "system"]
+        result = {
+            "model": self.model,
+            "messages": non_system,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+        if system_msg:
+            result["system"] = system_msg
+        return result
+
+
+# Example usage
+messages = [
+    Message(role="system", content="You are a helpful coding assistant."),
+    Message(role="user", content="Write a Python function to compute factorial."),
+]
+request = ChatRequest(model="gpt-4", messages=messages, temperature=0.2)
+
+print("OpenAI format:")
+print(json.dumps(request.to_openai_format(), indent=2))
+print("\nAnthropic format:")
+print(json.dumps(request.to_anthropic_format(), indent=2))
+```
+
+The key difference: Anthropic treats the system message as a top-level parameter, not part of the message array. Google's Gemini API uses a different structure entirely (`contents` with `parts`). In production, you'll want an abstraction layer like the one above — or use a library like LiteLLM — to swap providers without rewriting call sites.
+
+**The role system matters.** The `system` message sets behavioral constraints that the model treats with higher priority. The `user`/`assistant` alternation establishes conversation context. A common production pattern is to put instructions in `system`, few-shot examples as `user`/`assistant` pairs, and the actual request as the final `user` message.
+
+<ConceptCheck id="cc-1" />
+
+---
+
+## 2. Token Economics
+
+LLMs charge per token. Understanding token economics is not optional — it is the difference between a profitable product and one that burns money faster than it acquires users. I have seen teams launch LLM features without cost modeling and discover $50,000 monthly bills within weeks. Cost is a first-class engineering constraint, and the right time to model it is before you write the first line of integration code.
+
+### 2.1 Input vs. Output Pricing
+
+All providers charge differently for input (prompt) tokens and output (completion) tokens. Output tokens are significantly more expensive — typically 3-5x more per token — because generating each output token requires a full sequential forward pass through the model, while input tokens are processed in a single parallelized forward pass. This asymmetry has deep architectural implications.
+
+Consider a retrieval-augmented generation (RAG) system where you inject 5 pages of retrieved context into every prompt. Your input tokens are dominated by context that the model reads but doesn't generate. If output pricing is 5x input pricing, then a concise 100-token response costs the same as 500 additional input tokens. This means **controlling output verbosity is often the highest-leverage cost optimization** — more impactful than reducing context size.
+
+As of early 2026, approximate pricing per million tokens:
+
+| Model | Input ($/1M) | Output ($/1M) | Ratio |
+|-------|-------------|---------------|-------|
+| GPT-4o | $2.50 | $10.00 | 4x |
+| Claude 3.5 Sonnet | $3.00 | $15.00 | 5x |
+| Gemini 2.0 Flash | $0.10 | $0.40 | 4x |
+| Llama 3 70B (hosted) | $0.60 | $0.60 | 1x |
+
+### 2.2 Cost Estimation
+
+```python
+from dataclasses import dataclass
+from typing import Dict
+
+@dataclass
+class ModelPricing:
+    name: str
+    input_cost_per_million: float  # dollars per 1M input tokens
+    output_cost_per_million: float  # dollars per 1M output tokens
+
+    def estimate_cost(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        num_requests: int = 1,
+    ) -> float:
+        """Estimate cost in dollars."""
+        input_cost = (input_tokens * num_requests / 1_000_000) * self.input_cost_per_million
+        output_cost = (output_tokens * num_requests / 1_000_000) * self.output_cost_per_million
+        return input_cost + output_cost
+
+
+def monthly_cost_estimate(
+    daily_requests: int,
+    avg_input_tokens: int,
+    avg_output_tokens: int,
+    pricing: ModelPricing,
+) -> Dict[str, float]:
+    """Estimate monthly costs with breakdown."""
+    monthly_requests = daily_requests * 30
+    total_input = avg_input_tokens * monthly_requests
+    total_output = avg_output_tokens * monthly_requests
+
+    input_cost = (total_input / 1_000_000) * pricing.input_cost_per_million
+    output_cost = (total_output / 1_000_000) * pricing.output_cost_per_million
+
+    return {
+        "model": pricing.name,
+        "monthly_requests": monthly_requests,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "input_cost": round(input_cost, 2),
+        "output_cost": round(output_cost, 2),
+        "total_cost": round(input_cost + output_cost, 2),
+        "cost_per_request": round((input_cost + output_cost) / monthly_requests, 6),
+    }
+
+
+# Compare providers for a typical RAG workload
+# Scenario: 10K requests/day, 2000 input tokens (system + retrieved docs), 500 output tokens
+models = [
+    ModelPricing("GPT-4o", 2.50, 10.00),
+    ModelPricing("Claude 3.5 Sonnet", 3.00, 15.00),
+    ModelPricing("Gemini 2.0 Flash", 0.10, 0.40),
+    ModelPricing("Llama 3 70B (hosted)", 0.60, 0.60),
+]
+
+print("Monthly cost comparison for RAG workload (10K req/day, 2K in + 500 out tokens):\n")
+for model in models:
+    estimate = monthly_cost_estimate(10_000, 2000, 500, model)
+    print(f"  {estimate['model']:25s}  ${estimate['total_cost']:>8,.2f}/month  "
+          f"(${estimate['cost_per_request']:.4f}/req)")
+```
+
+The difference between Gemini Flash and Claude Sonnet for the same workload can be **50x**. This is why model selection is an engineering decision, not a taste decision. Many production systems use a **model routing** pattern: a lightweight classifier or rules engine decides which model to use for each request. Simple tasks (classification, extraction from clean text) go to a cheap, fast model. Complex tasks (multi-step reasoning, creative writing, nuanced analysis) go to a frontier model. This can cut costs by 80% with negligible quality loss on the simple tasks — because a $0.10/1M model can classify sentiment just as well as a $15/1M model.
+
+### 2.3 Token Counting
+
+How many tokens is a given string? The exact answer depends on the tokenizer. A rough heuristic: 1 token is about 4 characters or 0.75 words in English. But you need exact counts for budgeting. Here is a simplified token counter:
+
+```python
+def estimate_token_count(text: str, method: str = "chars") -> int:
+    """
+    Estimate token count using simple heuristics.
+    For production, use tiktoken (OpenAI) or the provider's tokenizer.
+
+    Heuristics:
+        - "chars": ~4 characters per token (English text)
+        - "words": ~0.75 words per token (English text)
+        - "whitespace": split on whitespace, multiply by 1.3
+    """
+    if method == "chars":
+        return max(1, len(text) // 4)
+    elif method == "words":
+        words = len(text.split())
+        return max(1, int(words * 1.33))
+    elif method == "whitespace":
+        return max(1, int(len(text.split()) * 1.3))
+    raise ValueError(f"Unknown method: {method}")
+
+
+text = "The transformer architecture processes input tokens through self-attention layers."
+for method in ["chars", "words", "whitespace"]:
+    print(f"  {method:12s}: ~{estimate_token_count(text, method)} tokens")
+print(f"  Actual text length: {len(text)} chars, {len(text.split())} words")
+```
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 3. Rate Limiting and Retry Logic
+
+Every API has rate limits — typically measured in requests per minute (RPM) and tokens per minute (TPM). When you hit them, you get a 429 status code. Production systems **must** handle this gracefully. If your code simply crashes or drops requests on a 429, your users see errors during peak traffic — precisely when reliability matters most.
+
+Rate limits exist for good reasons. LLM inference is GPU-bound, and providers need to ensure fair access across customers. Typical limits range from 60-500 RPM for developer tiers to 10,000+ RPM for enterprise tiers. You will hit these limits. The question is not "if" but "when," and the answer determines whether your service degrades gracefully or catches fire.
+
+### 3.1 Exponential Backoff with Jitter
+
+The standard retry strategy. The idea: wait an increasing amount of time between retries, with randomness to prevent thundering herd problems when many clients retry simultaneously. The "thundering herd" problem is worth understanding: if 100 clients all hit a rate limit at time $t_0$ and all retry at $t_0 + 1\text{s}$, the service gets hammered again at exactly $t_0 + 1\text{s}$, causing another round of 429s. Jitter spreads the retries uniformly across the backoff window, eliminating this coordinated spike.
+
+The wait time for the $k$-th retry:
+
+$$t_k = \min\left(t_{\max}, \, t_{\text{base}} \cdot 2^k + \text{jitter}\right)$$
+
+where jitter is drawn uniformly from $[0, t_{\text{base}} \cdot 2^k]$.
+
+```python
+import math
+import time
+import json
+from dataclasses import dataclass, field
+from typing import Callable, Any, List
+import hashlib
+
+@dataclass
+class RetryConfig:
+    max_retries: int = 5
+    base_delay: float = 1.0  # seconds
+    max_delay: float = 60.0  # seconds
+    jitter: bool = True
+    retryable_errors: tuple = (429, 500, 502, 503, 504)
+
+def compute_backoff_delay(
+    attempt: int,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    jitter: bool = True,
+) -> float:
+    """
+    Compute exponential backoff delay with optional jitter.
+
+    Args:
+        attempt: Zero-indexed retry attempt number.
+        base_delay: Initial delay in seconds.
+        max_delay: Maximum delay cap in seconds.
+        jitter: Whether to add randomized jitter.
+
+    Returns:
+        Delay in seconds.
+    """
+    # Exponential backoff: base * 2^attempt
+    delay = min(max_delay, base_delay * (2 ** attempt))
+
+    if jitter:
+        # "Full jitter" strategy: uniform random in [0, delay]
+        # Using a deterministic seed for reproducibility in this demo
+        import random
+        delay = random.uniform(0, delay)
+
+    return delay
+
+
+# Demonstrate the backoff schedule
+import random
+random.seed(42)
+
+print("Exponential backoff schedule (5 retries):\n")
+print(f"  {'Attempt':<10} {'No Jitter':>12} {'With Jitter':>12}")
+print(f"  {'-'*10} {'-'*12} {'-'*12}")
+for attempt in range(6):
+    no_jitter = min(60.0, 1.0 * (2 ** attempt))
+    random.seed(42 + attempt)  # reproducible jitter
+    with_jitter = compute_backoff_delay(attempt, 1.0, 60.0, jitter=True)
+    print(f"  {attempt:<10} {no_jitter:>10.2f}s {with_jitter:>10.2f}s")
+```
+
+### 3.2 Circuit Breaker Pattern
+
+Retries alone are not enough. If a service is truly down, retrying wastes resources and adds latency. A **circuit breaker** stops trying after repeated failures, then periodically tests whether the service has recovered.
+
+The circuit breaker has three states:
+- **Closed** (normal): Requests pass through. Track failures.
+- **Open** (tripped): Requests fail immediately without calling the service. After a timeout, transition to half-open.
+- **Half-open** (testing): Allow a single request through. If it succeeds, close the circuit. If it fails, open it again.
+
+```python
+from dataclasses import dataclass, field
+import time
+
+@dataclass
+class CircuitBreaker:
+    failure_threshold: int = 5
+    recovery_timeout: float = 30.0  # seconds
+    _failure_count: int = field(default=0, repr=False)
+    _state: str = field(default="closed", repr=False)
+    _last_failure_time: float = field(default=0.0, repr=False)
+
+    @property
+    def state(self) -> str:
+        if self._state == "open":
+            if time.time() - self._last_failure_time >= self.recovery_timeout:
+                return "half_open"
+        return self._state
+
+    def record_success(self) -> None:
+        self._failure_count = 0
+        self._state = "closed"
+
+    def record_failure(self) -> None:
+        self._failure_count += 1
+        self._last_failure_time = time.time()
+        if self._failure_count >= self.failure_threshold:
+            self._state = "open"
+
+    def allow_request(self) -> bool:
+        state = self.state
+        if state == "closed":
+            return True
+        elif state == "half_open":
+            return True  # Allow one test request
+        else:
+            return False
+
+
+# Demonstrate circuit breaker behavior
+cb = CircuitBreaker(failure_threshold=3, recovery_timeout=5.0)
+
+events = [
+    ("success", True),
+    ("failure", False),
+    ("failure", False),
+    ("failure", False),  # This should trip the circuit
+    ("attempt", None),   # Should be blocked
+    ("attempt", None),   # Should be blocked
+]
+
+for label, success in events:
+    allowed = cb.allow_request()
+    if success is True:
+        cb.record_success()
+    elif success is False:
+        cb.record_failure()
+
+    print(f"  {label:10s} | allowed={allowed!s:5s} | state={cb.state:10s} | "
+          f"failures={cb._failure_count}")
+```
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 4. Temperature and Sampling
+
+When the model produces logits $\mathbf{z} \in \mathbb{R}^{|V|}$, the next token is selected by sampling from a modified distribution. The three main controls are temperature, top-p, and top-k. These parameters are often treated as "magic knobs" to fiddle with, but they have precise mathematical meanings with predictable effects on output quality and diversity. Understanding the math is the difference between informed tuning and cargo-cult parameter selection.
+
+### 4.1 Temperature
+
+Temperature is borrowed from statistical mechanics, where it controls the probability of a system being in a given energy state via the Boltzmann distribution. In the LLM context, temperature $T$ scales the logits before softmax:
+
+$$p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$
+
+- $T = 1.0$: Standard softmax. The model's default distribution.
+- $T \to 0$: The distribution collapses to a point mass on the highest logit (greedy decoding). Deterministic but unimaginative.
+- $T > 1$: The distribution flattens. More randomness, more creativity, more nonsense.
+- $T = 0$ (exactly): Argmax. Always select the most probable token.
+
+```python
+import numpy as np
+
+def temperature_sampling_demo(logits: np.ndarray, temperatures: list) -> None:
+    """Show how temperature affects the probability distribution."""
+    vocab = ["the", "a", "one", "some", "that"]
+
+    print(f"Raw logits: {logits.tolist()}\n")
+    print(f"  {'Temp':<8} | {'Distribution':40s} | {'Entropy':>8} | Top token")
+    print(f"  {'-'*8} | {'-'*40} | {'-'*8} | {'-'*10}")
+
+    for T in temperatures:
+        if T == 0:
+            # Argmax
+            probs = np.zeros_like(logits, dtype=float)
+            probs[np.argmax(logits)] = 1.0
+        else:
+            scaled = logits / T
+            scaled -= scaled.max()  # numerical stability
+            exp_scaled = np.exp(scaled)
+            probs = exp_scaled / exp_scaled.sum()
+
+        # Shannon entropy
+        entropy = -np.sum(probs * np.log(probs + 1e-10))
+        dist_str = "  ".join(f"{p:.3f}" for p in probs)
+        top_token = vocab[np.argmax(probs)]
+
+        print(f"  {T:<8.2f} | {dist_str:40s} | {entropy:>8.3f} | {top_token}")
+
+
+logits = np.array([2.0, 1.5, 0.5, 0.3, -0.5])
+temperature_sampling_demo(logits, [0, 0.1, 0.5, 1.0, 2.0, 5.0])
+```
+
+### 4.2 Top-p (Nucleus Sampling)
+
+Top-p sampling (Holtzman et al., 2020) keeps the smallest set of tokens whose cumulative probability mass exceeds $p$, then renormalizes. For example, with $p = 0.9$, if the top 3 tokens have probabilities 0.5, 0.3, 0.15, they sum to 0.95 > 0.9, so only those 3 tokens are candidates.
+
+This is more adaptive than top-k: when the model is confident, few tokens are considered; when uncertain, many tokens are considered.
+
+### 4.3 Top-k
+
+Top-k sampling keeps only the $k$ most probable tokens and renormalizes. It's simpler but less adaptive than top-p.
+
+**Production guidance**: For most tasks, set `temperature=0` or `temperature=0.1` and leave top-p at 1.0. Use higher temperatures (0.7-1.0) only for creative tasks. Never set both temperature and top-p to non-default values — they interact in confusing ways.
+
+---
+
+## 5. Structured Outputs
+
+Raw text completions are hard to parse reliably. The fundamental tension in LLM engineering is this: you want the model's intelligence for understanding and reasoning, but you need deterministic, parseable outputs for your downstream code. Regex-parsing free-text LLM output is a brittle nightmare — the model might add a preamble, change formatting, or include markdown you didn't expect. Production systems need **structured outputs** — JSON, typed objects, specific formats.
+
+This problem has driven significant API evolution. Early LLM integrations relied on prompt engineering ("respond ONLY in JSON format") combined with fragile parsing. Modern APIs offer first-class structured output support, but the underlying challenge remains: you are asking a probabilistic text generator to conform to a rigid schema.
+
+### 5.1 JSON Mode
+
+Most providers now offer a JSON mode that constrains the model's output to valid JSON. Some providers go further — OpenAI's "Structured Outputs" and Anthropic's tool use both support JSON Schema validation, guaranteeing the output matches a specific schema. But even with schema validation, the model might produce valid-but-wrong JSON: correct types but nonsensical values, empty arrays where you expected data, or hallucinated field values. You still need application-level validation.
+
+```python
+import json
+from dataclasses import dataclass, asdict
+from typing import List, Optional
+
+@dataclass
+class ExtractedEntity:
+    name: str
+    entity_type: str
+    confidence: float
+    context: Optional[str] = None
+
+@dataclass
+class ExtractionResult:
+    entities: List[ExtractedEntity]
+    source_text: str
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), indent=2)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "ExtractionResult":
+        data = json.loads(json_str)
+        entities = [ExtractedEntity(**e) for e in data["entities"]]
+        return cls(entities=entities, source_text=data["source_text"])
+
+    def validate(self) -> List[str]:
+        """Validate the extraction result. Returns list of errors."""
+        errors = []
+        for i, entity in enumerate(self.entities):
+            if not entity.name.strip():
+                errors.append(f"Entity {i}: empty name")
+            if entity.confidence < 0 or entity.confidence > 1:
+                errors.append(f"Entity {i}: confidence {entity.confidence} not in [0,1]")
+            if entity.entity_type not in {"person", "organization", "location", "date", "other"}:
+                errors.append(f"Entity {i}: invalid type '{entity.entity_type}'")
+        return errors
+
+
+# Simulated extraction output
+result = ExtractionResult(
+    entities=[
+        ExtractedEntity("OpenAI", "organization", 0.95, "Founded by..."),
+        ExtractedEntity("San Francisco", "location", 0.88),
+        ExtractedEntity("GPT-4", "other", 0.72, "Released in March 2023"),
+    ],
+    source_text="OpenAI, based in San Francisco, released GPT-4..."
+)
+
+json_output = result.to_json()
+print("Serialized:\n", json_output)
+
+# Round-trip validation
+parsed = ExtractionResult.from_json(json_output)
+errors = parsed.validate()
+print(f"\nValidation errors: {errors if errors else 'None'}")
+print(f"Entities found: {len(parsed.entities)}")
+```
+
+### 5.2 Function Calling / Tool Use
+
+Function calling lets you define a schema for the model's output. The model doesn't call functions — it generates structured arguments that your code uses to call functions. This is the foundation of agentic patterns.
+
+The schema typically follows JSON Schema format. The model sees the function definitions and produces a structured invocation:
+
+```python
+import json
+
+# Define available tools
+tools = [
+    {
+        "name": "search_database",
+        "description": "Search a product database by query and filters",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "category": {
+                    "type": "string",
+                    "enum": ["electronics", "clothing", "books"],
+                    "description": "Product category filter",
+                },
+                "max_price": {"type": "number", "description": "Maximum price in USD"},
+                "in_stock": {"type": "boolean", "description": "Only show in-stock items"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_product_details",
+        "description": "Get detailed information about a specific product",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "Product identifier"},
+            },
+            "required": ["product_id"],
+        },
+    },
+]
+
+# Simulated model response (in production, this comes from the API)
+tool_call_response = {
+    "tool_calls": [
+        {
+            "function": {
+                "name": "search_database",
+                "arguments": json.dumps({
+                    "query": "noise cancelling headphones",
+                    "category": "electronics",
+                    "max_price": 300,
+                    "in_stock": True,
+                }),
+            }
+        }
+    ]
+}
+
+# Parse and dispatch
+for call in tool_call_response["tool_calls"]:
+    func_name = call["function"]["name"]
+    args = json.loads(call["function"]["arguments"])
+    print(f"Function: {func_name}")
+    print(f"Arguments: {json.dumps(args, indent=2)}")
+
+    # Validate against schema
+    tool_schema = next(t for t in tools if t["name"] == func_name)
+    required = tool_schema["parameters"].get("required", [])
+    missing = [r for r in required if r not in args]
+    if missing:
+        print(f"ERROR: Missing required fields: {missing}")
+    else:
+        print("Validation: PASSED")
+```
+
+---
+
+## 6. Streaming and Latency
+
+### 6.1 Server-Sent Events (SSE)
+
+LLM APIs stream responses using the **Server-Sent Events** protocol. Instead of waiting for the complete response (which can take 10-30 seconds for long outputs), the server sends tokens as they are generated. Each event is a line of text:
+
+```
+data: {"choices": [{"delta": {"content": "Hello"}}]}
+data: {"choices": [{"delta": {"content": " world"}}]}
+data: [DONE]
+```
+
+This dramatically improves perceived latency: the user sees the first token in 200-500ms (Time to First Token, or TTFT) instead of waiting for the full response.
+
+### 6.2 Latency Breakdown
+
+Total latency = TTFT + (output_tokens * time_per_token)
+
+- **TTFT (Time to First Token)**: 200ms - 2s depending on model and prompt length. This includes processing the full input prompt.
+- **Time per token (inter-token latency)**: 10-50ms depending on model size. Roughly proportional to model parameters.
+- **Total for 500 output tokens**: 200ms + 500 * 30ms = 15.2s for a typical large model.
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class LatencyEstimate:
+    model: str
+    ttft_ms: float          # time to first token
+    per_token_ms: float     # inter-token latency
+
+    def total_latency_ms(self, output_tokens: int) -> float:
+        return self.ttft_ms + output_tokens * self.per_token_ms
+
+    def tokens_per_second(self) -> float:
+        return 1000.0 / self.per_token_ms
+
+models = [
+    LatencyEstimate("GPT-4o", 300, 25),
+    LatencyEstimate("Claude 3.5 Sonnet", 400, 30),
+    LatencyEstimate("Gemini 2.0 Flash", 150, 10),
+    LatencyEstimate("Llama 3 8B (local)", 50, 8),
+]
+
+print(f"{'Model':25s} {'TTFT':>8s} {'TPS':>6s} {'100 tok':>10s} {'500 tok':>10s} {'2000 tok':>10s}")
+print("-" * 70)
+for m in models:
+    print(f"{m.model:25s} {m.ttft_ms:>6.0f}ms {m.tokens_per_second():>5.0f}/s "
+          f"{m.total_latency_ms(100)/1000:>8.1f}s "
+          f"{m.total_latency_ms(500)/1000:>8.1f}s "
+          f"{m.total_latency_ms(2000)/1000:>8.1f}s")
+```
+
+### 6.3 Optimization Strategies
+
+**Prompt caching**: Some providers cache the prefix of your prompt. If you send the same system message repeatedly, only the unique suffix is processed. Anthropic's prompt caching can reduce TTFT by 80% and cost by 90% for cached tokens.
+
+**Parallel calls**: When you need multiple independent completions (e.g., evaluating with multiple models, or processing multiple documents), send requests in parallel. The API's rate limit is your bottleneck, not sequential waiting.
+
+**Batching**: For offline workloads, batch APIs offer 50% cost savings in exchange for higher latency (24-hour SLA). Use batch endpoints for bulk processing — evaluation, data annotation, content generation.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 7. Error Handling in Production
+
+Production LLM integrations must handle a taxonomy of failures:
+
+| Error Type | Status Code | Strategy |
+|-----------|-------------|----------|
+| Rate limit | 429 | Exponential backoff, queue |
+| Server error | 500/502/503 | Retry with backoff |
+| Context too long | 400 | Truncate input, summarize |
+| Content filter | 400 | Rephrase, escalate |
+| Timeout | N/A | Set deadline, retry |
+| Malformed output | N/A | Re-prompt, fallback |
+
+The **malformed output** case deserves special attention. Even with JSON mode, the model might:
+- Return valid JSON with wrong fields
+- Return an empty response
+- Return a refusal ("I can't help with that")
+- Truncate mid-output due to max_tokens
+
+```python
+from dataclasses import dataclass
+from typing import Optional, Any
+import json
+
+@dataclass
+class LLMResponse:
+    """Wrapper for LLM API responses with validation."""
+    raw_text: str
+    status: str  # "success", "error", "refusal", "truncated"
+    parsed: Optional[Any] = None
+    error: Optional[str] = None
+
+    @classmethod
+    def from_raw(cls, text: str, expected_json: bool = False) -> "LLMResponse":
+        """Parse and validate a raw LLM response."""
+        # Check for common refusal patterns
+        refusal_phrases = [
+            "I cannot", "I can't", "I'm unable",
+            "I apologize", "I'm not able",
+        ]
+        if any(phrase.lower() in text.lower() for phrase in refusal_phrases):
+            return cls(raw_text=text, status="refusal", error="Model refused the request")
+
+        if not text.strip():
+            return cls(raw_text=text, status="error", error="Empty response")
+
+        if expected_json:
+            try:
+                parsed = json.loads(text)
+                return cls(raw_text=text, status="success", parsed=parsed)
+            except json.JSONDecodeError as e:
+                return cls(raw_text=text, status="error",
+                          error=f"Invalid JSON: {e}")
+
+        return cls(raw_text=text, status="success")
+
+
+# Test various response types
+test_cases = [
+    ('{"name": "Alice", "age": 30}', True, "Valid JSON"),
+    ('{"name": "Alice", "age": }', True, "Invalid JSON"),
+    ("I cannot help with that request.", False, "Refusal"),
+    ("", False, "Empty response"),
+    ("Here is your answer: hello!", False, "Plain text"),
+]
+
+for text, expect_json, label in test_cases:
+    response = LLMResponse.from_raw(text, expected_json=expect_json)
+    print(f"  {label:20s} -> status={response.status:10s} "
+          f"error={response.error or 'None'}")
+```
+
+---
+
+## Summary
+
+Building with LLMs is software engineering, not magic. The API is a function call that takes text and returns text, with well-defined cost, latency, and failure characteristics. You control the output distribution with temperature and top-p. You extract structure with JSON mode and function calling. You handle failure with exponential backoff, circuit breakers, and response validation. You manage costs by understanding token economics and choosing the right model for each task.
+
+The key mental model: **treat the LLM as a powerful but unreliable microservice.** It has latency SLAs, error rates, cost per call, and output schemas — just like any other service in your architecture. Design accordingly.
+
+Next week, we'll dive into prompt engineering — the art and science of writing inputs that produce reliable outputs.

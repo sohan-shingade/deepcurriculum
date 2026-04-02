@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "The Elements of Computing Systems (Nand2Tetris) — Chapter 1: Boolean Logic",
+      "authors": "Noam Nisan and Shimon Schocken",
+      "url": "https://www.nand2tetris.org/course",
+      "note": "The foundational text for building computers from NAND gates. Chapter 1 covers Boolean algebra, truth tables, canonical forms, and the 15 elementary logic gates you build in Project 1. Read this before starting Problem Set 1."
+    },
+    {
+      "title": "MIT 6.004 Computation Structures — Units 2 and 3: The Digital Abstraction and CMOS Technology",
+      "authors": "MIT OpenCourseWare (Steve Ward, Chris Terman)",
+      "url": "https://computationstructures.org/",
+      "note": "Covers the digital abstraction (how continuous voltages become discrete bits), noise margins, CMOS inverter design, and timing specifications. The interactive courseware includes excellent visualizations of MOSFET operation and CMOS gate design."
+    },
+    {
+      "title": "Modern Semiconductor Devices for Integrated Circuits — Chapter 7: MOSFET",
+      "authors": "Chenming Hu (UC Berkeley)",
+      "url": "https://www.chu.berkeley.edu/wp-content/uploads/2020/01/Chenming-Hu_ch7.pdf",
+      "note": "The definitive treatment of MOSFET physics from first principles. Covers threshold voltage derivation, body effect, I-V characteristics, and short-channel effects. Dense but thorough — this is the reference that practicing IC designers use."
+    },
+    {
+      "title": "TSMC N2 and Intel 18A: The GAA Transition",
+      "authors": "Various (Tom's Hardware, IEEE Spectrum, SemiWiki)",
+      "url": "https://spectrum.ieee.org/tsmc-n2",
+      "note": "A collection of articles on the transition from FinFET to Gate-All-Around transistors. Covers the physics of why GAA provides better electrostatic control, TSMC's nanosheet implementation, Intel's RibbonFET + PowerVia combination, and Samsung's MBCFET. Read to understand the current state of the art in semiconductor manufacturing."
+    },
+    {
+      "title": "Logical Effort: Designing Fast CMOS Circuits",
+      "authors": "Ivan Sutherland, Bob Sproull, and David Harris",
+      "url": "https://en.wikipedia.org/wiki/Logical_effort",
+      "note": "The theoretical framework for optimizing CMOS gate sizing for speed. Introduces the concept of logical effort (how much worse a gate is than an inverter at driving capacitive loads) and provides a systematic method for minimizing delay in multi-stage logic paths. Essential for understanding why NAND gates are preferred over NOR in most designs."
+    }
+  ]
+}

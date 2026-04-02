@@ -1,0 +1,44 @@
+{
+  "readings": [
+    {
+      "title": "Google's Production Readiness Review Process",
+      "author": "Betsy Beyer, Chris Jones, Jennifer Petoff, Niall Richard Murphy",
+      "source": "Site Reliability Engineering (O'Reilly), Chapter 32",
+      "url": "https://sre.google/sre-book/launching/",
+      "type": "reference",
+      "description": "The canonical reference on production readiness reviews from Google SRE. Covers the launch checklist, capacity planning, failure mode analysis, and the review process itself. While written for traditional services, the framework applies directly to AI systems with the additional dimensions of model quality and behavioral assurance discussed in Lecture 1."
+    },
+    {
+      "title": "The AI Engineer (Rising New Role in Tech)",
+      "author": "Shawn Wang (swyx)",
+      "source": "Latent Space blog",
+      "url": "https://www.latent.space/p/ai-engineer",
+      "type": "article",
+      "description": "The essay that coined the 'AI Engineer' role and sparked the AI Engineer conference and community. Argues that a new role is emerging between frontend/backend engineers and ML researchers, focused on building products with foundation models. Essential reading for understanding where the field is headed and where you fit in it."
+    },
+    {
+      "title": "What We Learned from a Year of Building with LLMs",
+      "author": "Eugene Yan, Bryan Bischof, Charles Frye, Hamel Husain, Jason Liu, Shreya Shankar",
+      "source": "O'Reilly / Applied LLMs",
+      "url": "https://applied-llms.org/",
+      "type": "article",
+      "description": "A comprehensive guide from six practitioners who spent a year building production LLM applications. Covers tactical advice on prompting, RAG, evaluation, and operations. Organized into tactical, operational, and strategic sections. One of the best single resources on production AI engineering best practices."
+    },
+    {
+      "title": "Responsible Scaling Policy",
+      "author": "Anthropic",
+      "source": "Anthropic Research",
+      "url": "https://www.anthropic.com/research/responsible-scaling-policy",
+      "type": "reference",
+      "description": "Anthropic's framework for safely developing increasingly capable AI systems. Defines AI Safety Levels (ASL) tied to capability thresholds, with corresponding security and evaluation requirements. Important reading for understanding how AI companies think about safety at the frontier and what responsible AI deployment requires."
+    },
+    {
+      "title": "The Bitter Lesson",
+      "author": "Rich Sutton",
+      "source": "Personal website",
+      "url": "http://www.incompleteideas.net/IncsightIdeasIdeas/TheBitterLesson.html",
+      "type": "article",
+      "description": "Rich Sutton's influential essay arguing that the biggest lesson from 70 years of AI research is that general methods leveraging computation (search and learning) ultimately dominate approaches that attempt to build in human knowledge. Essential context for understanding why foundation models succeed and why engineering systems around general-purpose models is the winning strategy."
+    }
+  ]
+}

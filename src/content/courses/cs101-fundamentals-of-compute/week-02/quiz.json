@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 2: Combinational Circuits",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the 8-bit two's complement representation of -42?",
+      "options": [
+        "10101010",
+        "11010110",
+        "01010110",
+        "11010101"
+      ],
+      "correct": 1,
+      "explanation": "To find the two's complement of -42: (1) Write 42 in binary: $42 = 32 + 8 + 2 = 00101010_2$. (2) Flip all bits: $11010101$. (3) Add 1: $11010101 + 1 = 11010110$. Verify: $-128 + 64 + 16 + 4 + 2 = -128 + 86 = -42$. Two's complement makes subtraction trivial: $A - 42 = A + 11010110_2$ using the same adder hardware as addition."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In IEEE 754 single precision, the bit pattern `0 01111100 01000000000000000000000` represents which decimal value?",
+      "options": [
+        "0.15625",
+        "0.3125",
+        "1.25",
+        "0.078125"
+      ],
+      "correct": 0,
+      "explanation": "Sign $s = 0$ (positive). Exponent $E = 01111100_2 = 124$, true exponent $e = 124 - 127 = -3$. Mantissa bits = $01000...0$, significand = $1.01_2 = 1 + 0.25 = 1.25$. Value = $(-1)^0 \\times 2^{-3} \\times 1.25 = 1 \\times 0.125 \\times 1.25 = 0.15625$. The biased exponent encoding allows both very large and very small numbers: with 8 exponent bits and bias 127, we can represent exponents from $-126$ (tiny numbers near $10^{-38}$) to $+127$ (huge numbers near $10^{38}$)."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which IEEE 754 special value is produced by the computation $0.0 / 0.0$?",
+      "options": [
+        "Positive zero (+0)",
+        "Negative infinity ($-\\infty$)",
+        "Not a Number (NaN)",
+        "Positive infinity ($+\\infty$)"
+      ],
+      "correct": 2,
+      "explanation": "$0/0$ is mathematically undefined — it has no meaningful value. IEEE 754 represents this as NaN (Not a Number). NaN is encoded with exponent = 255 (all 1s) and a non-zero mantissa. The defining property of NaN is that $\\text{NaN} \\neq \\text{NaN}$ — it is not equal to anything, including itself. This provides a programmatic test: `if (x != x)` is true only for NaN. Other operations that produce NaN include $\\infty - \\infty$, $\\infty \\times 0$, and $\\sqrt{x}$ for $x < 0$. In contrast, $1.0/0.0 = +\\infty$ and $-1.0/0.0 = -\\infty$ — these are defined by the standard."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A full adder has inputs $A = 1$, $B = 1$, $C_{in} = 1$. What are the outputs Sum and $C_{out}$?",
+      "options": [
+        "Sum = 0, $C_{out}$ = 1",
+        "Sum = 1, $C_{out}$ = 0",
+        "Sum = 1, $C_{out}$ = 1",
+        "Sum = 0, $C_{out}$ = 0"
+      ],
+      "correct": 2,
+      "explanation": "A full adder computes $A + B + C_{in} = 1 + 1 + 1 = 3_{10} = 11_2$. So Sum = 1 (LSB) and $C_{out} = 1$ (MSB). Using the equations: Sum = $A \\oplus B \\oplus C_{in} = 1 \\oplus 1 \\oplus 1 = 0 \\oplus 1 = 1$. $C_{out} = AB + C_{in}(A \\oplus B) = 1 \\cdot 1 + 1 \\cdot (1 \\oplus 1) = 1 + 1 \\cdot 0 = 1$. The full adder's ability to handle three input bits is what makes it chainable — each stage accepts the carry from the previous stage."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a 4-bit carry-lookahead adder, the carry $C_3$ is expressed as $C_3 = G_2 + P_2 G_1 + P_2 P_1 G_0 + P_2 P_1 P_0 C_0$. How many gate delays does it take to compute $C_3$ from the primary inputs $A_i$ and $B_i$?",
+      "options": [
+        "1 gate delay",
+        "2 gate delays",
+        "3 gate delays",
+        "4 gate delays"
+      ],
+      "correct": 2,
+      "explanation": "Level 1 (1 gate delay): Compute all $G_i = A_i \\cdot B_i$ and $P_i = A_i \\oplus B_i$ in parallel — these are single-gate operations directly from the inputs. Level 2 (1 gate delay): Compute the AND terms in the CLA equation: $P_2 G_1$, $P_2 P_1 G_0$, $P_2 P_1 P_0 C_0$ — these are multi-input AND gates computed in one level. Level 3 (1 gate delay): OR all terms together. Total: 3 gate delays to compute $C_3$, regardless of how many bits. Compare this to the ripple-carry approach, which would need 6 gate delays (2 per full adder carry stage $\\times$ 3 stages). The CLA trades area for speed — the equations get wider with more bits, but the depth stays constant within a block."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A Kogge-Stone prefix adder for 64-bit addition has a carry delay of approximately $2\\log_2(64) + 2 = 14$ gate delays. A ripple-carry adder has approximately $2 \\times 64 = 128$ gate delays. What is the approximate speedup?",
+      "options": [
+        "About 4x faster",
+        "About 9x faster",
+        "About 16x faster",
+        "About 64x faster"
+      ],
+      "correct": 1,
+      "explanation": "Speedup = $128 / 14 \\approx 9.1$x. The Kogge-Stone adder achieves $O(\\log n)$ delay compared to $O(n)$ for ripple-carry, at the cost of $O(n \\log n)$ area versus $O(n)$. For 64-bit addition at a 3nm process with ~5 ps per gate delay: ripple-carry takes ~640 ps (too slow for a 4 GHz cycle of 250 ps), while Kogge-Stone takes ~70 ps (easily fits). The Brent-Kung variant trades slightly more depth ($2\\log_2 n - 1 \\approx 11$ delays) for significantly less area ($O(n)$ instead of $O(n \\log n)$), making it a common practical choice."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Booth's multiplication algorithm, examining the bit pair $(Q_0, Q_{-1}) = (0, 1)$ triggers which operation?",
+      "options": [
+        "No operation",
+        "$A = A + M$ (add the multiplicand)",
+        "$A = A - M$ (subtract the multiplicand)",
+        "Shift only, no arithmetic"
+      ],
+      "correct": 1,
+      "explanation": "The bit pair $(Q_0, Q_{-1}) = (0, 1)$ means: the current bit is 0 and the previous bit was 1. This represents the END of a run of 1s in the multiplier (transition from 1 to 0). At the end of a run, Booth's algorithm adds the multiplicand. The encoding: (0,0) = no op (middle of 0s), (0,1) = add M (end of 1s run), (1,0) = subtract M (start of 1s run), (1,1) = no op (middle of 1s). This works because a run of consecutive 1s in binary, e.g., $01110_2$, equals $10000_2 - 00010_2$. The subtraction happens at the start (transition $0 \\to 1$) and the addition at the end (transition $1 \\to 0$)."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 4:1 multiplexer has select lines $S_1 S_0 = 10$. Which data input appears at the output?",
+      "options": [
+        "$D_0$",
+        "$D_1$",
+        "$D_2$",
+        "$D_3$"
+      ],
+      "correct": 2,
+      "explanation": "The select lines form a binary index: $S_1 S_0 = 10_2 = 2_{10}$, so data input $D_2$ is selected. The MUX equation is $Y = \\overline{S_1}\\overline{S_0}D_0 + \\overline{S_1}S_0 D_1 + S_1\\overline{S_0}D_2 + S_1 S_0 D_3$. With $S_1 = 1, S_0 = 0$: only the third term survives: $Y = 1 \\cdot 1 \\cdot D_2 = D_2$. Multiplexers are the data-routing workhorses of processor design — the ALU uses them to select between operations, the register file uses them to select which register to read, and the control path uses them to choose between PC+4 and branch targets."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "When an 8-bit ALU computes the addition of two signed numbers $A = 01100100_2$ (100) and $B = 00110010_2$ (50), the result is $10010110_2$ (150 unsigned, -106 signed). Which flags should be set?",
+      "options": [
+        "Z = 0, N = 1, V = 1, C = 0",
+        "Z = 0, N = 1, V = 0, C = 0",
+        "Z = 0, N = 0, V = 1, C = 0",
+        "Z = 0, N = 1, V = 1, C = 1"
+      ],
+      "correct": 0,
+      "explanation": "Z (Zero) = 0: result is not zero. N (Negative) = 1: MSB of result ($10010110_2$) is 1. V (Overflow) = 1: both operands are positive (MSB = 0) but the result is negative (MSB = 1). This is signed overflow — the mathematical result +150 cannot be represented in 8-bit two's complement (range is -128 to +127). C (Carry) = 0: there is no carry out of bit 7 in the unsigned sum ($100 + 50 = 150 < 256$). The V flag is computed as: (A_sign == B_sign) AND (result_sign != A_sign) = (0 == 0) AND (1 != 0) = 1. The processor uses these flags for conditional branches: BLT uses N XOR V, BEQ uses Z."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 32-bit barrel shifter uses 5 stages of 2:1 multiplexers. If each MUX has a propagation delay of 3 gate delays, what is the total shift delay for any shift amount from 0 to 31?",
+      "options": [
+        "3 gate delays (only one stage activates)",
+        "15 gate delays (all 5 stages, in series)",
+        "93 gate delays (31 stages for maximum shift)",
+        "96 gate delays (32 stages cascaded)"
+      ],
+      "correct": 1,
+      "explanation": "The barrel shifter always passes through ALL 5 stages regardless of the shift amount. Each stage either passes the data through unchanged (when its control bit is 0) or shifts by $2^k$ positions (when its control bit is 1). The stages are in series, so the total delay is $5 \\times 3 = 15$ gate delays. This is the key advantage over a naive approach: a cascaded shifter would need up to 31 single-shift stages ($31 \\times 3 = 93$ gate delays for maximum shift). The barrel shifter achieves $O(\\log n)$ delay by decomposing any shift amount into at most $\\log_2 n$ power-of-2 components. This same principle — decomposing a problem into $\\log n$ stages — appears in carry-lookahead adders and prefix adders."
+    }
+  ]
+}

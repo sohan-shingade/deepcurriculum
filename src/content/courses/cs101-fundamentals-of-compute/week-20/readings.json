@@ -1,0 +1,40 @@
+{
+  "readings": [
+    {
+      "title": "More than Moore: Heterogeneous Integration and Chiplet Architectures",
+      "authors": "Subu Iyer et al. (IEEE Micro, 2023)",
+      "url": "https://ieeexplore.ieee.org/document/10049700/",
+      "note": "Survey of post-Moore scaling strategies including 2.5D/3D integration, chiplet ecosystems, and the UCIe (Universal Chiplet Interconnect Express) standard. Covers the economic forces driving chiplet adoption: as monolithic dies exceed 800 mm^2 yield limits, disaggregation into smaller chiplets connected via silicon interposer or organic substrate becomes the only economically viable path to scaling."
+    },
+    {
+      "title": "Photonic Computing: Current State and Future Prospects",
+      "authors": "Lightmatter, Inc.",
+      "url": "https://lightmatter.co/technology/",
+      "note": "Overview of photonic computing approaches including Mach-Zehnder interferometer arrays for matrix multiplication and photonic interconnects for chip-to-chip communication. Photonics offers fundamental advantages in bandwidth-distance product and energy per bit for data movement, but faces challenges in nonlinear activation functions and on-chip integration. The Passage interconnect technology demonstrates photonic advantages for inter-chiplet communication."
+    },
+    {
+      "title": "Loihi 2: A Neuromorphic Processor with Quantized Neuron Models",
+      "authors": "Mike Davies et al. (Intel Labs)",
+      "url": "https://www.intel.com/content/www/us/en/research/neuromorphic-computing.html",
+      "note": "Intel's second-generation neuromorphic research chip with 128 neuromorphic cores, 1 million programmable neurons, and asynchronous event-driven processing. Achieves 100x energy efficiency improvement over von Neumann architectures for sparse, event-driven workloads like sensor fusion, anomaly detection, and optimization. The key insight: eliminating the clock and processing only on events removes the energy floor of conventional computing."
+    },
+    {
+      "title": "Quantum Computing: An Applied Approach (2nd Edition)",
+      "authors": "Jack Hidary (Springer, 2022)",
+      "url": "https://link.springer.com/book/10.1007/978-3-030-83274-2",
+      "note": "Accessible yet rigorous introduction to quantum computing covering qubit technologies (superconducting, trapped-ion, photonic), quantum gates, error correction, and near-term algorithms (VQE, QAOA). Chapter 15 on quantum finance discusses portfolio optimization and Monte Carlo sampling. Provides necessary context for understanding why post-quantum cryptography matters for financial systems today."
+    },
+    {
+      "title": "Processing-in-Memory: A Workload-Driven Perspective",
+      "authors": "Onur Mutlu et al. (IBM Journal of R&D, 2019)",
+      "url": "https://arxiv.org/abs/1907.12947",
+      "note": "Comprehensive survey of processing-in-memory architectures from both DRAM and NAND flash perspectives. Analyzes which workloads benefit most from PIM (memory-bound with low arithmetic intensity and irregular access patterns) versus conventional processing. The UPMEM PiM-DRAM is the first commercially available PIM architecture, embedding small processors directly in DRAM chips."
+    },
+    {
+      "title": "Post-Quantum Cryptography: Current State and Quantum Mitigation",
+      "authors": "NIST Post-Quantum Cryptography Standardization",
+      "url": "https://csrc.nist.gov/projects/post-quantum-cryptography",
+      "note": "NIST's post-quantum cryptography standardization project, which selected CRYSTALS-Kyber (lattice-based key encapsulation) and CRYSTALS-Dilithium (lattice-based digital signatures) as the first post-quantum standards (FIPS 203, FIPS 204). Financial institutions must begin migrating now because 'harvest now, decrypt later' attacks threaten long-lived financial data. Course conclusion reading on the intersection of compute and security."
+    }
+  ]
+}

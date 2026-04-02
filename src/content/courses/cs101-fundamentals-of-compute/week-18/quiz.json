@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 17: Systems Programming and Performance Engineering",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "On x86-64, a system call costs approximately 100-500 ns. Linux provides `clock_gettime` via the vDSO (virtual Dynamic Shared Object) at approximately 20 ns. Why is the vDSO faster?",
+      "options": [
+        "The vDSO uses a faster clock hardware",
+        "The vDSO maps kernel data (including the current time) into user-space memory, allowing the function to execute without a privilege transition to kernel mode",
+        "The vDSO caches the result and returns stale values",
+        "The vDSO runs on a dedicated CPU core that is always available"
+      ],
+      "correct": 1,
+      "explanation": "The vDSO is a small shared library that the kernel maps into every process's address space. It contains read-only data pages that the kernel updates (the current time values) and code that reads those pages. When user code calls `clock_gettime`, the vDSO implementation reads the time from these shared pages without executing a `syscall` instruction -- no privilege transition, no register save/restore, no TLB flush, no Spectre mitigation overhead. The time values are accurate (updated by the kernel's timer interrupt handler) but read-only from user space. This technique reduces clock_gettime from ~200 ns (full syscall) to ~20 ns (memory read)."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 4-level x86-64 page table walk accesses 4 memory locations. If all page table entries are in DRAM (80 ns each), what is the total walk time? How does the TLB help?",
+      "options": [
+        "Walk: 320 ns. TLB hit: 0 ns (free)",
+        "Walk: 320 ns. TLB hit: ~1 cycle (~0.3 ns at 3 GHz) because the TLB caches the final virtual-to-physical translation",
+        "Walk: 80 ns (only one level is accessed). TLB stores intermediate levels.",
+        "Walk: 320 ns. TLB only helps for 4 KB pages, not huge pages."
+      ],
+      "correct": 1,
+      "explanation": "A full 4-level page table walk requires reading PML4, PDPT, PD, and PT entries, each from DRAM at 80 ns = 320 ns total. The TLB (Translation Lookaside Buffer) caches the final result of the walk: the mapping from virtual page number to physical frame number. On a TLB hit, the translation completes in approximately 1 cycle (L1 dTLB) or 7-10 cycles (L2 STLB), avoiding the 320 ns walk entirely. Note that page table entries may be cached in L1/L2/L3 data cache, reducing individual walk steps to 4-12 ns. The TLB works for all page sizes: 4 KB, 2 MB, and 1 GB. In fact, each huge page TLB entry covers 512x (2 MB) or 262,144x (1 GB) more memory than a 4 KB entry, dramatically reducing TLB miss rates."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A server has 128 GB of RAM and a process with a 64 GB working set. Using 4 KB pages, the L2 STLB (2,048 entries) covers 8 MB. Using 2 MB huge pages, the STLB covers 4 GB. Which statement is correct?",
+      "options": [
+        "4 KB pages: ~99.99% TLB miss rate, making virtual memory the primary bottleneck",
+        "2 MB pages: TLB miss rate drops to ~0% because 4 GB > 64 GB working set",
+        "2 MB pages: TLB miss rate drops to approximately 93.75% (covers 4 GB of 64 GB), still significant but much better than 4 KB pages",
+        "The working set is too large for either page size to help"
+      ],
+      "correct": 2,
+      "explanation": "With 4 KB pages: TLB coverage = 2,048 x 4 KB = 8 MB. For a 64 GB working set, coverage ratio = 8 MB / 64 GB = 0.0122%. TLB miss rate approaches 99.99% for random access patterns. With 2 MB pages: TLB coverage = 2,048 x 2 MB = 4 GB. Coverage ratio = 4 GB / 64 GB = 6.25%. TLB miss rate drops to approximately 93.75%. This is still high but represents a ~1,600x reduction in TLB misses compared to 4 KB pages. For a 64 GB working set, 1 GB pages would cover 2,048 GB = 2 TB, fully covering the working set and reducing TLB misses to ~0%. This is why databases (PostgreSQL, Oracle) on large-memory systems use 1 GB huge pages."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Linux CFS (Completely Fair Scheduler) stores runnable tasks in a red-black tree sorted by virtual runtime (vruntime). What is the time complexity of finding the next task to run?",
+      "options": [
+        "$O(n)$ -- CFS must scan all tasks",
+        "$O(\\log n)$ -- the leftmost node of the red-black tree has the smallest vruntime",
+        "$O(1)$ -- CFS caches a pointer to the leftmost (minimum vruntime) node",
+        "$O(n \\log n)$ -- CFS re-sorts the tree on every scheduling decision"
+      ],
+      "correct": 2,
+      "explanation": "CFS maintains a pointer (`rb_leftmost`) to the leftmost node of the red-black tree, which has the smallest vruntime. Finding the next task is $O(1)$ -- just dereference the cached pointer. Inserting a task (when it becomes runnable) and removing a task (when it blocks or finishes its timeslice) are $O(\\log n)$ red-black tree operations. This design gives CFS excellent scalability: scheduling decisions are constant-time regardless of the number of runnable tasks. The red-black tree ensures that all tasks converge to the same vruntime over time, providing fair CPU allocation."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A profiler shows that a loop processes 1 million elements with IPC = 0.4 and 15% LLC miss rate. The loop accesses a 500-byte struct per element but only reads a single 8-byte field. What optimization would most improve performance?",
+      "options": [
+        "Unroll the loop to reduce branch overhead",
+        "Convert from AoS to SoA layout: access only the 8-byte field array instead of loading the full 500-byte struct, improving cache utilization from 1.6% to 100%",
+        "Use SIMD instructions to process 4 elements simultaneously",
+        "Increase the CPU clock frequency by 10%"
+      ],
+      "correct": 1,
+      "explanation": "The IPC of 0.4 with 15% LLC miss rate strongly indicates a memory-bound workload. The root cause is clear: each iteration loads a 500-byte struct into cache but uses only 8 bytes, wasting 98.4% of every cache line fetched. With AoS layout: 500 bytes loaded per element, 8 bytes useful = 1.6% cache utilization. Total data loaded: 500 MB. With SoA layout: only the 8-byte field array is accessed = 8 bytes per element, 100% cache utilization. Total data loaded: 8 MB (62.5x less). The LLC miss rate would drop from 15% to near 0% because 8 MB likely fits entirely in L3 cache. SIMD would also help after the layout change, but without fixing the memory layout, SIMD would just stall on cache misses faster."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A modern x86 CPU has a 15-cycle branch misprediction penalty. A tight inner loop processes 10 billion iterations with a data-dependent branch that mispredicts at 2% rate. How much time is wasted on mispredictions at 4 GHz?",
+      "options": [
+        "0.75 seconds ($10^{10} \\times 0.02 \\times 15 / (4 \\times 10^9)$)",
+        "7.5 seconds",
+        "0.075 seconds",
+        "75 seconds"
+      ],
+      "correct": 0,
+      "explanation": "Mispredicted branches = $10^{10} \\times 0.02 = 2 \\times 10^8$. Wasted cycles = $2 \\times 10^8 \\times 15 = 3 \\times 10^9$ cycles. Time = $3 \\times 10^9 / (4 \\times 10^9 \\text{ Hz}) = 0.75$ seconds. For a loop that should run in 2-3 seconds (at ~3 instructions/cycle), 0.75 seconds of misprediction penalty is a 25-37% overhead. Converting the branch to a conditional move (cmov) eliminates this entirely. Even reducing the misprediction rate from 2% to 0.5% (by improving branch prediction patterns) would save 0.56 seconds. This is why branch-free code matters in inner loops."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "io_uring uses shared ring buffers between user space and kernel to eliminate per-I/O syscall overhead. How does this differ from standard `read()`/`write()` calls?",
+      "options": [
+        "io_uring is faster because it uses DMA directly, bypassing the CPU entirely",
+        "io_uring eliminates the syscall transition: the user writes I/O requests to a shared Submission Queue and reads completions from a Completion Queue, both via memory operations rather than syscalls",
+        "io_uring is only faster for disk I/O, not network I/O",
+        "io_uring uses multiple threads to parallelize I/O operations"
+      ],
+      "correct": 1,
+      "explanation": "With standard I/O: each `read()` or `write()` is a syscall (100-500 ns overhead for privilege transition, register save/restore, Spectre mitigations). A server doing 500K I/O operations per second spends 15% of a core on syscall overhead alone. With io_uring: the user writes Submission Queue Entries (SQEs) to a memory-mapped ring buffer -- just a store instruction, no syscall. The kernel processes submissions asynchronously and posts Completion Queue Entries (CQEs) to another ring buffer, which the user reads via a load instruction. In the best case (with SQPOLL mode), the entire I/O path is syscall-free. io_uring supports both disk and network I/O, and also supports registered buffers (pre-pinned memory for DMA) and fixed files (pre-resolved file descriptors) for further overhead reduction."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "OpenOnload (Solarflare/Xilinx) achieves kernel bypass while being application-transparent. How does it intercept socket API calls without requiring code changes?",
+      "options": [
+        "OpenOnload replaces the Linux kernel's networking stack at the device driver level",
+        "OpenOnload uses LD_PRELOAD to inject a shared library that intercepts socket API calls and redirects them to a user-space TCP/IP stack running directly on the Solarflare NIC",
+        "OpenOnload requires the application to link against a special library at compile time",
+        "OpenOnload modifies the kernel's system call table to redirect networking syscalls"
+      ],
+      "correct": 1,
+      "explanation": "OpenOnload uses the `LD_PRELOAD` mechanism: `LD_PRELOAD=libonload.so ./my_application`. The dynamic linker loads libonload.so before any other shared library, so its implementations of `socket()`, `read()`, `write()`, `connect()`, etc. override the standard libc versions. When the application calls `socket()`, OpenOnload's version creates a user-space socket backed by the ef_vi low-level API, which directly accesses the Solarflare NIC hardware. The TCP/IP protocol stack runs entirely in user space. No kernel involvement, no syscalls, no context switches. The application code is unchanged -- it uses the standard POSIX socket API. This is why trading firms overwhelmingly use Solarflare NICs with OpenOnload: 5-10x latency reduction with zero code changes."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Dennard scaling predicted that power density stays constant as transistors shrink. It broke down around 2006. What was the primary cause?",
+      "options": [
+        "Transistors became too small to manufacture reliably",
+        "Voltage could not scale below approximately 0.7V due to the threshold voltage limit, and leakage current increased exponentially at smaller geometries, making power density grow rather than stay constant",
+        "Clock frequencies exceeded the speed of light limitation",
+        "Memory bandwidth could not keep up with processor speed"
+      ],
+      "correct": 1,
+      "explanation": "Dennard scaling required voltage to decrease proportionally with feature size, keeping the electric field constant and power density stable. Below about 65nm (2006 era), two barriers emerged: (1) Threshold voltage ($V_{th}$) cannot scale below ~0.3V without the transistor leaking excessively when 'off.' Since $V_{dd}$ must be at least 2-3x $V_{th}$ for the transistor to function, $V_{dd}$ hit a floor around 0.7-0.8V. (2) Subthreshold leakage current increases exponentially as the channel shortens -- at 7nm, leakage can be 30-40% of total power. With voltage unable to scale and leakage increasing, power density grew with each node shrink instead of staying constant. The result: frequency scaling stopped at approximately 4-5 GHz, and the industry pivoted to multi-core architectures to continue improving total throughput within power budgets."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "When benchmarking a function that takes approximately 100 ns, which of the following is the most important methodological concern?",
+      "options": [
+        "Running exactly 100 trials for statistical significance",
+        "Using a high-resolution timer (perf_counter_ns), amortizing measurement overhead by timing many iterations together, performing warm-up runs to populate caches and branch predictor, and preventing dead code elimination",
+        "Running on a quiet system with no other processes",
+        "Using the maximum Turbo Boost frequency for consistent results"
+      ],
+      "correct": 1,
+      "explanation": "For a 100 ns function: (1) Timer overhead: `time.perf_counter_ns()` takes ~20-50 ns on Linux, which is 20-50% of the measured time. Solution: time 10,000 iterations together and divide. (2) Warm-up: the first iterations have cold caches and untrained branch predictor. Discard 5-10 warm-up iterations. (3) Dead code elimination: if the function's result is unused, the compiler may optimize it away entirely, measuring nothing. Ensure the result is used (accumulated into a sum, written to a volatile variable). (4) Turbo Boost: under light load, CPUs boost to maximum frequency. Under heavy load, they throttle. Benchmarks must account for this by either disabling Turbo Boost or running under consistent load conditions. Running on a quiet system helps reduce variance but doesn't address the systematic errors above."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "You are building a RAG system for a customer support knowledge base. Documents are well-structured FAQ pages with clear question-answer pairs averaging 150 tokens each. Which chunking strategy is most appropriate?",
+      "options": [
+        "Fixed-size chunking at 512 tokens to maximize context per chunk",
+        "Semantic chunking to detect topic boundaries between questions",
+        "Structure-aware chunking that splits on FAQ question headers",
+        "Recursive character splitting with large overlap"
+      ],
+      "correct": 2,
+      "explanation": "When documents have explicit structure (FAQ headers, markdown sections, HTML tags), structure-aware chunking is the clear winner. The document is literally telling you where the semantic boundaries are — each question-answer pair is a self-contained unit. Semantic chunking would work but adds unnecessary complexity (and an embedding pass) when the structure is already explicit. Fixed-size chunking at 512 tokens would merge multiple Q&A pairs into one chunk, diluting the embedding signal. The key principle: use the strongest structural signal available before falling back to statistical methods."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In the BM25 scoring formula, what is the purpose of the parameter b (typically set to 0.75)?",
+      "options": [
+        "It controls how quickly term frequency saturates",
+        "It controls document length normalization — how much longer documents are penalized",
+        "It sets the minimum IDF threshold for rare terms",
+        "It determines the weight of query term proximity"
+      ],
+      "correct": 1,
+      "explanation": "The parameter b controls document length normalization. When b = 1, BM25 fully normalizes by document length (longer documents are penalized proportionally to their length). When b = 0, no length normalization occurs. The default b = 0.75 means BM25 applies substantial but not complete length normalization. This matters because longer documents naturally contain more term occurrences, but that does not necessarily mean they are more relevant. The parameter k1 (not b) controls term frequency saturation — how quickly additional occurrences of a term stop contributing to the score."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Why can't cross-encoders be used directly for retrieval over a million-document corpus?",
+      "options": [
+        "Cross-encoders produce lower quality relevance scores than bi-encoders",
+        "Cross-encoders require the query and document to be processed together, making pre-computation of document representations impossible",
+        "Cross-encoders can only handle documents shorter than 128 tokens",
+        "Cross-encoders require labeled training data for every query-document pair"
+      ],
+      "correct": 1,
+      "explanation": "Cross-encoders concatenate the query and document and process them jointly through the transformer's attention layers. This means every query token can attend to every document token, producing highly accurate relevance scores. However, this architecture makes it impossible to pre-compute document representations — you need the query to compute anything. For a corpus of 1M documents, you would need 1M forward passes per query, which takes hours. Bi-encoders solve this by encoding queries and documents independently, allowing document embeddings to be computed once and stored. The retrieve-then-rerank pattern exploits the strengths of both: bi-encoders for fast recall, cross-encoders for precise re-ranking of a short candidate list."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In Reciprocal Rank Fusion with k=60, document A is ranked #1 by BM25 and #5 by dense retrieval. Document B is ranked #3 by both systems. Which document has the higher RRF score?",
+      "options": [
+        "Document A, because being ranked #1 in any system dominates",
+        "Document B, because consistent ranking across systems is rewarded",
+        "They have equal RRF scores",
+        "It depends on the total number of documents retrieved"
+      ],
+      "correct": 1,
+      "explanation": "Let's compute: Document A: 1/(60+1) + 1/(60+5) = 1/61 + 1/65 = 0.01639 + 0.01538 = 0.03177. Document B: 1/(60+3) + 1/(60+3) = 1/63 + 1/63 = 0.01587 + 0.01587 = 0.03175. Document B's RRF score (0.03175) is almost identical to but slightly less than Document A's (0.03177). This illustrates why RRF works: consistent moderate rankings are rewarded almost as much as one extreme ranking. In practice, the difference is negligible — but this shows that RRF balances the 'best in one system' vs 'good in all systems' signals rather than strictly preferring either."
+    }
+  ]
+}

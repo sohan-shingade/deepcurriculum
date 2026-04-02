@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "CUDA C++ Programming Guide",
+      "authors": "NVIDIA",
+      "url": "https://docs.nvidia.com/cuda/cuda-c-programming-guide/",
+      "note": "The comprehensive reference for CUDA programming. Focus on Chapter 2 (Programming Model), Chapter 3 (Programming Interface), and Chapter 5 (Performance Guidelines). The sections on memory hierarchy, thread hierarchy, and synchronization map directly to this week's lectures."
+    },
+    {
+      "title": "Optimizing Parallel Reduction in CUDA",
+      "authors": "Mark Harris, NVIDIA",
+      "url": "https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf",
+      "note": "The classic presentation on parallel reduction optimization. Walks through 7 optimization levels with measured performance improvements. Our lecture covers the first 5; the paper adds algorithmic cascading and multiple loads per thread. Essential reading for understanding GPU optimization methodology."
+    },
+    {
+      "title": "Bringing HPC Techniques to Deep Learning (Ring-AllReduce)",
+      "authors": "Andrew Gibiansky, Baidu Research",
+      "url": "https://andrew.gibiansky.com/blog/machine-learning/baidu-allreduce/",
+      "note": "The definitive blog post on Ring-AllReduce for distributed deep learning. Derives the algorithm step by step, proves bandwidth optimality, and explains why it replaced parameter servers for gradient synchronization. This is the paper that inspired Horovod and influenced NCCL's design."
+    },
+    {
+      "title": "An Even Easier Introduction to CUDA",
+      "authors": "Mark Harris, NVIDIA Developer Blog",
+      "url": "https://developer.nvidia.com/blog/even-easier-introduction-cuda/",
+      "note": "A gentle but complete introduction to CUDA programming: vector addition, unified memory, and profiling with nvprof. Good starting point before diving into the more advanced optimizations covered in lecture."
+    },
+    {
+      "title": "NVIDIA Collective Communications Library (NCCL)",
+      "authors": "NVIDIA",
+      "url": "https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/overview.html",
+      "note": "Official documentation for NCCL. Covers supported collectives, communication patterns (ring, tree, hybrid), and integration with PyTorch and TensorFlow. Understanding NCCL is essential for anyone working with distributed GPU training."
+    }
+  ]
+}

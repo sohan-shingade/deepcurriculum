@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In RISC-V Sv39, a full page table walk for a 4 KB page requires how many memory accesses to translate a single virtual address?",
+      "options": [
+        "1 memory access",
+        "2 memory accesses",
+        "3 memory accesses (one per page table level)",
+        "4 memory accesses (3 for the walk plus 1 for the data)"
+      ],
+      "correct": 2,
+      "explanation": "Sv39 has 3 levels of page tables: the root table (level 2), the level 1 table, and the level 0 table. Each level requires one memory access to read the page table entry. So translating a 4 KB page requires 3 memory accesses. At 80 ns per DRAM access, the worst-case walk penalty is 3 * 80 = 240 ns. For 2 MB megapages, only 2 accesses are needed (stop at level 1). For 1 GB gigapages, only 1 access. This is why TLBs are critical -- they cache the final PPN so that subsequent accesses to the same page avoid the walk entirely."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "AMD Zen 4's L1 DTLB has 72 entries for 4 KB pages and 72 entries for 2 MB pages. What is the coverage ratio between using 2 MB pages versus 4 KB pages?",
+      "options": [
+        "2x (2 MB is 2x larger than 4 KB... wait, that's wrong)",
+        "72x (more entries per set)",
+        "512x (each 2 MB page covers 512 times more address space than a 4 KB page)",
+        "144x (72 * 2)"
+      ],
+      "correct": 2,
+      "explanation": "With 4 KB pages: coverage = 72 * 4 KB = 288 KB. With 2 MB pages: coverage = 72 * 2 MB = 144 MB. The ratio is 144 MB / 288 KB = 512x. This comes directly from the page size ratio: 2 MB / 4 KB = 512. Each TLB entry covers 512 times more virtual address space when using 2 MB pages, dramatically reducing TLB miss rates for applications with large working sets. This is why databases, scientific computing, and machine learning workloads frequently use huge pages."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the RISC-V Sv39 PTE format, if a page table entry has R=0, W=0, X=0, and V=1, what does this PTE represent?",
+      "options": [
+        "An invalid entry that should trigger a page fault",
+        "A read-only page with no execute permission",
+        "A pointer to the next level page table (non-leaf PTE)",
+        "A page that has been swapped to disk"
+      ],
+      "correct": 2,
+      "explanation": "In Sv39, the interpretation depends on the combination of R, W, X bits. If V=1 (valid) but R=0, W=0, X=0, the entry is a non-leaf PTE: it contains the physical page number of the next-level page table, not a final physical page mapping. The page walk algorithm follows this pointer to the next level. Only when at least one of R, W, X is set does the PTE describe a leaf mapping to an actual physical page. Note that W=1, R=0 is explicitly reserved (illegal) in the RISC-V spec."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A kernel performs 100 GFLOP of computation while transferring 50 GB from DRAM. On a machine with 500 GFLOP/s peak compute and 100 GB/s peak bandwidth, is this kernel compute-bound or memory-bound?",
+      "options": [
+        "Compute-bound, because 100 GFLOP is a lot of computation",
+        "Memory-bound: arithmetic intensity = 2 FLOP/Byte, ridge point = 5 FLOP/Byte, and 2 < 5",
+        "Compute-bound: it performs more FLOPs than bytes transferred",
+        "Cannot be determined without knowing the cache hit rate"
+      ],
+      "correct": 1,
+      "explanation": "Arithmetic intensity = 100 GFLOP / 50 GB = 2 FLOP/Byte. Ridge point = peak_compute / peak_bandwidth = 500 GFLOP/s / 100 GB/s = 5 FLOP/Byte. Since 2 < 5, the kernel is memory-bound. Its attainable performance is limited by bandwidth: 2 FLOP/Byte * 100 GB/s = 200 GFLOP/s, which is only 40% of peak compute. To make it compute-bound, we would need to increase arithmetic intensity above 5 FLOP/Byte, for example by tiling the computation to reuse data from cache."
+    }
+  ]
+}

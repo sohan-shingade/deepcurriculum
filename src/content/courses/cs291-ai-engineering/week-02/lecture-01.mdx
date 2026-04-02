@@ -1,0 +1,487 @@
+---
+title: "RAG from First Principles"
+week: 2
+lecture: 1
+estimatedMinutes: 55
+---
+
+# RAG from First Principles
+
+Last week we built intuition for how LLMs work — token prediction, attention, context windows. This week we confront the central limitation: **LLMs only know what was in their training data**. Ask GPT-4 about your company's internal docs, last Tuesday's board minutes, or a paper published yesterday, and it will either hallucinate or politely decline. Retrieval-Augmented Generation (RAG) is the most important pattern in production AI engineering precisely because it bridges this gap.
+
+RAG is not a hack. It is not "just search plus LLM." It is a principled probabilistic framework for conditioning language model generation on external evidence. By the end of this lecture, you will understand it from the math up.
+
+## The RAG Formulation
+
+Let us define the problem precisely. Given a user query $q$ and a document corpus $\mathcal{D} = \{d_1, d_2, \ldots, d_N\}$, we want to generate an answer $a$ that is both **faithful** to the evidence in $\mathcal{D}$ and **relevant** to $q$.
+
+Without RAG, an LLM computes:
+
+$$P(a \mid q) = \prod_{t=1}^{T} P(a_t \mid a_{<t}, q; \theta)$$
+
+where $\theta$ are the frozen model parameters. The model can only draw on knowledge baked into $\theta$ during pretraining.
+
+With RAG, we introduce a retrieval step. Let $R(q, \mathcal{D}) \rightarrow \mathcal{C}$ be a retrieval function that selects a context set $\mathcal{C} \subset \mathcal{D}$ of the most relevant documents. Now we compute:
+
+$$P(a \mid q, \mathcal{D}) = \sum_{\mathcal{C} \subseteq \mathcal{D}} P(a \mid q, \mathcal{C}; \theta) \cdot P(\mathcal{C} \mid q)$$
+
+In practice, we approximate this intractable marginalization by selecting the top-$k$ documents and conditioning directly:
+
+$$P(a \mid q, \mathcal{D}) \approx P(a \mid q, \mathcal{C}_k; \theta)$$
+
+where $\mathcal{C}_k = \text{top-}k(R(q, \mathcal{D}))$. This is the **retrieve-then-read** paradigm introduced by Lewis et al. (2020) in their landmark paper "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks."
+
+### The RAG Pipeline Architecture
+
+Every RAG system, from a weekend prototype to a production system serving millions of queries, follows this pipeline:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    INDEXING (OFFLINE)                     │
+│                                                          │
+│  Documents → Chunk → Embed → Store in Vector DB          │
+│                                                          │
+│  ┌──────┐    ┌───────┐    ┌───────┐    ┌────────────┐   │
+│  │ Docs │───▶│ Chunk │───▶│ Embed │───▶│ Vector DB  │   │
+│  └──────┘    └───────┘    └───────┘    └────────────┘   │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                   RETRIEVAL (ONLINE)                     │
+│                                                          │
+│  Query → Embed → Search → Rank → Context                 │
+│                                                          │
+│  ┌───────┐   ┌───────┐   ┌────────┐   ┌──────────┐     │
+│  │ Query │──▶│ Embed │──▶│ Search │──▶│ Re-rank  │     │
+│  └───────┘   └───────┘   └────────┘   └──────────┘     │
+│                                              │           │
+│                                              ▼           │
+│                                        ┌──────────┐     │
+│                                        │ Context  │     │
+│                                        └──────────┘     │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                  GENERATION (ONLINE)                     │
+│                                                          │
+│  Prompt(Query + Context) → LLM → Answer                  │
+│                                                          │
+│  ┌────────────────┐    ┌─────┐    ┌────────┐            │
+│  │ Prompt Builder │───▶│ LLM │───▶│ Answer │            │
+│  └────────────────┘    └─────┘    └────────┘            │
+└─────────────────────────────────────────────────────────┘
+```
+
+Each stage involves real engineering decisions that compound. A poor chunking strategy will defeat even the best embedding model. A great retriever is useless if the prompt template buries the context. Let us examine the most critical component: **embeddings**.
+
+<ConceptCheck id="cc-1" />
+
+## Embedding Models: How Text Becomes Geometry
+
+An embedding model is a function $f: \text{String} \rightarrow \mathbb{R}^d$ that maps variable-length text to a fixed-dimensional vector such that **semantic similarity in text space corresponds to geometric proximity in vector space**. This is a profound idea. It means we can reduce the problem of "find relevant documents" to "find nearby points" — a problem with decades of algorithmic research behind it.
+
+### From Transformers to Vectors
+
+Modern embedding models are transformer encoders (typically BERT-family architectures). Given an input sequence of tokens $\{x_1, x_2, \ldots, x_n\}$, the transformer produces contextualized hidden states $\{h_1, h_2, \ldots, h_n\} \in \mathbb{R}^{n \times d}$. But we need a single vector, not a sequence. Two dominant pooling strategies:
+
+**CLS Pooling.** BERT prepends a special `[CLS]` token to every input. The hidden state $h_{\text{CLS}}$ is trained (via next sentence prediction in the original BERT) to capture the "summary" of the input. CLS pooling simply uses $h_{\text{CLS}}$ as the sentence embedding:
+
+$$\mathbf{e} = h_{\text{CLS}} = h_1$$
+
+The problem: the `[CLS]` token was trained for next sentence prediction, not semantic similarity. Reimers and Gurevych (2019) showed in the Sentence-BERT paper that raw BERT `[CLS]` embeddings actually produce *worse* semantic similarity scores than GloVe averages. The representations are anisotropic — they cluster in a narrow cone of the vector space rather than spreading out.
+
+**Mean Pooling.** Average all token hidden states, optionally using the attention mask $m$ to ignore padding:
+
+$$\mathbf{e} = \frac{\sum_{i=1}^{n} m_i \cdot h_i}{\sum_{i=1}^{n} m_i}$$
+
+Mean pooling is empirically stronger for similarity tasks because it aggregates information from all positions rather than bottlenecking through a single token. Most modern embedding models (E5, GTE, BGE, Nomic) use mean pooling.
+
+Here is mean pooling implemented from scratch:
+
+```python
+import numpy as np
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class TokenEmbedding:
+    """Simulates transformer output for a single token."""
+    vector: np.ndarray
+    attention_mask: int  # 1 = real token, 0 = padding
+
+def mean_pool(token_embeddings: List[TokenEmbedding]) -> np.ndarray:
+    """Mean pooling over token embeddings, respecting attention mask."""
+    vectors = np.array([t.vector for t in token_embeddings])
+    masks = np.array([t.attention_mask for t in token_embeddings])
+
+    # Expand mask dims for broadcasting: (n,) -> (n, 1)
+    mask_expanded = masks[:, np.newaxis]
+
+    # Sum of (mask * vector) / sum of mask
+    summed = np.sum(vectors * mask_expanded, axis=0)
+    count = np.sum(masks)
+
+    return summed / max(count, 1e-9)  # avoid division by zero
+
+# Example: 4 real tokens + 2 padding, dim=3
+tokens = [
+    TokenEmbedding(np.array([1.0, 0.5, -0.3]), 1),
+    TokenEmbedding(np.array([0.8, 0.2,  0.1]), 1),
+    TokenEmbedding(np.array([0.3, 0.9,  0.4]), 1),
+    TokenEmbedding(np.array([0.6, 0.1, -0.2]), 1),
+    TokenEmbedding(np.array([0.0, 0.0,  0.0]), 0),  # padding
+    TokenEmbedding(np.array([0.0, 0.0,  0.0]), 0),  # padding
+]
+
+embedding = mean_pool(tokens)
+print(f"Sentence embedding: {embedding}")
+print(f"Shape: {embedding.shape}")  # (3,)
+```
+
+### Contrastive Learning: InfoNCE Loss
+
+How do we *train* an embedding model to place semantically similar texts near each other? The dominant approach is **contrastive learning** with the InfoNCE loss (Oord et al., 2018).
+
+Given a batch of $N$ positive pairs $\{(q_i, d_i^+)\}_{i=1}^{N}$, where $q_i$ is a query and $d_i^+$ is a relevant document, the InfoNCE loss treats all other documents in the batch as negatives. For a single query $q_i$:
+
+$$\mathcal{L}_i = -\log \frac{\exp(\text{sim}(q_i, d_i^+) / \tau)}{\sum_{j=1}^{N} \exp(\text{sim}(q_i, d_j^+) / \tau)}$$
+
+where $\text{sim}(\cdot, \cdot)$ is cosine similarity and $\tau$ is a temperature hyperparameter (typically 0.01-0.1). The full batch loss averages over all queries:
+
+$$\mathcal{L} = \frac{1}{N} \sum_{i=1}^{N} \mathcal{L}_i$$
+
+Let us unpack why this works. The numerator $\exp(\text{sim}(q_i, d_i^+) / \tau)$ pushes the positive pair together. The denominator sums over all documents — including negatives — so minimizing the loss requires the positive similarity to dominate all negative similarities. The temperature $\tau$ controls the sharpness: a small $\tau$ amplifies differences, making the loss more discriminative but harder to optimize.
+
+This is a **softmax over similarities**. You are literally training the model to solve a classification problem: "which of these $N$ documents is the correct match for this query?" The brilliance of InfoNCE is that negatives come for free from the batch — you do not need explicit negative labels.
+
+**Hard negatives matter enormously.** If your negatives are easy (e.g., a query about machine learning paired with a document about cooking), the model learns nothing. Wang et al. (2022) showed in the E5 paper that mining hard negatives — documents that are topically related but not actually relevant — is the single largest factor in embedding quality.
+
+```python
+import numpy as np
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute cosine similarity between two vectors."""
+    dot = np.dot(a, b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    return dot / (norm_a * norm_b + 1e-8)
+
+def infonce_loss(
+    query_embeddings: np.ndarray,    # (N, d)
+    doc_embeddings: np.ndarray,      # (N, d) — matched pairs
+    temperature: float = 0.05
+) -> float:
+    """Compute InfoNCE contrastive loss for a batch of query-doc pairs."""
+    N = query_embeddings.shape[0]
+
+    # Normalize embeddings
+    q_norm = query_embeddings / (np.linalg.norm(query_embeddings, axis=1, keepdims=True) + 1e-8)
+    d_norm = doc_embeddings / (np.linalg.norm(doc_embeddings, axis=1, keepdims=True) + 1e-8)
+
+    # Similarity matrix: (N, N) — each query against all docs
+    sim_matrix = q_norm @ d_norm.T / temperature
+
+    # For numerical stability, subtract max
+    sim_matrix -= np.max(sim_matrix, axis=1, keepdims=True)
+
+    # Log-softmax along doc axis
+    exp_sim = np.exp(sim_matrix)
+    log_softmax = sim_matrix - np.log(np.sum(exp_sim, axis=1, keepdims=True))
+
+    # Loss is negative log probability of the diagonal (positive pairs)
+    loss = -np.mean(np.diag(log_softmax))
+
+    return loss
+
+# Demo: 4 pairs in a batch, embedding dim = 8
+np.random.seed(42)
+N, d = 4, 8
+queries = np.random.randn(N, d)
+# Positive docs are similar to queries (add small noise)
+pos_docs = queries + np.random.randn(N, d) * 0.1
+
+loss = infonce_loss(queries, pos_docs, temperature=0.05)
+print(f"InfoNCE loss (similar pairs): {loss:.4f}")
+
+# Compare with random docs (should be higher loss)
+random_docs = np.random.randn(N, d)
+loss_random = infonce_loss(queries, random_docs, temperature=0.05)
+print(f"InfoNCE loss (random pairs): {loss_random:.4f}")
+```
+
+### MTEB: How We Benchmark Embeddings
+
+The Massive Text Embedding Benchmark (MTEB) by Muennighoff et al. (2023) evaluates embedding models across 8 tasks: classification, clustering, pair classification, reranking, retrieval, STS (semantic textual similarity), summarization, and zero-shot classification. For RAG, the **retrieval** subset is what matters most — specifically nDCG@10 on datasets like MS MARCO, NQ, HotpotQA.
+
+Key takeaways from MTEB as of early 2025: (1) Larger models are better, but diminishing returns above ~1B parameters. (2) Instruction-tuned embeddings (E5-Mistral, GTE-Qwen2) outperform base models significantly. (3) Matryoshka representations let you truncate embeddings to smaller dimensions with graceful degradation — important for cost.
+
+<ConceptCheck id="cc-2" />
+
+## Vector Similarity: Geometry of Retrieval
+
+Once documents and queries are embedded, retrieval reduces to finding the nearest neighbors in vector space. But "nearest" depends on your metric. Three metrics dominate, and choosing wrong will silently degrade your system.
+
+### Cosine Similarity
+
+$$\text{cos}(\mathbf{a}, \mathbf{b}) = \frac{\mathbf{a} \cdot \mathbf{b}}{\|\mathbf{a}\| \|\mathbf{b}\|}$$
+
+Cosine similarity measures the angle between two vectors, ignoring magnitude. It ranges from $-1$ (opposite) to $1$ (identical direction). This is the default metric for text embeddings because embedding models are trained with normalized vectors — only the direction encodes semantic meaning.
+
+**When to use**: Almost always for text embeddings. If your embedding model was trained with cosine similarity (most are), use cosine similarity at retrieval time. Mismatched training/inference metrics degrade quality.
+
+### Dot Product (Inner Product)
+
+$$\text{dot}(\mathbf{a}, \mathbf{b}) = \mathbf{a} \cdot \mathbf{b} = \sum_{i=1}^{d} a_i b_i$$
+
+The dot product equals cosine similarity times the product of norms: $\mathbf{a} \cdot \mathbf{b} = \|\mathbf{a}\| \|\mathbf{b}\| \cos\theta$. Unlike cosine, it is sensitive to magnitude. This matters when magnitude encodes information — for example, document importance or confidence.
+
+**When to use**: When embeddings are pre-normalized (dot product = cosine similarity) or when you specifically want magnitude to influence ranking. Maximum Inner Product Search (MIPS) is used in recommendation systems where item "popularity" is encoded in embedding norm.
+
+### Euclidean Distance (L2)
+
+$$\text{L2}(\mathbf{a}, \mathbf{b}) = \|\mathbf{a} - \mathbf{b}\|_2 = \sqrt{\sum_{i=1}^{d}(a_i - b_i)^2}$$
+
+L2 distance measures the straight-line distance between points. For normalized vectors, L2 distance and cosine similarity are monotonically related:
+
+$$\|\mathbf{a} - \mathbf{b}\|_2^2 = 2(1 - \cos(\mathbf{a}, \mathbf{b}))$$
+
+This means that for unit vectors, minimizing L2 distance is equivalent to maximizing cosine similarity. The ranking is identical.
+
+**When to use**: When working with non-normalized embeddings where absolute position in the vector space matters more than direction. Common in image embeddings and some clustering scenarios. Rarely the right choice for text RAG.
+
+```python
+import numpy as np
+
+def compare_metrics(a: np.ndarray, b: np.ndarray) -> dict:
+    """Compare all three similarity/distance metrics."""
+    cos_sim = np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    dot_prod = np.dot(a, b)
+    l2_dist = np.linalg.norm(a - b)
+
+    return {
+        "cosine_similarity": cos_sim,
+        "dot_product": dot_prod,
+        "l2_distance": l2_dist,
+    }
+
+# Case 1: Same direction, different magnitude
+v1 = np.array([1.0, 2.0, 3.0])
+v2 = np.array([2.0, 4.0, 6.0])  # 2x magnitude of v1
+
+print("Same direction, different magnitude:")
+for k, v in compare_metrics(v1, v2).items():
+    print(f"  {k}: {v:.4f}")
+
+# Case 2: Same magnitude, different direction
+v3 = np.array([1.0, 0.0, 0.0])
+v4 = np.array([0.707, 0.707, 0.0])
+
+print("\nSame magnitude, different direction:")
+for k, v in compare_metrics(v3, v4).items():
+    print(f"  {k}: {v:.4f}")
+
+# Case 3: Normalized vectors — cosine and dot are identical
+v5 = v1 / np.linalg.norm(v1)
+v6 = np.array([0.5, -0.3, 0.8])
+v6 = v6 / np.linalg.norm(v6)
+
+print("\nNormalized vectors:")
+for k, v in compare_metrics(v5, v6).items():
+    print(f"  {k}: {v:.4f}")
+print(f"  L2^2 = 2(1 - cos): {2 * (1 - compare_metrics(v5, v6)['cosine_similarity']):.4f}")
+```
+
+<ConceptCheck id="cc-3" />
+
+## Vector Databases: Approximate Nearest Neighbors at Scale
+
+Here is the brutal reality of nearest neighbor search. Given $N$ documents in $d$ dimensions, exact nearest neighbor search requires $O(Nd)$ time — you must compute the distance to every document. At $N = 10$ million and $d = 1536$, that is 15 billion floating point operations per query. Unacceptable for production.
+
+The solution: **approximate nearest neighbor (ANN)** algorithms that trade a small amount of recall for dramatic speedups. The dominant algorithm in production is **HNSW**.
+
+### HNSW: Hierarchical Navigable Small World Graphs
+
+HNSW, introduced by Malkov and Yashunin (2018), is the backbone of virtually every production vector database (Pinecone, Weaviate, Qdrant, pgvector with `hnsw` index). Understanding it matters.
+
+**The Small World Intuition.** Consider a social network. To find someone, you do not scan all 8 billion humans. You ask a friend, who asks their friend, and within 6 hops you reach anyone (the "six degrees of separation" phenomenon). Small world graphs have this property: most nodes are not directly connected, but any node can be reached in a small number of hops.
+
+**Navigable Small World Graphs.** Construct a graph where each vector is a node, and edges connect "nearby" vectors. To find the nearest neighbor of a query $q$:
+
+1. Start at a random entry node.
+2. Greedily move to the neighbor closest to $q$.
+3. Repeat until no neighbor is closer than the current node.
+
+This greedy search works well on average, but can get trapped in local minima — especially in high-dimensional spaces where the graph structure becomes complex.
+
+**The Hierarchical Fix.** HNSW builds multiple layers. The top layer is sparse (few nodes, long-range connections), and each subsequent layer adds more nodes with shorter-range connections. Search starts at the top layer and "zooms in":
+
+```
+Layer 3 (sparse):   A ────────────── Z
+
+Layer 2:            A ──── M ──── Z
+
+Layer 1:            A ── F ── M ── T ── Z
+
+Layer 0 (dense):    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+```
+
+At each layer $\ell$, perform greedy search to find the closest node. Then descend to layer $\ell - 1$ using that node as the entry point. This is analogous to a skip list, but in vector space.
+
+**Complexity.** For $N$ vectors, HNSW provides:
+- **Build time**: $O(N \log N)$
+- **Query time**: $O(\log N)$
+- **Memory**: $O(N \cdot M)$, where $M$ is the maximum number of connections per node (typically 16-64)
+
+The key parameters are:
+- $M$: max connections per node. Higher $M$ = better recall but more memory.
+- $ef_{\text{construction}}$: beam width during index building. Higher = better graph quality but slower builds.
+- $ef_{\text{search}}$: beam width during search. Higher = better recall but slower queries. This is the knob you tune at query time.
+
+### IVF-PQ: Compression for Scale
+
+When you have billions of vectors, even HNSW's memory requirements become problematic. 1 billion vectors at 1536 dimensions in float32 = **6 TB** of RAM. Enter **IVF-PQ** (Inverted File Index with Product Quantization), which compresses vectors dramatically.
+
+**IVF (Inverted File Index).** Partition the vector space into $K$ Voronoi cells using k-means clustering. Each cell has a centroid $c_k$. At query time, find the $n_{\text{probe}}$ closest centroids and only search vectors within those cells. This reduces the search space by a factor of $K / n_{\text{probe}}$.
+
+**PQ (Product Quantization).** Split each $d$-dimensional vector into $M$ sub-vectors of dimension $d/M$. For each sub-space, train a codebook of 256 centroids using k-means. Each sub-vector is replaced by its nearest centroid's 8-bit index. A 1536-dim float32 vector (6144 bytes) compressed with $M=96$ sub-vectors becomes 96 bytes — a **64x compression**.
+
+The distance between a query $q$ and a compressed vector is approximated using **asymmetric distance computation (ADC)**: compute exact distances between query sub-vectors and codebook centroids (precomputed in a lookup table), then sum across sub-spaces.
+
+$$\hat{d}(q, x) = \sum_{m=1}^{M} \|q^{(m)} - c_{k_m}^{(m)}\|^2$$
+
+where $q^{(m)}$ is the $m$-th sub-vector of the query, $k_m$ is the quantization index for the $m$-th sub-vector of $x$, and $c_{k_m}^{(m)}$ is the corresponding centroid.
+
+```python
+import numpy as np
+
+def demonstrate_product_quantization(
+    vectors: np.ndarray,  # (N, d) original vectors
+    n_subvectors: int = 4,
+    n_centroids: int = 8  # Use 8 for demo; production uses 256
+) -> dict:
+    """Demonstrate PQ compression (simplified, no sklearn)."""
+    N, d = vectors.shape
+    sub_dim = d // n_subvectors
+
+    # Split vectors into sub-vectors
+    sub_vectors = vectors.reshape(N, n_subvectors, sub_dim)
+
+    # For each sub-space, find centroids via simple random selection
+    # (Real systems use k-means; we simplify for Pyodide compatibility)
+    codebooks = []
+    codes = np.zeros((N, n_subvectors), dtype=np.int32)
+
+    for m in range(n_subvectors):
+        sub_data = sub_vectors[:, m, :]  # (N, sub_dim)
+
+        # Select random centroids
+        centroid_indices = np.random.choice(N, n_centroids, replace=False)
+        centroids = sub_data[centroid_indices].copy()
+        codebooks.append(centroids)
+
+        # Assign each vector to nearest centroid
+        for i in range(N):
+            distances = np.linalg.norm(centroids - sub_data[i], axis=1)
+            codes[i, m] = np.argmin(distances)
+
+    # Compression stats
+    original_bytes = N * d * 4  # float32
+    compressed_bytes = N * n_subvectors * 1  # uint8 codes
+    codebook_bytes = n_subvectors * n_centroids * sub_dim * 4
+
+    return {
+        "codes": codes,
+        "codebooks": codebooks,
+        "original_bytes": original_bytes,
+        "compressed_bytes": compressed_bytes + codebook_bytes,
+        "compression_ratio": original_bytes / (compressed_bytes + codebook_bytes),
+    }
+
+# Demo
+np.random.seed(42)
+vectors = np.random.randn(100, 16).astype(np.float32)
+result = demonstrate_product_quantization(vectors, n_subvectors=4, n_centroids=8)
+print(f"Original size: {result['original_bytes']} bytes")
+print(f"Compressed size: {result['compressed_bytes']} bytes")
+print(f"Compression ratio: {result['compression_ratio']:.1f}x")
+print(f"Code shape: {result['codes'].shape}")
+```
+
+## RAG Taxonomy: Naive, Advanced, and Modular
+
+Gao et al. (2024) in their survey "Retrieval-Augmented Generation for Large Language Models: A Survey" categorize RAG systems into three generations:
+
+### Naive RAG
+
+The simplest pipeline: chunk documents, embed them, retrieve top-$k$ by cosine similarity, concatenate into the prompt, generate. This is what you build in your first afternoon with LangChain. It works surprisingly well for simple use cases, and it is the correct starting point.
+
+Naive RAG fails when: (1) the query is ambiguous and the right chunks are not retrieved, (2) the retrieved chunks lack sufficient context (e.g., a sentence fragment mentioning "it" without the antecedent), (3) the answer requires synthesizing information from multiple documents, or (4) the context window fills with irrelevant text, diluting the signal.
+
+### Advanced RAG
+
+Advanced RAG adds preprocessing and postprocessing stages around the core retrieve-and-generate loop:
+
+- **Pre-retrieval**: Query rewriting (expand, decompose, or rephrase the query), HyDE — hypothetical document embeddings (Gao et al., 2023) where you generate a hypothetical answer and embed *that* for retrieval.
+- **Retrieval**: Hybrid search (combine sparse BM25 with dense embeddings via reciprocal rank fusion), sentence window retrieval (retrieve a sentence but include surrounding context), auto-merging (if multiple child chunks from the same parent are retrieved, merge to the parent).
+- **Post-retrieval**: Reranking with a cross-encoder (more accurate but slower than bi-encoder), context compression (extract only the relevant sentences from retrieved chunks), diversity filtering (avoid redundant chunks).
+
+### Modular RAG
+
+Modular RAG decomposes the pipeline into interchangeable modules: routing (choose which retrieval strategy to use based on query type), iterative retrieval (retrieve → generate → retrieve again with refined query), and tool-augmented retrieval (the LLM decides when and what to retrieve, as in Toolformer by Schick et al., 2023).
+
+The modular view is the most productive mental model for production systems. You are not building "a RAG system" — you are assembling a pipeline from well-defined modules, each of which can be tested, evaluated, and swapped independently.
+
+<ConceptCheck id="cc-4" />
+
+## Chunking: The Unsexy Foundation
+
+Chunking strategy is the single most impactful decision in RAG that gets the least attention. You are converting continuous documents into discrete units for retrieval. Every chunk is an atom — it will be retrieved whole or not at all. Get the chunk boundaries wrong and no amount of model sophistication will save you.
+
+**Fixed-size chunking**: Split every $n$ tokens with overlap $o$. Simple, predictable. A chunk size of 256-512 tokens with 10-20% overlap is a reasonable default. The overlap ensures concepts that span a boundary appear in at least one chunk.
+
+**Semantic chunking**: Split at paragraph or section boundaries. Respects the author's logical structure. Better for well-formatted documents (textbooks, documentation). Worse for messy data (emails, chat logs).
+
+**Recursive character splitting**: LangChain's default. Try to split on `\n\n`, then `\n`, then `. `, then ` `. Keeps paragraphs together when possible, falls back to smaller units.
+
+**The chunk size tradeoff**: Smaller chunks are more precise (higher retrieval precision) but less informative (the retrieved text may lack context). Larger chunks provide more context but retrieve more irrelevant text (lower precision). There is no universal optimum — it depends on your documents and queries. This is empirical, not theoretical. **Measure it.**
+
+```python
+from typing import List
+from dataclasses import dataclass
+
+@dataclass
+class Chunk:
+    text: str
+    start_idx: int
+    end_idx: int
+
+def fixed_size_chunk(
+    text: str,
+    chunk_size: int = 200,
+    overlap: int = 50
+) -> List[Chunk]:
+    """Split text into fixed-size chunks with overlap."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunk_text = text[start:end]
+        chunks.append(Chunk(text=chunk_text, start_idx=start, end_idx=end))
+        start += chunk_size - overlap
+        if start + overlap >= len(text):
+            break
+    return chunks
+
+# Demo
+sample = "Machine learning is a subset of AI. " * 20
+chunks = fixed_size_chunk(sample, chunk_size=100, overlap=20)
+for i, c in enumerate(chunks[:3]):
+    print(f"Chunk {i}: [{c.start_idx}:{c.end_idx}] '{c.text[:50]}...'")
+print(f"Total chunks: {len(chunks)}")
+```
+
+## Putting It All Together
+
+RAG is not one technique — it is a **systems design problem**. The math of embeddings, the geometry of similarity, the algorithms of approximate search, and the pragmatics of chunking all compound. When a RAG system fails, the failure could be in any component. The only way to diagnose and improve is to evaluate each component independently and end-to-end.
+
+In the next lecture, we will examine exactly how RAG systems fail and build the evaluation framework to catch those failures before users do.

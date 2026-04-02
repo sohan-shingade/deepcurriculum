@@ -1,0 +1,46 @@
+{
+  "readings": [
+    {
+      "title": "Computer Organization and Design: RISC-V Edition, Chapters 4.1-4.5",
+      "authors": "David Patterson and John Hennessy",
+      "url": "https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6",
+      "note": "Chapter 4 covers the processor design in detail: 4.1-4.3 build the single-cycle RISC-V datapath step by step, 4.4 introduces control signals and the control unit truth table, and 4.5 discusses the multi-cycle approach. This is the primary textbook reference for the lecture material."
+    },
+    {
+      "title": "Harris & Harris, Digital Design and Computer Architecture: RISC-V Edition, Appendix B",
+      "authors": "David Money Harris and Sarah L. Harris",
+      "url": "https://pages.hmc.edu/harris/ddca/ddcarv/DDCArv_AppB_Harris.pdf",
+      "note": "Appendix B provides a detailed RISC-V instruction reference with all opcodes, funct3, and funct7 values in a compact format. Useful as a quick reference when implementing the control unit and ALU control logic."
+    },
+    {
+      "title": "CMU 18-447: Single-Cycle and Multi-Cycle Datapath Lectures",
+      "authors": "Onur Mutlu",
+      "url": "https://people.inf.ethz.ch/omutlu/lecture-videos.html",
+      "note": "Professor Mutlu's lectures on single-cycle and multi-cycle processor design are among the best available. He traces signals through the datapath for each instruction type with exceptional clarity and discusses the engineering tradeoffs that motivate each design decision."
+    },
+    {
+      "title": "A Look at Microprogrammed Control",
+      "authors": "Maurice Wilkes",
+      "url": "https://dl.acm.org/doi/10.1145/361953.361962",
+      "note": "Wilkes invented microprogrammed control in 1951 at Cambridge. This paper describes the concept of storing control sequences in a ROM rather than implementing them in hardware logic. The idea was reinvented and popularized by IBM for the System/360 in 1964."
+    },
+    {
+      "title": "Intel Golden Cove Microarchitecture Deep Dive",
+      "authors": "AnandTech",
+      "url": "https://www.anandtech.com/show/16881/a-deep-dive-into-intels-alder-lake-microarchitectures/3",
+      "note": "A detailed look at Intel's Golden Cove core (12th Gen Alder Lake), which includes a 6-wide decoder, 4K-entry micro-op cache, and 512-entry reorder buffer. Shows how the concepts from this lecture — decode, control signals, microprogrammed execution — are implemented in a real, modern processor."
+    },
+    {
+      "title": "Popping the Hood on Golden Cove",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/popping-the-hood-on-golden-cove",
+      "note": "A measurement-based analysis of Intel's Golden Cove microarchitecture. Includes empirical data on decode bandwidth, branch predictor performance, and execution unit latencies. Complements the theoretical design discussions in lecture with real-world numbers."
+    },
+    {
+      "title": "AMD's Zen 4 Part 1: Frontend and Execution Engine",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/amds-zen-4-part-1-frontend-and-execution-engine",
+      "note": "Detailed analysis of AMD's Zen 4 frontend: 4-wide decoder, 6.75K-entry op cache delivering 9 uops/cycle, and 320-entry ROB. Compare the design choices with Intel's Golden Cove — both companies solve the same problems (CISC decode, microcode, out-of-order execution) with different engineering tradeoffs."
+    }
+  ]
+}

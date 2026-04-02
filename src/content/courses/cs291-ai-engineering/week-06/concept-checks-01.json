@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A product team is building an AI system that summarizes a single short document (under 2000 tokens). The summary needs to be accurate and well-written. Should they use a multi-agent system?",
+      "options": [
+        "Yes — use a research agent, a drafting agent, and an editing agent for best quality",
+        "Yes — use a generator agent and a critic agent to verify the summary",
+        "No — a single well-prompted agent with a good system prompt will outperform a multi-agent system for this task",
+        "It depends entirely on the model being used, not the architecture"
+      ],
+      "correct": 2,
+      "explanation": "A short document summary is a single-role task with low context pressure and no need for parallel decomposition. The coordination overhead of multiple agents (extra LLM calls, message passing, synthesis) would add cost and latency without meaningfully improving quality. The decision framework says: use multi-agent systems when you have role specialization, parallel decomposability, context pressure, or adversarial verification needs. A simple summarization task has none of these at a level that justifies multi-agent overhead."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A content creation system uses a pipeline architecture: Research Agent → Draft Agent → Edit Agent → SEO Agent. If the Research Agent takes 8 seconds, Draft takes 12 seconds, Edit takes 6 seconds, and SEO takes 4 seconds, what is the latency for a single task and the approximate throughput for a stream of 100 tasks?",
+      "options": [
+        "Latency: 30s, Throughput: 100/30s ≈ 3.3 tasks/second",
+        "Latency: 30s, Throughput: approaches 100/12s ≈ 8.3 tasks/second as the pipeline fills",
+        "Latency: 12s (max stage), Throughput: 100/12s ≈ 8.3 tasks/second",
+        "Latency: 30s, Throughput: 100/8s ≈ 12.5 tasks/second"
+      ],
+      "correct": 1,
+      "explanation": "In a pipeline architecture, the latency for a single task is the sum of all stage latencies: 8 + 12 + 6 + 4 = 30 seconds. However, for a stream of tasks, the pipeline can process multiple tasks simultaneously (task 2 enters Draft while task 1 is in Edit). Once the pipeline is full, the throughput is limited by the slowest stage (the bottleneck), which is Draft at 12 seconds. So the throughput approaches 100/12 ≈ 8.3 tasks per 12-second cycle. This is the difference between latency (how long one task takes) and throughput (how many tasks per unit time), which is central to pipeline architecture design."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "You are designing a multi-agent system for analyzing a large codebase (200 files) across security, performance, code quality, and test coverage dimensions. The analysis of each dimension is independent. Which architecture pattern is most appropriate?",
+      "options": [
+        "Pipeline — each dimension builds on the previous analysis",
+        "Peer-to-peer — agents should debate and reach consensus on each file",
+        "Hierarchical (manager-worker) — a coordinator assigns dimensions to specialized workers who analyze in parallel",
+        "Blackboard — agents should iteratively contribute findings to shared state"
+      ],
+      "correct": 2,
+      "explanation": "The task has clear decomposition (four distinct analysis dimensions), high parallelism potential (dimensions are independent), and well-defined roles. This matches the hierarchical architecture perfectly: a coordinator decomposes the task into four dimension-specific subtasks, delegates each to a specialized worker (security agent, performance agent, quality agent, test agent), and synthesizes results. Pipeline is wrong because the dimensions don't form sequential stages. Peer-to-peer adds unnecessary complexity since there's no need for debate. Blackboard could work but adds concurrency complexity that isn't needed when the decomposition is known upfront."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Which of the following is NOT an anti-pattern in multi-agent system design?",
+      "options": [
+        "A coordinator that validates its task decomposition against the original task before delegating to workers",
+        "Splitting a simple classification task into 8 specialized micro-agents, each handling one label",
+        "Worker agents that send 3-4 rounds of clarification messages to the coordinator before starting work",
+        "Five 'specialized' agents that all use the same model, same tools, and nearly identical system prompts"
+      ],
+      "correct": 0,
+      "explanation": "Decomposition validation — having the coordinator verify its plan before executing — is a best practice that mitigates the single-point-of-failure risk of the coordinator pattern. Option B is over-decomposition: a classification task with 8 labels doesn't need 8 agents; a single agent handles it fine. Option C describes chatty agents: multi-round clarification means the task specification was inadequate. Option D describes homogeneous agents pretending to be specialized: if the agents differ only in a few words of their system prompt, the specialization is not meaningful and you're paying coordination overhead for no benefit."
+    }
+  ]
+}

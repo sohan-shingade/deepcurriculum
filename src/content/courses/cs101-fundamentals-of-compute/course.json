@@ -1,0 +1,247 @@
+{
+  "slug": "cs101-fundamentals-of-compute",
+  "title": "Fundamentals of Compute",
+  "code": "CS 101",
+  "description": "A rigorous 20-week graduate-level course covering computation from transistor physics to supercomputer architecture. Master digital logic, processor design, memory hierarchies, GPU programming, FPGA-based high-frequency trading, and high-performance computing. Students build progressively complex systems in C and C++ through 6 guided projects, culminating in a capstone that pushes the boundaries of computational systems.",
+  "quarterLength": 20,
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "slug": "week-01",
+      "title": "Transistors and Logic Gates",
+      "description": "Semiconductor physics, MOSFET operation, CMOS logic gates, Boolean algebra, and Karnaugh maps. Introduction to C programming with bitwise operators.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Atoms, Electrons, and Semiconductors", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Logic Gates from Transistors", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 1: Digital Foundations", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 1: Transistors and Logic", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 2,
+      "slug": "week-02",
+      "title": "Combinational Circuits and Arithmetic",
+      "description": "Number representation, IEEE 754 floating point, adder circuits, carry-lookahead, Booth's multiplication, ALU design. C pointers and arrays.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Arithmetic Circuits", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Multiplexers, Decoders, and ALU Design", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 2: Arithmetic and ALU", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 2: Combinational Circuits", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 3,
+      "slug": "week-03",
+      "title": "Sequential Circuits and State Machines",
+      "description": "Latches, flip-flops, timing analysis, registers, counters, finite state machines (Moore and Mealy), microprogrammed control. C dynamic memory allocation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Latches, Flip-Flops, and Timing", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Finite State Machines and Control", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 3: Sequential Logic", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 3: Sequential Circuits", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 4,
+      "slug": "week-04",
+      "title": "Memory Technologies and Storage",
+      "description": "SRAM 6T cell, DRAM 1T1C, DDR5 and HBM3 specifications, SSD architecture, NVMe, storage hierarchy. C structs and file I/O.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "SRAM, DRAM, and Memory Technologies", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Flash Storage, SSDs, and the Storage Hierarchy", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 4: Memory Systems", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 4: Memory Technologies", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 5,
+      "slug": "week-05",
+      "title": "Instruction Set Architecture",
+      "description": "ISA design philosophy, CISC vs RISC, RISC-V RV32I complete instruction set with bit-level encoding, assembly programming, compilation pipeline. C preprocessor and Makefiles.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Instruction Set Architecture: CISC, RISC, and RISC-V", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "RISC-V Assembly Programming and the Compilation Pipeline", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 5: ISA and Assembly", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 5: Instruction Sets", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 6,
+      "slug": "week-06",
+      "title": "Processor Datapath Design",
+      "description": "Single-cycle RISC-V datapath with signal-by-signal trace, multi-cycle design with FSM controller, microprogrammed control. C libraries and linking.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The Single-Cycle RISC-V Processor", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Multi-Cycle Design and Microprogrammed Control", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 6: Processor Design", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 6: Datapath and Control", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 7,
+      "slug": "week-07",
+      "title": "Pipelining and Branch Prediction",
+      "description": "5-stage pipeline, data hazards and forwarding, control hazards, branch prediction from 1-bit to TAGE and neural predictors, Amdahl's Law. C++ classes and RAII.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The Pipelined Processor", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Branch Prediction: From Saturating Counters to Neural Predictors", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 7: Pipelining", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 7: Pipelining and Prediction", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 8,
+      "slug": "week-08",
+      "title": "Cache Hierarchies and Virtual Memory",
+      "description": "Cache design from direct-mapped to fully-associative, AMAT analysis, multi-level caches, virtual memory with Sv39 page tables, TLBs, roofline model. C++ templates and STL.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Cache Design and the Memory Hierarchy", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Virtual Memory, TLBs, and the Roofline Model", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 8: Caches and Virtual Memory", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 8: Memory Hierarchy", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 9,
+      "slug": "week-09",
+      "title": "Out-of-Order Execution and Advanced Processors",
+      "description": "Tomasulo's algorithm, register renaming, reorder buffer, speculative execution, VLIW, SMT, power wall, chiplet architectures. C++ smart pointers and move semantics.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Out-of-Order Execution: Tomasulo's Algorithm", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Speculative Execution, VLIW, SMT, and the Power Wall", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 9: Advanced Processors", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 9: Out-of-Order and Speculation", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 10,
+      "slug": "week-10",
+      "title": "Midterm and Project Review",
+      "description": "Comprehensive midterm exam covering weeks 1-9. Review of Project 1 (Logic Simulator) and Project 2 (RISC-V Processor) final milestones.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Midterm Review: Transistors to Out-of-Order", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Project Architecture Review and Performance Analysis", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "midterm", "title": "Midterm Exam", "type": "midterm", "order": 3, "estimatedMinutes": 90 }
+      ]
+    },
+    {
+      "weekNumber": 11,
+      "slug": "week-11",
+      "title": "Multicore Processors and Coherence",
+      "description": "Cache coherence (MESI protocol with full state diagrams), directory-based coherence, false sharing, synchronization primitives, lock-free programming, CXL, NUMA. C++ concurrency.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Multicore Processors and Cache Coherence", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Synchronization, Lock-Free Programming, and NUMA", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 10: Multicore and Coherence", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 10: Multicore Systems", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 12,
+      "slug": "week-12",
+      "title": "SIMD, Vectors, and Matrix Operations",
+      "description": "Flynn's taxonomy, SIMD and vector processing (AVX, SVE, RISC-V V), tiled GEMM derivation, Strassen's algorithm, systolic arrays, BLAS levels. C++ operator overloading.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "SIMD and Vector Processing", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Matrix Operations: From GEMM to Systolic Arrays", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 11: SIMD and Matrix Ops", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 11: Parallel Data Processing", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 13,
+      "slug": "week-13",
+      "title": "GPU Architecture",
+      "description": "GPU hardware internals (SM structure, warp/SIMT execution, memory hierarchy, coalescing, occupancy), architecture evolution from Kepler to Blackwell, GPU vs CPU design trade-offs.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "GPU Hardware: Streaming Multiprocessors and SIMT", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "GPU Memory Hierarchy and Occupancy", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 12: GPU Architecture", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 12: GPU Hardware", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 14,
+      "slug": "week-14",
+      "title": "GPU Programming and Optimization",
+      "description": "CUDA programming model, parallel reduction (5 optimization levels), scan, tiled GEMM, radix sort, multi-GPU with NVLink, ring-AllReduce algorithm.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "CUDA Programming: Kernels, Threads, and Memory", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "GPU Optimization: Reduction, Scan, GEMM, and Multi-GPU", "type": "lecture", "order": 2, "estimatedMinutes": 60 },
+        { "slug": "problem-set", "title": "Problem Set 13: GPU Programming", "type": "problem_set", "order": 3, "estimatedMinutes": 180 },
+        { "slug": "quiz", "title": "Quiz 13: CUDA and GPU Optimization", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 15,
+      "slug": "week-15",
+      "title": "FPGA Architecture and HDL",
+      "description": "FPGA internals (CLB, LUT, BRAM, DSP, routing), FPGA vs ASIC vs CPU, Verilog HDL (behavioral, structural, synthesis patterns, testbenches), High-Level Synthesis with Vitis HLS.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "FPGA Architecture: LUTs, BRAMs, and Programmable Logic", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Verilog HDL and High-Level Synthesis", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 14: FPGA and Verilog", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 14: FPGA Architecture", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 16,
+      "slug": "week-16",
+      "title": "FPGA for High-Frequency Trading",
+      "description": "FPGA in HFT: FAST protocol decoding, hardware order books, tick-to-trade pipelines, fixed-point arithmetic, colocation, sub-microsecond latency. The complete FPGA trading system.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The FPGA Trading Pipeline: From Wire to Order", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Hardware Order Books, Risk Checks, and Colocation", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 15: FPGA Trading Systems", "type": "problem_set", "order": 3, "estimatedMinutes": 180 },
+        { "slug": "quiz", "title": "Quiz 15: FPGA and HFT", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 17,
+      "slug": "week-17",
+      "title": "Supercomputer Architecture and HPC",
+      "description": "Top supercomputers (Frontier, El Capitan), interconnect topologies (fat tree, dragonfly, torus), MPI collectives, distributed memory, parallel I/O, power and cooling.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Supercomputer Architecture: From Frontier to El Capitan", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Interconnects, MPI, and Distributed Computing", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 16: HPC Systems", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 16: Supercomputers and HPC", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 18,
+      "slug": "week-18",
+      "title": "Systems Programming and Performance Engineering",
+      "description": "System calls, scheduling, memory management, I/O models, zero-copy, NUMA, huge pages, CPU isolation for trading, profiling, cache-line optimization, SIMD intrinsics, benchmarking.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Systems Programming: Kernel Interfaces and Memory Management", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Performance Engineering: Profiling, Optimization, and Benchmarking", "type": "lecture", "order": 2, "estimatedMinutes": 55 },
+        { "slug": "problem-set", "title": "Problem Set 17: Systems and Performance", "type": "problem_set", "order": 3, "estimatedMinutes": 150 },
+        { "slug": "quiz", "title": "Quiz 17: Systems Programming", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 19,
+      "slug": "week-19",
+      "title": "Quantitative Finance Computing",
+      "description": "Trading technology stack, GPU for risk (Monte Carlo, Black-Scholes), FPGA for execution, kernel bypass networking, compute-intensive finance: Monte Carlo on GPU, fixed-point Black-Scholes, real-time risk, covariance and PCA.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The Quant Computing Stack: Data, Signal, Execution, Risk", "type": "lecture", "order": 1, "estimatedMinutes": 60 },
+        { "slug": "lecture-02", "title": "Compute-Intensive Finance: Monte Carlo, Risk, and Real-Time Analytics", "type": "lecture", "order": 2, "estimatedMinutes": 60 },
+        { "slug": "problem-set", "title": "Problem Set 18: Quant Compute", "type": "problem_set", "order": 3, "estimatedMinutes": 180 },
+        { "slug": "quiz", "title": "Quiz 18: Finance Computing", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 20,
+      "slug": "week-20",
+      "title": "Future of Compute and Final Exam",
+      "description": "3D integration, chiplets, photonic computing, processing-in-memory, neuromorphic computing, quantum computing current state, post-quantum cryptography for finance. Capstone project and comprehensive final exam.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The Future of Compute: Photonics, PIM, Neuromorphic, and Quantum", "type": "lecture", "order": 1, "estimatedMinutes": 55 },
+        { "slug": "lecture-02", "title": "Capstone Project Specification and Course Synthesis", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "final", "title": "Final Exam", "type": "final", "order": 3, "estimatedMinutes": 120 }
+      ]
+    }
+  ]
+}

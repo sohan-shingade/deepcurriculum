@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "You have a context window budget of 4000 tokens. Your system prompt uses 300 tokens, the query uses 100 tokens, and you want to reserve 600 tokens for the model's response. You have 8 retrieved chunks averaging 450 tokens each. How many chunks can you fit, and what is the key concern?",
+      "options": [
+        "8 chunks fit with room to spare; no concerns",
+        "6 chunks fit (3000 tokens available for chunks); the concern is selecting the most relevant 6",
+        "6 chunks fit; the key concern is ordering them to avoid lost-in-the-middle degradation",
+        "4 chunks fit because you need to leave extra buffer"
+      ],
+      "correct": 2,
+      "explanation": "Available budget for chunks: 4000 - 300 - 100 - 600 = 3000 tokens. At 450 tokens per chunk, 3000 / 450 = 6.67, so 6 chunks fit. Both selection and ordering matter, but ordering is the more subtle and often-overlooked concern. The greedy selection (top 6 by relevance) is straightforward. The ordering question — whether to place them by decreasing relevance or use sandwich ordering to keep the most relevant chunks at the beginning and end of the context — is what Liu et al. (2023) showed makes a material difference in answer quality."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Chain-of-thought prompting improves model performance on multi-step reasoning tasks. What is the mechanism by which this works?",
+      "options": [
+        "It activates special reasoning circuits in the transformer that are otherwise dormant",
+        "The generated intermediate steps become part of the autoregressive context, conditioning subsequent token generation on explicit reasoning",
+        "It reduces the temperature of generation, making outputs more deterministic",
+        "It forces the model to use more attention heads per token"
+      ],
+      "correct": 1,
+      "explanation": "Language models are autoregressive: each token is generated conditioned on all previous tokens. When the model generates intermediate reasoning steps ('First, I need to calculate X. X = 5 * 3 = 15. Next...'), those tokens become part of the context for generating subsequent tokens. This effectively gives the model a working memory — it can refer back to intermediate results it has written down. Without chain-of-thought, the model must compute multi-step reasoning entirely within its forward pass, which is much harder for complex problems. This is why chain-of-thought works better for harder tasks — easy tasks don't need the scratchpad."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In a production system, you change your QA prompt from version 1.2 to 1.3 and deploy it. Answer quality drops 5% as measured by your eval suite. What is the correct response?",
+      "options": [
+        "Tweak version 1.3 and redeploy immediately",
+        "Roll back to version 1.2, then investigate v1.3's failure on the eval suite offline",
+        "Keep version 1.3 deployed and wait for more data before deciding",
+        "Increase the model temperature to compensate for the quality drop"
+      ],
+      "correct": 1,
+      "explanation": "The correct response is to roll back immediately and investigate offline. A 5% quality drop in production means real users are getting worse answers right now. Rollback is cheap and instant; debugging takes time. Once you have rolled back, you can analyze which specific eval cases v1.3 fails on, understand why, and iterate on v1.4 before deploying again. This is exactly why prompt versioning and automated eval suites exist — they give you the safety net to move fast. Keeping v1.3 deployed 'to gather more data' is choosing to harm users for your convenience."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "What is the core innovation of DSPy compared to traditional prompt engineering?",
+      "options": [
+        "It uses larger context windows to fit more examples",
+        "It replaces manual prompt iteration with programmatic optimization over a defined metric and evaluation set",
+        "It generates prompts in multiple languages simultaneously",
+        "It eliminates the need for few-shot examples entirely"
+      ],
+      "correct": 1,
+      "explanation": "DSPy's core insight is that prompt engineering is an optimization problem. Traditional prompt engineering is manual iteration: you change a word, test it on a few examples in your head, and hope for the best. DSPy instead defines a signature (input/output fields), a metric (how to score quality), and uses an optimizer to systematically search for the best prompt configuration — including which few-shot examples to include, what instructions to write, and how to structure reasoning chains. The prompt becomes a compiled artifact produced by an algorithm, not a hand-crafted string. This makes prompt development reproducible, measurable, and improvable through systematic experimentation rather than intuition."
+    }
+  ]
+}

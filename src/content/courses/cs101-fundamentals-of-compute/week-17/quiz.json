@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 16: Supercomputer Architecture and HPC",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "El Capitan achieves $R_{\\max} = 1.742$ EFlop/s with $R_{\\text{peak}} \\approx 2.75$ EFlop/s. What is its HPL efficiency?",
+      "options": [
+        "Approximately 50%",
+        "Approximately 63%",
+        "Approximately 75%",
+        "Approximately 87%"
+      ],
+      "correct": 1,
+      "explanation": "HPL efficiency = $R_{\\max} / R_{\\text{peak}} = 1.742 / 2.75 \\approx 0.633 = 63.3\\%$. This is somewhat below the 70-80% range typical of well-optimized systems, partly because the MI300A APU architecture is newer and LINPACK optimization is still maturing. Frontier achieves about 80.5% efficiency by comparison ($1.353 / 1.68$)."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Cerebras WSE-3 has 44 GB of SRAM with 21 PB/s bandwidth, while an NVIDIA H100 has 80 GB of HBM3 with 3.35 TB/s bandwidth. What is the approximate bandwidth ratio?",
+      "options": [
+        "WSE-3 has roughly 60x more bandwidth",
+        "WSE-3 has roughly 600x more bandwidth",
+        "WSE-3 has roughly 6,000x more bandwidth",
+        "WSE-3 has roughly 60,000x more bandwidth"
+      ],
+      "correct": 2,
+      "explanation": "$21 \\text{ PB/s} / 3.35 \\text{ TB/s} = 21 \\times 10^{15} / 3.35 \\times 10^{12} \\approx 6{,}269\\times$. The WSE-3 achieves approximately 6,000x more memory bandwidth by placing all memory as SRAM on the same die as the compute cores, eliminating the off-chip memory wall. The trade-off is capacity: 44 GB vs 80 GB. The WSE approach works well for models that fit in SRAM but requires external MemoryX appliances for larger models."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A Google TPU v4 MXU uses bfloat16 inputs. What advantage does bfloat16 have over IEEE FP16 (half precision)?",
+      "options": [
+        "bfloat16 has higher precision (more mantissa bits)",
+        "bfloat16 has the same exponent range as FP32, preserving dynamic range while halving storage",
+        "bfloat16 is faster to compute because it uses fewer transistors",
+        "bfloat16 eliminates the need for FP32 accumulation"
+      ],
+      "correct": 1,
+      "explanation": "bfloat16 uses 1 sign + 8 exponent + 7 mantissa bits, while IEEE FP16 uses 1 sign + 5 exponent + 10 mantissa bits. bfloat16 has fewer mantissa bits (lower precision) but the same exponent range as FP32 (8 exponent bits). This preserves the dynamic range, meaning values can span the same orders of magnitude as FP32 without overflow or underflow. This is critical for deep learning where gradient values span many orders of magnitude. Converting FP32 to bfloat16 is trivial -- just truncate the low 16 bits. FP32 accumulation is still needed (and used) to prevent error drift during matrix multiply."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a dragonfly topology with minimal routing, the maximum hop count is 3 (LGL). With Valiant non-minimal routing, it is 5 (LGLLGL). Under what traffic pattern is non-minimal routing preferred?",
+      "options": [
+        "Uniform random traffic, because it reduces average latency",
+        "Nearest-neighbor traffic, because it avoids congested local links",
+        "Adversarial traffic patterns where many flows share the same global link, because Valiant routing distributes load across all global links",
+        "Non-minimal routing is never preferred because it doubles the path length"
+      ],
+      "correct": 2,
+      "explanation": "Minimal routing sends traffic on the shortest path, which can create hot spots when many flows share the same global link (adversarial patterns). Valiant routing randomizes the intermediate group, converting any traffic pattern into a random pattern. For adversarial traffic (e.g., all nodes in group A sending to group B), minimal routing overloads the A-to-B global link, while Valiant distributes traffic across all global links. The cost is 2x path length, which at most halves the throughput. But the alternative -- a single overloaded link -- can reduce throughput to nearly zero. UGAL (Universal Globally Adaptive Load-balancing) dynamically chooses between minimal and non-minimal based on queue depth, getting the best of both."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Frontier consumes 21 MW of power. If the data center has a PUE of 1.3, what is the total facility power?",
+      "options": [
+        "21.0 MW",
+        "27.3 MW",
+        "63.0 MW",
+        "16.2 MW"
+      ],
+      "correct": 1,
+      "explanation": "PUE = Total Facility Power / IT Equipment Power. Therefore Total Facility Power = PUE $\\times$ IT Power = $1.3 \\times 21 = 27.3$ MW. The additional 6.3 MW goes to cooling, power distribution losses, lighting, and other infrastructure. A PUE of 1.3 means 30% overhead, which is typical for modern HPC facilities. The most efficient data centers achieve PUE near 1.1. At $0.10/kWh, 27.3 MW costs approximately $23.9 million per year in electricity alone."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "For a ring allreduce of $n = 10$ MB across $P = 1{,}024$ processes, the cost is $T = 2(P-1)\\alpha + 2\\frac{P-1}{P}n\\beta$. With $\\alpha = 1\\;\\mu\\text{s}$ and bandwidth = 50 GB/s, what dominates the total time?",
+      "options": [
+        "Latency dominates: $2 \\times 1023 \\times 1\\;\\mu\\text{s} = 2046\\;\\mu\\text{s}$ vs bandwidth cost of $\\approx 400\\;\\mu\\text{s}$",
+        "Bandwidth dominates: latency cost is only $20\\;\\mu\\text{s}$",
+        "Both are approximately equal at about 1000 $\\mu$s each",
+        "Neither -- the computation cost $\\gamma$ dominates"
+      ],
+      "correct": 0,
+      "explanation": "Latency cost: $2 \\times 1023 \\times 10^{-6} = 2.046 \\times 10^{-3}$ s = 2,046 $\\mu$s. Bandwidth cost: $2 \\times (1023/1024) \\times 10^7 \\times (1/50 \\times 10^9) = 2 \\times 0.999 \\times 2 \\times 10^{-4} \\approx 4 \\times 10^{-4}$ s = 400 $\\mu$s. Latency dominates by 5x. This is why ring allreduce is unsuitable for large process counts with moderate message sizes -- the $O(P)$ latency term kills performance. Rabenseifner allreduce achieves the same bandwidth term but with only $2\\log_2(1024) \\times 1\\;\\mu\\text{s} = 20\\;\\mu\\text{s}$ latency -- a 100x improvement."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A $k$-ary 3D torus with $k = 32$ has what bisection bandwidth relative to a fat tree connecting the same $32^3 = 32{,}768$ nodes, assuming identical per-link bandwidth $b$?",
+      "options": [
+        "Same bisection bandwidth",
+        "Torus has $2 \\times 32^2 \\times b = 2{,}048b$; fat tree has $32{,}768b$ — the fat tree has 16x more",
+        "Torus has $32^3 \\times b$; equal to fat tree",
+        "Cannot be compared because they use different link counts"
+      ],
+      "correct": 1,
+      "explanation": "Torus bisection bandwidth: $B = 2 \\cdot k^{n-1} \\cdot b = 2 \\cdot 32^2 \\cdot b = 2{,}048b$. Fat tree bisection bandwidth: $B = N \\cdot b = 32{,}768b$. The fat tree provides $32{,}768 / 2{,}048 = 16\\times$ more bisection bandwidth. This is why the torus struggles with all-to-all communication patterns (which need high bisection bandwidth) but excels at nearest-neighbor patterns (stencil codes) where the torus's direct connections minimize latency. The fat tree achieves its high bisection bandwidth by using approximately $5N/4 = 40{,}960$ switches, while the torus uses zero switches."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "RDMA (Remote Direct Memory Access) achieves 3-5 $\\mu$s latency versus 20-80 $\\mu$s for standard TCP/IP. Which overhead does RDMA eliminate?",
+      "options": [
+        "Signal propagation delay through the cable",
+        "Serialization delay of the data onto the wire",
+        "System call overhead, socket buffer copies, kernel protocol processing, and interrupt handling",
+        "The time to compute checksums on the data"
+      ],
+      "correct": 2,
+      "explanation": "RDMA achieves low latency by eliminating four major sources of software overhead: (1) System call transitions: standard networking requires user-to-kernel transitions for send/recv, costing ~100-500 ns each. (2) Socket buffer copies: the kernel copies data between user buffers and kernel socket buffers. (3) Kernel protocol processing: TCP/IP stack processing in the kernel. (4) Interrupt handling: each received packet triggers an interrupt, causing a context switch and cache pollution. RDMA bypasses all of these after initial connection setup -- the NIC directly reads from or writes to application memory (zero-copy, kernel bypass, CPU offload). Signal propagation and serialization delays are physical constraints that RDMA cannot change."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "AMD EPYC Genoa uses up to 12 CCDs (Core Complex Dies) at 5nm connected to an IOD at 6nm. Why use different process nodes for CCDs and IOD?",
+      "options": [
+        "The IOD needs faster transistors than the CCDs",
+        "Using the latest (smallest) process for compute-heavy CCDs maximizes core count and efficiency, while the IOD's large analog/IO circuits (memory controllers, PCIe, SerDes) do not benefit from the smallest node and are cheaper to fabricate on a larger process",
+        "AMD ran out of 5nm wafer capacity and had to use 6nm for some dies",
+        "The IOD must be larger than the CCDs, so it needs a larger process node"
+      ],
+      "correct": 1,
+      "explanation": "This is the key insight of chiplet architecture: different functions benefit from different process nodes. CPU cores benefit from the smallest, densest process (5nm) for maximum transistor count and power efficiency. But the IOD contains analog circuits (DDR5 memory controllers, PCIe Gen5 SerDes, Infinity Fabric PHYs) that are area-dominated by analog/mixed-signal blocks. These circuits do not shrink well on the smallest nodes and are much cheaper to fabricate on a more mature process (6nm). By decoupling the die, AMD can use each process where it makes economic and technical sense, reducing total cost while maximizing performance. This is also why each CCD is only ~70 mm^2 (high yield) instead of a ~700 mm^2 monolithic die (low yield)."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Fugaku uses a 6D mesh/torus interconnect (Tofu Interconnect D) with topology 24x23x24x2x3x2. Why 6 dimensions instead of a simpler 3D torus?",
+      "options": [
+        "6D provides exactly 6x more bandwidth than 3D",
+        "6D is needed because Fugaku uses ARM processors, which require more interconnect dimensions",
+        "Higher dimensionality reduces network diameter (more dimensions = shorter maximum distance between any two nodes) and increases bisection bandwidth relative to the number of links per node, improving scalability to 100,000+ nodes",
+        "The 6D topology matches the physical layout of Fugaku's data center, which has 6 floors"
+      ],
+      "correct": 2,
+      "explanation": "A 6D torus connects each node to 12 neighbors (2 per dimension). For the same number of links per node, a higher-dimensional torus has lower diameter and higher bisection bandwidth than a lower-dimensional one. A 3D torus with $k = 54$ (same ~160K nodes) would have diameter $3 \\times 27 = 81$ hops. Fugaku's 6D topology has diameter $\\lfloor 24/2 \\rfloor + \\lfloor 23/2 \\rfloor + \\lfloor 24/2 \\rfloor + \\lfloor 2/2 \\rfloor + \\lfloor 3/2 \\rfloor + \\lfloor 2/2 \\rfloor = 12 + 11 + 12 + 1 + 1 + 1 = 38$ hops -- lower diameter despite 12x more nodes being reachable. The software layer abstracts this as a 3D torus for programmer convenience. Fujitsu reports 12x higher scalability than a 3D torus."
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 7: Pipelining and Prediction",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 5-stage pipeline processes 100 instructions with no hazards. How many total clock cycles does it take?",
+      "options": [
+        "100 cycles",
+        "104 cycles",
+        "500 cycles",
+        "105 cycles"
+      ],
+      "correct": 1,
+      "explanation": "A k-stage pipeline processing n instructions takes k + (n - 1) cycles. With k=5 and n=100: 5 + 99 = 104 cycles. The first instruction takes 5 cycles to flow through all stages, and each subsequent instruction completes one cycle after the previous one. This gives a CPI of 104/100 = 1.04, approaching the ideal CPI of 1.0 as the number of instructions grows."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the 5-stage RISC-V pipeline, which hazard type CANNOT be fully resolved by data forwarding?",
+      "options": [
+        "RAW hazard between two consecutive ALU instructions",
+        "RAW hazard between a load and an immediately following ALU instruction that uses the loaded value",
+        "RAW hazard between two ALU instructions separated by one independent instruction",
+        "Structural hazard between instruction fetch and data memory access"
+      ],
+      "correct": 1,
+      "explanation": "A load-use hazard occurs when a load instruction is immediately followed by an instruction that reads the loaded register. The load produces its result at the end of the MEM stage (cycle 4), but the dependent instruction needs it at the beginning of its EX stage (also cycle 4). Since the value hasn't been read from memory yet when the dependent instruction needs it, forwarding alone cannot help -- a 1-cycle stall (bubble) must be inserted. After the stall, the value is available in the MEM/WB register and can be forwarded via the MEM-to-EX path."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "AMD Zen 4 has a ~13-cycle branch mispredict penalty. If 20% of instructions are branches and the predictor achieves 96% accuracy, what is the branch-related CPI penalty?",
+      "options": [
+        "0.104",
+        "0.052",
+        "2.60",
+        "0.26"
+      ],
+      "correct": 0,
+      "explanation": "CPI penalty = branch_frequency x misprediction_rate x mispredict_penalty = 0.20 x 0.04 x 13 = 0.104. This means branches add 0.104 cycles per instruction to the base CPI of 1.0, resulting in a CPI of at least 1.104. This illustrates why even a 4% misprediction rate is costly with a deep pipeline -- it wastes over 10% of execution bandwidth."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 2-bit saturating counter is in state 11 (strongly taken). A branch is NOT taken. What is the new state and prediction?",
+      "options": [
+        "State 00, predict not-taken",
+        "State 01, predict not-taken",
+        "State 10, predict taken",
+        "State 11, predict taken (counter saturates)"
+      ],
+      "correct": 2,
+      "explanation": "The 2-bit counter decrements on a not-taken outcome: 11 -> 10 (weakly taken). Since the MSB is still 1, the prediction remains 'taken.' This is the key advantage of the 2-bit counter over the 1-bit design: a single contrary outcome does not flip the prediction. The counter must see two consecutive contrary outcomes to change from predicting taken to predicting not-taken (11 -> 10 -> 01). This reduces mispredictions at loop boundaries from 2 per invocation (1-bit) to 1 per invocation (2-bit)."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The TAGE predictor uses tagged tables with geometrically increasing history lengths. If the history lengths are 5, 10, 20, 40, 80, 160 branches, and tables T_1 (L=5) and T_3 (L=20) both have tag matches for a given branch, which table's prediction is used?",
+      "options": [
+        "T_1, because shorter history is more reliable",
+        "T_3, because the longest-matching component is always preferred",
+        "Whichever has the higher confidence counter value",
+        "The base predictor T_0, since multiple matches indicate aliasing"
+      ],
+      "correct": 1,
+      "explanation": "TAGE always uses the prediction from the longest-matching component. This follows the Prediction by Partial Matching (PPM) principle from data compression: longer contexts provide more specific and typically more accurate predictions. T_3 with history length 20 captures a more specific branch+history context than T_1 with history length 5. If the 20-branch history matches, it means the predictor has seen this exact branch in this exact 20-branch context before, which is a stronger signal than a 5-branch context match."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A perceptron branch predictor uses 32 bits of history. How many weights does each perceptron entry need?",
+      "options": [
+        "32 weights",
+        "33 weights (32 history + 1 bias)",
+        "2^32 weights",
+        "64 weights (32 for taken, 32 for not-taken)"
+      ],
+      "correct": 1,
+      "explanation": "The perceptron computes y = w_0 + sum(w_i * x_i) for i = 1 to n, where n = 32 (history length). This requires n + 1 = 33 weights: one bias weight w_0 and one weight w_i per history bit. This LINEAR scaling (O(n) weights for n bits of history) is the key advantage of perceptron predictors over table-based designs like gshare, which would need 2^32 = 4 billion entries for 32 bits of history."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the purpose of the Branch Target Buffer (BTB)?",
+      "options": [
+        "To predict whether a branch is taken or not taken",
+        "To store the target address of recently executed branches so the processor can redirect fetch before the instruction is decoded",
+        "To buffer branch instructions before they enter the pipeline",
+        "To store the return addresses for function calls"
+      ],
+      "correct": 1,
+      "explanation": "The BTB is a cache indexed by the branch instruction's PC that stores the target address (where the branch jumps to). When the processor fetches an instruction, it simultaneously looks up the BTB. If there is a hit and the direction predictor says 'taken,' the processor redirects the next fetch to the stored target address -- all before the branch instruction is even decoded. Without the BTB, the processor would need to decode the instruction first to determine the target, wasting cycles. Modern designs use multi-level BTBs: Intel Golden Cove has ~6K L1 and ~12K L2 entries."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "According to Amdahl's Law, if 80% of a program can be parallelized across an unlimited number of processors, what is the maximum achievable speedup?",
+      "options": [
+        "4x",
+        "5x",
+        "8x",
+        "80x"
+      ],
+      "correct": 1,
+      "explanation": "Amdahl's Law: S_max = 1 / (1 - p) = 1 / (1 - 0.80) = 1 / 0.20 = 5x. No matter how many processors you add, the 20% serial portion creates an absolute ceiling of 5x speedup. This has profound implications for processor design: reducing the serial fraction through techniques like speculative execution, branch prediction, and out-of-order execution yields much larger returns than simply adding more cores or pipeline stages."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the RISC-V 5-stage pipeline, why does the register file need to support both a read and a write in the same clock cycle?",
+      "options": [
+        "Because RISC-V instructions always read and write registers simultaneously",
+        "Because the ID stage reads registers for one instruction while the WB stage writes the result of a different instruction that is 4 stages ahead, and both can happen in the same cycle",
+        "Because the forwarding unit requires simultaneous access",
+        "Because branches need to read and write the PC simultaneously"
+      ],
+      "correct": 1,
+      "explanation": "In a pipelined processor, the ID stage of instruction N reads registers while the WB stage of instruction N-4 writes its result. These are different instructions at different pipeline stages, and they both access the register file in the same clock cycle. The common solution is to design the register file so writes occur in the first half of the cycle and reads in the second half, or to use forwarding when the same register is being read and written simultaneously."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Return Address Stack (RAS) achieves >99% accuracy for return instructions. What is the primary cause of the remaining <1% mispredictions?",
+      "options": [
+        "Return instructions are inherently unpredictable",
+        "The RAS has limited depth, and call stacks deeper than the RAS capacity cause overflow, losing the oldest return addresses",
+        "The RAS cannot handle recursive functions",
+        "Returns always use the BTB instead of the RAS"
+      ],
+      "correct": 1,
+      "explanation": "The RAS is a small hardware stack (typically 16-32 entries in modern processors; AMD Zen uses 32 per thread). When the call depth exceeds this capacity, the oldest return addresses are lost due to overflow. However, this is rare in practice because most programs maintain modest call depths during normal execution. Other rare causes include longjmp, exception handling, coroutine switching, and speculative execution corrupting the RAS (modern designs checkpoint the RAS to recover from this)."
+    }
+  ]
+}

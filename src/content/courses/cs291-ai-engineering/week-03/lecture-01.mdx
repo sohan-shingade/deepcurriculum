@@ -1,0 +1,525 @@
+---
+title: "Chunking, Hybrid Search, and Re-Ranking"
+week: 3
+lecture: 1
+estimatedMinutes: 55
+---
+
+# Chunking, Hybrid Search, and Re-Ranking
+
+Last week we embedded documents into vector space and built a retrieval pipeline. This week we confront an uncomfortable truth: **naive retrieval is not good enough for production**. If you take a 40-page PDF, split it into 512-token chunks, embed them with a decent model, and do cosine similarity search, you will get results that are _plausible_ but frequently wrong. The right paragraph lives at rank 7 while a superficially similar but irrelevant chunk sits at rank 1.
+
+Production RAG systems fix this with three interlocking mechanisms: intelligent chunking, hybrid search that combines sparse and dense retrieval, and re-ranking that applies expensive models only to a short candidate list. By the end of this lecture you will understand each mechanism deeply enough to make principled engineering tradeoffs rather than cargo-culting default settings.
+
+---
+
+## 1. Chunking: The First Decision That Ruins Everything
+
+Chunking is the process of splitting source documents into the units that get embedded and retrieved. It is the single most under-discussed decision in RAG system design, and it is often the difference between a system that works and one that hallucinates.
+
+The core tension is this: **small chunks increase precision but destroy context; large chunks preserve context but dilute the embedding signal**. An embedding model compresses an entire chunk into a single vector. If that chunk contains three distinct ideas, the vector becomes a blurry average of all three, and a query about any one of them will match weakly.
+
+### 1.1 Fixed-Size Chunking
+
+The simplest strategy: split text into chunks of exactly $n$ tokens (or characters), optionally with an overlap of $o$ tokens.
+
+```python
+from typing import List
+
+def fixed_size_chunk(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
+    """Split text into fixed-size character chunks with overlap."""
+    chunks: List[str] = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
+    return chunks
+
+# Example
+document = "This is a sample document. " * 100
+chunks = fixed_size_chunk(document, chunk_size=200, overlap=50)
+print(f"Document length: {len(document)} chars")
+print(f"Number of chunks: {len(chunks)}")
+print(f"First chunk length: {len(chunks[0])}")
+```
+
+Fixed-size chunking is fast, deterministic, and easy to reason about. It is also brutally indifferent to document structure. A chunk boundary can land in the middle of a sentence, a code block, or a mathematical derivation. The overlap parameter mitigates this partially — if the important sentence straddles a boundary, it appears in full in at least one chunk — but overlap increases storage and index size linearly.
+
+**When to use it**: Homogeneous, unstructured text where you genuinely have no structural signals. Chat logs, raw OCR output, legacy text dumps.
+
+### 1.2 Recursive Character Splitting
+
+LangChain popularized this approach, and for good reason — it is a significant improvement over fixed-size chunking with minimal added complexity. The idea: define a hierarchy of separators (`\n\n`, `\n`, `.`, ` `) and recursively split on the highest-level separator that produces chunks under the target size.
+
+```python
+from typing import List
+
+def recursive_chunk(
+    text: str,
+    chunk_size: int = 500,
+    separators: List[str] | None = None
+) -> List[str]:
+    """Recursively split text using a hierarchy of separators."""
+    if separators is None:
+        separators = ["\n\n", "\n", ". ", " "]
+
+    chunks: List[str] = []
+
+    if len(text) <= chunk_size:
+        return [text] if text.strip() else []
+
+    # Try each separator in order of preference
+    for i, sep in enumerate(separators):
+        if sep in text:
+            parts = text.split(sep)
+            current = ""
+            for part in parts:
+                candidate = current + sep + part if current else part
+                if len(candidate) <= chunk_size:
+                    current = candidate
+                else:
+                    if current:
+                        chunks.append(current)
+                    # If single part exceeds chunk_size, recurse with finer separator
+                    if len(part) > chunk_size and i + 1 < len(separators):
+                        chunks.extend(recursive_chunk(part, chunk_size, separators[i+1:]))
+                    else:
+                        current = part
+            if current:
+                chunks.append(current)
+            return chunks
+
+    # Fallback: hard split
+    return fixed_size_chunk(text, chunk_size, overlap=0)
+
+paragraphs = "First paragraph about embeddings.\n\nSecond paragraph about chunking.\n\nThird paragraph about search."
+result = recursive_chunk(paragraphs, chunk_size=60)
+for i, chunk in enumerate(result):
+    print(f"Chunk {i}: {chunk!r}")
+```
+
+This preserves paragraph boundaries when possible, falls back to sentence boundaries, and only splits mid-sentence as a last resort. The key insight: **natural language boundaries are better chunk boundaries than arbitrary character positions** because they tend to align with semantic boundaries.
+
+### 1.3 Semantic Chunking
+
+The most sophisticated approach: use embeddings themselves to detect where the topic shifts, and split there. The algorithm:
+
+1. Split the document into sentences (or small fixed units).
+2. Embed each sentence.
+3. Compute the cosine similarity between consecutive sentence embeddings.
+4. Identify **breakpoints** where similarity drops below a threshold (or drops by more than one standard deviation from the running mean).
+5. Group sentences between breakpoints into chunks.
+
+The similarity between consecutive sentence embeddings $\mathbf{e}_i$ and $\mathbf{e}_{i+1}$ is:
+
+$$\text{sim}(i, i+1) = \frac{\mathbf{e}_i \cdot \mathbf{e}_{i+1}}{\|\mathbf{e}_i\| \|\mathbf{e}_{i+1}\|}$$
+
+A breakpoint occurs at position $i$ when:
+
+$$\text{sim}(i, i+1) < \mu - \alpha \cdot \sigma$$
+
+where $\mu$ and $\sigma$ are the mean and standard deviation of all consecutive similarities in the document, and $\alpha$ is a sensitivity parameter (typically 1.0–2.0).
+
+```python
+import numpy as np
+from typing import List, Tuple
+
+def compute_breakpoints(
+    embeddings: np.ndarray,
+    threshold_factor: float = 1.0
+) -> List[int]:
+    """Find semantic breakpoints where topic shifts occur."""
+    # Compute cosine similarity between consecutive embeddings
+    similarities: List[float] = []
+    for i in range(len(embeddings) - 1):
+        cos_sim = np.dot(embeddings[i], embeddings[i+1]) / (
+            np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[i+1])
+        )
+        similarities.append(float(cos_sim))
+
+    sims = np.array(similarities)
+    mean_sim = np.mean(sims)
+    std_sim = np.std(sims)
+    threshold = mean_sim - threshold_factor * std_sim
+
+    breakpoints = [i for i, s in enumerate(similarities) if s < threshold]
+    return breakpoints
+
+# Simulate with random embeddings (in production, use a real embedding model)
+np.random.seed(42)
+# 10 sentences, 3 topics: sentences 0-3 (topic A), 4-6 (topic B), 7-9 (topic C)
+topic_a = np.random.randn(4, 64) + np.array([1, 0, 0] + [0]*61)
+topic_b = np.random.randn(3, 64) + np.array([0, 1, 0] + [0]*61)
+topic_c = np.random.randn(3, 64) + np.array([0, 0, 1] + [0]*61)
+embeddings = np.vstack([topic_a, topic_b, topic_c])
+
+breakpoints = compute_breakpoints(embeddings, threshold_factor=0.5)
+print(f"Breakpoints at sentence indices: {breakpoints}")
+print(f"This suggests splitting after sentences: {[b for b in breakpoints]}")
+```
+
+Semantic chunking produces the most topically coherent chunks, but it requires an embedding pass over the entire document before chunking — which means it is slower and more expensive. It also introduces a hyperparameter ($\alpha$) that you need to tune per domain.
+
+### 1.4 Structure-Aware Chunking
+
+When documents have explicit structure — Markdown headers, HTML tags, LaTeX sections, code function boundaries — you should use it. This is not clever; this is common sense. A Markdown document with `## Section` headers is _telling you_ where the semantic boundaries are.
+
+```python
+import re
+from typing import List, Tuple
+
+def markdown_chunk(text: str, max_chunk_size: int = 1000) -> List[dict]:
+    """Split markdown by headers, preserving hierarchy."""
+    header_pattern = r'^(#{1,3})\s+(.+)$'
+    lines = text.split('\n')
+    chunks: List[dict] = []
+    current_content: List[str] = []
+    current_headers: List[str] = []
+
+    for line in lines:
+        match = re.match(header_pattern, line)
+        if match:
+            # Save previous chunk
+            if current_content:
+                content = '\n'.join(current_content).strip()
+                if content:
+                    chunks.append({
+                        'headers': list(current_headers),
+                        'content': content
+                    })
+            level = len(match.group(1))
+            header_text = match.group(2)
+            # Update header hierarchy
+            current_headers = current_headers[:level-1] + [header_text]
+            current_content = [line]
+        else:
+            current_content.append(line)
+
+    # Don't forget the last chunk
+    if current_content:
+        content = '\n'.join(current_content).strip()
+        if content:
+            chunks.append({
+                'headers': list(current_headers),
+                'content': content
+            })
+
+    return chunks
+
+md = """# Introduction
+This is about retrieval.
+
+## Vector Search
+Vectors are great for semantic similarity.
+
+## Keyword Search
+BM25 remains competitive.
+
+### TF-IDF Basics
+Term frequency matters.
+"""
+for chunk in markdown_chunk(md):
+    print(f"Headers: {chunk['headers']}")
+    print(f"Content: {chunk['content'][:80]}...")
+    print()
+```
+
+### 1.5 Chunk Size: The Numbers
+
+How big should your chunks be? This is an empirical question, but there are strong regularities. The table below summarizes findings from multiple production systems and the MTEB benchmark evaluations:
+
+| Chunk Size | Precision | Recall | Best For |
+|-----------|-----------|--------|----------|
+| 128 tokens | High | Low | Fact lookup, QA over tables |
+| 256 tokens | High | Medium | General QA, customer support |
+| 512 tokens | Medium | High | Summarization, complex reasoning |
+| 1024 tokens | Low | High | Long-form analysis, legal docs |
+
+The optimal chunk size depends on your query distribution. Short, factual queries ("What is the learning rate for GPT-3?") benefit from small chunks. Complex queries ("Explain the tradeoffs between RLHF and DPO") need larger chunks that preserve argumentation structure.
+
+<ConceptCheck id="cc-1" />
+
+### 1.6 Contextual Embeddings: The Anthropic Approach
+
+A powerful technique, described by Anthropic in their contextual retrieval work (2024): before embedding a chunk, prepend a short summary of the document context. Instead of embedding the raw chunk "The learning rate was set to 3e-4 with cosine annealing," you embed:
+
+> "This chunk is from a paper about training large language models on code. Section 3 describes the training setup. | The learning rate was set to 3e-4 with cosine annealing."
+
+This gives the embedding model the context to disambiguate. The phrase "learning rate" in a machine learning paper means something very different from "learning rate" in a cognitive psychology paper, and the contextual prefix lets the embedding capture that distinction.
+
+In practice, you can generate these context prefixes using an LLM at indexing time (this is a development-time cost, not a runtime cost), or use simpler heuristics like prepending the document title and section header.
+
+---
+
+## 2. Hybrid Search: Combining Sparse and Dense Retrieval
+
+Dense retrieval (embedding similarity) is excellent at semantic matching — it knows that "automobile" and "car" are the same thing. But it has blind spots. It struggles with exact keyword matches, rare technical terms, and proper nouns. The query "CVE-2024-3094" should match documents containing exactly that string, but a dense retriever might return documents about other CVEs with similar descriptions.
+
+Sparse retrieval (BM25, TF-IDF) excels at precisely these cases. BM25 is a bag-of-words model that scores documents based on exact term overlap, weighted by term frequency and inverse document frequency.
+
+### 2.1 BM25: The Formula You Should Know
+
+The BM25 score for a document $D$ given a query $Q$ with terms $q_1, \ldots, q_n$ is:
+
+$$\text{BM25}(D, Q) = \sum_{i=1}^{n} \text{IDF}(q_i) \cdot \frac{f(q_i, D) \cdot (k_1 + 1)}{f(q_i, D) + k_1 \cdot \left(1 - b + b \cdot \frac{|D|}{\text{avgdl}}\right)}$$
+
+where:
+- $f(q_i, D)$ is the frequency of term $q_i$ in document $D$
+- $|D|$ is the length of document $D$ in words
+- $\text{avgdl}$ is the average document length in the corpus
+- $k_1$ (typically 1.2–2.0) controls term frequency saturation
+- $b$ (typically 0.75) controls length normalization
+
+The IDF component is:
+
+$$\text{IDF}(q_i) = \ln\left(\frac{N - n(q_i) + 0.5}{n(q_i) + 0.5} + 1\right)$$
+
+where $N$ is the total number of documents and $n(q_i)$ is the number of documents containing $q_i$.
+
+The key insight in BM25 is the **saturation function**: unlike raw TF, where a term appearing 100 times scores 100x higher than appearing once, BM25 saturates — the 10th occurrence of a term adds much less score than the 2nd. This prevents long documents full of a repeated term from dominating.
+
+```python
+import math
+from collections import Counter
+from typing import List, Dict
+
+def compute_bm25(
+    query_terms: List[str],
+    documents: List[List[str]],
+    k1: float = 1.5,
+    b: float = 0.75
+) -> List[float]:
+    """Compute BM25 scores for a query against a list of documents."""
+    N = len(documents)
+    avgdl = sum(len(d) for d in documents) / N
+
+    # Compute document frequencies
+    df: Dict[str, int] = {}
+    for doc in documents:
+        unique_terms = set(doc)
+        for term in unique_terms:
+            df[term] = df.get(term, 0) + 1
+
+    scores: List[float] = []
+    for doc in documents:
+        score = 0.0
+        doc_len = len(doc)
+        tf_counter = Counter(doc)
+        for term in query_terms:
+            if term not in df:
+                continue
+            tf = tf_counter.get(term, 0)
+            idf = math.log((N - df[term] + 0.5) / (df[term] + 0.5) + 1)
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * doc_len / avgdl)
+            score += idf * numerator / denominator
+        scores.append(score)
+
+    return scores
+
+# Example
+docs = [
+    "the cat sat on the mat".split(),
+    "the dog played in the park with the ball".split(),
+    "a cat and a dog are friends".split(),
+    "machine learning models need training data".split(),
+]
+query = "cat dog friends".split()
+scores = compute_bm25(query, docs)
+for i, s in enumerate(scores):
+    print(f"Doc {i}: {s:.4f} - {' '.join(docs[i])}")
+```
+
+<ConceptCheck id="cc-2" />
+
+### 2.2 Reciprocal Rank Fusion
+
+The question becomes: how do you combine results from BM25 and dense retrieval into a single ranked list? The most effective method is **Reciprocal Rank Fusion (RRF)**, introduced by Cormack, Clarke, and Buettcher (2009).
+
+Given $m$ ranked lists, the RRF score for document $d$ is:
+
+$$\text{RRF}(d) = \sum_{i=1}^{m} \frac{1}{k + r_i(d)}$$
+
+where $r_i(d)$ is the rank of document $d$ in the $i$-th list (1-indexed), and $k$ is a constant (typically 60). If document $d$ does not appear in list $i$, it is assigned rank $\infty$ (contributing 0 to the sum).
+
+**Why does RRF work?** The $\frac{1}{k + r}$ formula has two crucial properties:
+
+1. **Rank normalization**: It converts arbitrary scores from different systems into a common scale. BM25 scores might range from 0 to 15, while cosine similarities range from 0 to 1. Ranks are directly comparable.
+
+2. **Diminishing returns**: The difference between rank 1 and rank 2 ($\frac{1}{61} - \frac{1}{62} \approx 0.000265$) is much larger than between rank 100 and rank 101 ($\frac{1}{160} - \frac{1}{161} \approx 0.0000388$). This means being highly ranked in any one system gives a strong signal, but being mediocre in multiple systems provides weaker evidence.
+
+3. **The $k$ parameter**: Setting $k=60$ means that even the top-ranked document only gets a score of $\frac{1}{61} \approx 0.0164$. This prevents any single retriever from dominating — a document must rank well across multiple systems to score highest.
+
+```python
+from typing import List, Dict, Tuple
+
+def reciprocal_rank_fusion(
+    ranked_lists: List[List[str]],
+    k: int = 60
+) -> List[Tuple[str, float]]:
+    """Combine multiple ranked lists using Reciprocal Rank Fusion."""
+    rrf_scores: Dict[str, float] = {}
+
+    for ranked_list in ranked_lists:
+        for rank, doc_id in enumerate(ranked_list, start=1):
+            if doc_id not in rrf_scores:
+                rrf_scores[doc_id] = 0.0
+            rrf_scores[doc_id] += 1.0 / (k + rank)
+
+    # Sort by RRF score descending
+    sorted_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+    return sorted_results
+
+# BM25 ranking and dense retrieval ranking for the same query
+bm25_ranking = ["doc_3", "doc_1", "doc_7", "doc_5", "doc_2"]
+dense_ranking = ["doc_1", "doc_3", "doc_2", "doc_8", "doc_5"]
+
+fused = reciprocal_rank_fusion([bm25_ranking, dense_ranking])
+print("Fused ranking:")
+for doc_id, score in fused:
+    print(f"  {doc_id}: {score:.6f}")
+```
+
+Notice how `doc_1` and `doc_3` rise to the top because both systems agree they are relevant, while `doc_7` and `doc_8` (each appearing in only one list) score lower. This is the power of fusion: **agreement across independent signals is stronger evidence than high confidence from a single signal**.
+
+---
+
+## 3. Re-Ranking: The Expensive Second Pass
+
+Retrieval (whether sparse, dense, or hybrid) is a **recall-oriented** operation. You cast a wide net and pull back 50–100 candidates. Re-ranking is a **precision-oriented** operation: you apply an expensive model to those candidates to get the ordering right.
+
+### 3.1 Bi-Encoders vs. Cross-Encoders
+
+The distinction is architectural:
+
+**Bi-encoder** (used in retrieval): The query and document are encoded *independently*. The query embedding $\mathbf{q} = f(Q)$ and document embedding $\mathbf{d} = f(D)$ are computed separately, and relevance is $\cos(\mathbf{q}, \mathbf{d})$. This is what makes retrieval fast — you pre-compute all document embeddings and only compute one query embedding at search time.
+
+**Cross-encoder** (used in re-ranking): The query and document are *concatenated* and fed through the model *together*: $s = g([Q; D])$. The model's attention layers can compare every query token against every document token, producing far more accurate relevance scores. But this means you must run the model once per (query, document) pair — no pre-computation is possible.
+
+The latency difference is dramatic. For a corpus of 1 million documents:
+- **Bi-encoder retrieval**: 1 forward pass for the query + approximate nearest neighbor search ≈ 10–50ms
+- **Cross-encoder over all documents**: 1,000,000 forward passes ≈ 3–4 hours
+
+This is why re-ranking only works on a short candidate list. Running a cross-encoder on 20–50 documents adds 200–500ms, which is acceptable for most applications.
+
+$$\text{Bi-encoder: } \text{score}(Q, D) = \cos\big(f_\theta(Q),\ f_\theta(D)\big)$$
+
+$$\text{Cross-encoder: } \text{score}(Q, D) = g_\phi\big(\text{[CLS]}\ Q\ \text{[SEP]}\ D\ \text{[SEP]}\big)$$
+
+<ConceptCheck id="cc-3" />
+
+### 3.2 ColBERT: The Best of Both Worlds
+
+ColBERT (Khattab and Zaharia, 2020) introduces a **late interaction** architecture that sits between bi-encoders and cross-encoders in both accuracy and cost.
+
+Instead of compressing each document into a single vector, ColBERT produces a vector for *each token*:
+- Query tokens: $\mathbf{q}_1, \mathbf{q}_2, \ldots, \mathbf{q}_m$
+- Document tokens: $\mathbf{d}_1, \mathbf{d}_2, \ldots, \mathbf{d}_n$
+
+The relevance score is computed via the **MaxSim** operation:
+
+$$\text{ColBERT}(Q, D) = \sum_{i=1}^{m} \max_{j=1}^{n} \mathbf{q}_i \cdot \mathbf{d}_j$$
+
+For each query token, find the document token it matches best (maximum dot product), then sum across all query tokens. This captures fine-grained token-level interactions while still allowing document token embeddings to be pre-computed and indexed.
+
+The computational profile:
+- **Indexing**: Embed all document tokens (more storage than single-vector, but one-time cost)
+- **Query time**: Embed query tokens, then compute MaxSim against pre-computed document token embeddings
+- **Accuracy**: Near cross-encoder quality on most benchmarks
+- **Latency**: 50–200ms depending on implementation (much faster than cross-encoders on the same candidate set)
+
+```python
+import numpy as np
+
+def maxsim_score(
+    query_embeddings: np.ndarray,    # shape: (m, dim)
+    document_embeddings: np.ndarray  # shape: (n, dim)
+) -> float:
+    """Compute ColBERT MaxSim score between query and document token embeddings."""
+    # Compute all pairwise dot products: (m, dim) x (dim, n) -> (m, n)
+    similarity_matrix = query_embeddings @ document_embeddings.T
+
+    # For each query token, find the max similarity across all document tokens
+    max_sims = np.max(similarity_matrix, axis=1)  # shape: (m,)
+
+    # Sum across query tokens
+    return float(np.sum(max_sims))
+
+# Simulate: 5 query tokens and 8 document tokens, each 64-dimensional
+np.random.seed(42)
+q_emb = np.random.randn(5, 64).astype(np.float32)
+d_emb = np.random.randn(8, 64).astype(np.float32)
+
+score = maxsim_score(q_emb, d_emb)
+print(f"ColBERT MaxSim score: {score:.4f}")
+
+# Compare two documents
+d_emb_2 = np.random.randn(10, 64).astype(np.float32)
+score_2 = maxsim_score(q_emb, d_emb_2)
+print(f"Document 1 score: {score:.4f}")
+print(f"Document 2 score: {score_2:.4f}")
+print(f"Preferred document: {'Doc 1' if score > score_2 else 'Doc 2'}")
+```
+
+### 3.3 ColBERTv2 and PLAID
+
+ColBERTv2 (Santhanam et al., 2022) addressed the main weakness of ColBERT — storage cost. Storing per-token embeddings for millions of documents uses substantial disk and memory. ColBERTv2 introduced **residual compression**: cluster the token embeddings, store only the cluster centroids and the residuals (differences from centroids), and quantize the residuals to 1–2 bits. This reduces storage by 6–10x with minimal quality loss.
+
+The PLAID engine (Santhanam et al., 2022) further optimized ColBERT's retrieval with a three-stage pipeline: centroid-based candidate generation, centroid-interaction scoring, and full late interaction on the top candidates. This brought ColBERT's latency below 50ms on commodity hardware.
+
+---
+
+## 4. The Retrieve-Then-Rerank Pipeline
+
+Putting it all together, a production retrieval pipeline looks like this:
+
+```
+Query → BM25 (top 100) → ─────────────────┐
+                                           ├─→ RRF Fusion (top 50) → Cross-Encoder Re-rank (top 10) → LLM
+Query → Dense Retriever (top 100) → ───────┘
+```
+
+**Latency budget analysis** (real numbers from production systems):
+
+| Stage | Documents Processed | Latency | Cumulative |
+|-------|-------------------|---------|------------|
+| BM25 retrieval | 1M → 100 | 5–15ms | 15ms |
+| Dense retrieval | 1M → 100 | 10–50ms | 50ms |
+| RRF fusion | 200 → 50 | <1ms | 51ms |
+| Cross-encoder re-rank | 50 → 10 | 150–400ms | 450ms |
+| LLM generation | 10 chunks in context | 500–2000ms | 2450ms |
+
+Total: **under 2.5 seconds** end-to-end, with 80% of the time spent in the LLM. Re-ranking adds significant latency but dramatically improves the quality of the final context window. In production, you tune the number of candidates passed to the re-ranker to hit your latency target.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 5. Practical Recommendations
+
+1. **Start with recursive chunking** at 256–512 tokens with 10–20% overlap. Only move to semantic chunking if you have evidence (failed retrievals) that topic mixing in chunks is hurting you.
+
+2. **Always use hybrid search**. The engineering cost of adding BM25 alongside dense retrieval is trivial (Elasticsearch or a simple inverted index), and the recall improvement is consistently 5–15% across benchmarks.
+
+3. **Add re-ranking when precision matters more than latency**. Customer-facing QA? Re-rank. Internal log search? Probably skip it.
+
+4. **Use contextual embeddings** (prepending document/section context) if your chunks are small (<256 tokens) or your corpus has documents on very different topics where the same terminology means different things.
+
+5. **Measure retrieval quality separately from generation quality**. Build an evaluation set of (query, relevant_document) pairs and measure recall@10 and MRR before you ever connect a retriever to an LLM. If your retriever is not pulling the right documents, no amount of prompt engineering will save you.
+
+The best RAG systems are not defined by their LLM choice. They are defined by their retrieval pipeline. Get the right context into the window, and even a mediocre model will give good answers. Get the wrong context in, and GPT-4 will hallucinate with supreme confidence.
+
+---
+
+## Summary
+
+This lecture covered the full retrieval pipeline from document chunking through re-ranking:
+
+- **Chunking** determines the atomic units of retrieval. Fixed-size is simple but structure-blind; recursive splitting respects natural boundaries; semantic chunking uses embeddings to detect topic shifts; structure-aware chunking leverages document markup.
+- **BM25** remains a strong baseline for keyword-matching retrieval, with its saturation function preventing term-frequency gaming.
+- **Hybrid search with RRF** combines the complementary strengths of sparse and dense retrieval, with a principled fusion formula that rewards cross-system agreement.
+- **Cross-encoders** provide the most accurate relevance scoring but are too expensive for full-corpus search, making the retrieve-then-rerank pattern essential.
+- **ColBERT's late interaction** architecture offers a middle ground with per-token embeddings and the MaxSim operation.
+
+Next lecture, we turn to what happens after retrieval: engineering the context that goes into the LLM, managing prompt complexity, and extracting structured outputs.

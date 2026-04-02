@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A processor with an ideal CPI of 0.20 (5 IPC) has a branch misprediction rate of 5% and a misprediction penalty of 17 cycles. What is the effective IPC?",
+      "options": [
+        "4.17 IPC",
+        "1.05 IPC",
+        "0.85 IPC",
+        "2.50 IPC"
+      ],
+      "correct": 1,
+      "explanation": "Using $\\text{CPI}_{\\text{eff}} = \\text{CPI}_{\\text{ideal}} + \\text{mispredict rate} \\times \\text{penalty}$: $\\text{CPI}_{\\text{eff}} = 0.20 + 0.05 \\times 17 = 0.20 + 0.85 = 1.05$. The effective IPC is $1/1.05 \\approx 0.95$. A 5% misprediction rate with a 17-cycle penalty reduces IPC from 5.0 to less than 1.0 — an 80% reduction. This illustrates why branch prediction accuracy is so critical: even a few percent misprediction rate devastates performance when the penalty is high. Reducing the misprediction rate from 5% to 2% would give $\\text{CPI}_{\\text{eff}} = 0.20 + 0.34 = 0.54$, yielding IPC of 1.85 — nearly doubling performance."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Why did the VLIW-based Intel Itanium architecture fail to displace x86 in the server market?",
+      "options": [
+        "VLIW hardware was too complex and power-hungry compared to out-of-order x86",
+        "Itanium had poor floating-point performance compared to x86",
+        "Compilers could not extract enough ILP from general-purpose code, leaving many VLIW slots filled with NOPs; meanwhile, out-of-order x86 processors improved IPC faster through hardware-level dynamic scheduling",
+        "Itanium was too expensive to manufacture due to its large die size"
+      ],
+      "correct": 2,
+      "explanation": "Itanium's VLIW/EPIC approach relied on the compiler to find and schedule parallel operations. For regular, predictable workloads (like DSP), this works well. But general-purpose server code has data-dependent branches, pointer-chasing, and cache-miss-driven stalls that the compiler cannot predict at compile time. Many instruction slots were filled with NOPs, wasting bandwidth. Meanwhile, out-of-order x86 processors (Pentium Pro, Core) dynamically discovered parallelism at runtime, adapting to actual execution conditions. The hardware approach proved more effective for irregular workloads, and x86 maintained binary compatibility with existing software — a critical advantage in the server market. VLIW remains successful in embedded DSP (TI C6000) where workloads are regular and predictable."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In a 2-way SMT (Hyper-Threading) processor, thread A is stalled waiting for a cache miss while thread B has independent instructions ready to execute. What happens?",
+      "options": [
+        "The processor switches entirely to thread B, halting all of thread A's operations",
+        "The scheduler selects ready instructions from thread B to fill the pipeline bubbles caused by thread A's stall, while thread A's stalled instructions remain in their reservation stations",
+        "Both threads stall because they share the same execution engine",
+        "Thread B's instructions are buffered until thread A's cache miss resolves"
+      ],
+      "correct": 1,
+      "explanation": "In SMT, both threads share the same execution engine (ALUs, multipliers, load/store units). The scheduler selects instructions from **any** thread that are ready to execute, regardless of which thread they belong to. When thread A stalls on a cache miss, its instructions remain in reservation stations waiting for data, but thread B's ready instructions can flow into the functional units that would otherwise be idle. This is the core benefit of SMT: it converts **thread-level parallelism** into **instruction-level parallelism** by filling pipeline bubbles from one thread with useful work from another. Unlike a full context switch, both threads' architectural states remain active — the processor does not 'switch' between threads but rather interleaves their instructions cycle by cycle."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A processor runs at 4 GHz and 1.1 V, consuming 80 W of dynamic power. If we scale to 3 GHz and 0.9 V (assuming $P \\propto V^2 f$), what is the new dynamic power?",
+      "options": [
+        "60.0 W",
+        "40.2 W",
+        "53.5 W",
+        "32.7 W"
+      ],
+      "correct": 1,
+      "explanation": "Using $P \\propto V^2 f$, the ratio is: $\\frac{P_{\\text{new}}}{P_{\\text{old}}} = \\frac{V_{\\text{new}}^2 \\cdot f_{\\text{new}}}{V_{\\text{old}}^2 \\cdot f_{\\text{old}}} = \\frac{(0.9)^2 \\times 3}{(1.1)^2 \\times 4} = \\frac{0.81 \\times 3}{1.21 \\times 4} = \\frac{2.43}{4.84} = 0.502$. New power: $80 \\times 0.502 = 40.2$ W. Reducing frequency by 25% and voltage by 18% cuts dynamic power by nearly 50%. This demonstrates the cubic-like relationship between voltage/frequency and power — the $V^2$ term dominates, making voltage scaling the most effective power reduction lever. This is the physics behind DVFS: mobile processors aggressively reduce voltage at lower frequencies to extend battery life."
+    }
+  ]
+}

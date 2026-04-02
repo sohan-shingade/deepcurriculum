@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A RAG system retrieves the correct pricing document but the LLM generates an answer with a specific dollar amount not mentioned anywhere in the retrieved context. Which failure mode is this?",
+      "options": [
+        "Retrieval failure — the wrong document was retrieved",
+        "Context window overflow — too much context confused the model",
+        "Hallucination despite context — the LLM confabulated details beyond what the evidence supports",
+        "Stale embeddings — the pricing document is outdated"
+      ],
+      "correct": 2,
+      "explanation": "This is Failure Mode 4: hallucination despite context. The retriever did its job correctly (the right document was found), but the LLM generated a specific detail (a dollar amount) that is not supported by the retrieved evidence. This is particularly dangerous because the answer may sound authoritative and be difficult to detect without comparing it against the source. The RAGAS 'faithfulness' metric is specifically designed to catch this: it checks whether every claim in the answer is supported by the provided context."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "You have a retrieval system that returns 10 documents. 4 are relevant to the query, and there are 8 total relevant documents in the corpus. The relevant documents appear at positions 1, 4, 7, and 9. What is Recall@10?",
+      "options": [
+        "0.40 — four out of ten retrieved documents are relevant",
+        "0.50 — four out of eight total relevant documents were retrieved",
+        "0.25 — the first relevant document is at position 1, so 1/4",
+        "1.00 — the reciprocal rank of the first relevant document"
+      ],
+      "correct": 1,
+      "explanation": "Recall@k measures what fraction of ALL relevant documents appear in the top-k results. Here, there are 8 total relevant documents in the corpus, and 4 of them appear in the top 10 results. So Recall@10 = 4/8 = 0.50. Note that Precision@10 = 4/10 = 0.40 (option A describes precision, not recall). The positions of the relevant documents within the top-10 do not affect recall — only whether they appear at all. For RAG, recall is often more important than precision because a missing relevant document is a hard failure that no amount of generation quality can fix."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the RAGAS evaluation framework, which metric directly targets the detection of LLM hallucinations in generated answers?",
+      "options": [
+        "Context Relevancy — measures whether retrieved context is relevant to the query",
+        "Faithfulness — measures whether every claim in the answer is supported by the retrieved context",
+        "Answer Relevancy — measures whether the answer addresses the original question",
+        "Context Recall — measures whether the context contains all needed information"
+      ],
+      "correct": 1,
+      "explanation": "Faithfulness is the RAGAS metric that directly detects hallucination. It works by extracting individual claims from the generated answer, then checking each claim against the retrieved context. A faithfulness score of 1.0 means every claim is supported by evidence in the context. A low faithfulness score indicates the model is generating information beyond what the evidence supports — the definition of hallucination in RAG. This is the most critical RAGAS metric because an unfaithful RAG system can produce convincing but incorrect answers."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Why is pairwise comparison generally more reliable than pointwise scoring when using an LLM as a judge?",
+      "options": [
+        "Pairwise comparison requires fewer LLM calls and is therefore more cost-effective",
+        "Relative comparison between two outputs is cognitively easier and more consistent than assigning absolute scores on a numeric scale",
+        "Pointwise scoring cannot detect hallucinations while pairwise comparison can",
+        "Pairwise comparison eliminates the need for human evaluation entirely"
+      ],
+      "correct": 1,
+      "explanation": "As shown by Zheng et al. (2023) in 'Judging LLM-as-a-Judge,' pairwise comparison achieves higher agreement with human judges than pointwise scoring. The reason is fundamental: deciding which of two answers is better is a simpler cognitive task than assigning a precise score on a 1-5 scale. Pointwise scoring suffers from calibration issues — different prompts, models, and even different runs produce systematically different score distributions. Pairwise comparison avoids this by making the judgment relative. However, it does require addressing position bias (LLMs tend to prefer the first answer), typically by evaluating both orderings."
+    }
+  ]
+}

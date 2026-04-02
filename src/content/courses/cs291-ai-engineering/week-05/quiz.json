@@ -1,0 +1,119 @@
+{
+  "title": "Quiz 5: Agentic RAG & MCP",
+  "timeLimit": 15,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q5-1",
+      "type": "multiple_choice",
+      "points": 12,
+      "question": "Self-RAG (Asai et al. 2023) introduces reflection tokens such as [IsREL], [IsSUP], and [IsUSE]. What is the fundamental advantage of having the generator model itself produce these tokens, rather than using an external classifier?",
+      "options": [
+        "The generator model is always more accurate than external classifiers at quality assessment",
+        "It eliminates the need for any additional model calls, since the reflection and generation happen in a single forward pass, and the model can learn conditional generation — producing different outputs based on its own quality assessment",
+        "External classifiers cannot process the same input as the generator",
+        "Reflection tokens reduce the number of tokens in the output, making generation faster"
+      ],
+      "correct": 1,
+      "explanation": "When the generator produces reflection tokens inline, the quality assessment and the generation are a single inference pass. More importantly, the model can learn to condition its generation on its own quality signals — for example, if it detects that retrieved passages are irrelevant ([IsREL] = irrelevant), it can switch to generating from parametric knowledge within the same forward pass. An external classifier would require stopping generation, running a separate model, then restarting generation with potentially different context, adding both latency and architectural complexity."
+    },
+    {
+      "id": "q5-2",
+      "type": "multiple_choice",
+      "points": 12,
+      "question": "In Corrective RAG (CRAG), the retrieval evaluator classifies retrieval quality as CORRECT, AMBIGUOUS, or INCORRECT using confidence thresholds τ_upper and τ_lower. If you decrease τ_upper from 0.7 to 0.5, what is the likely effect on system behavior?",
+      "options": [
+        "More queries will be classified as INCORRECT, increasing web search usage",
+        "More queries will be classified as CORRECT, reducing web search augmentation but potentially allowing lower-quality retrievals through without correction",
+        "The system will retrieve more documents per query",
+        "The classification will have no effect since τ_lower is unchanged"
+      ],
+      "correct": 1,
+      "explanation": "The upper threshold τ_upper determines the boundary between CORRECT and AMBIGUOUS. Lowering it from 0.7 to 0.5 means retrievals with confidence scores between 0.5 and 0.7 are now classified as CORRECT (proceed without correction) instead of AMBIGUOUS (augment with web search). This is a precision-recall trade-off: you reduce latency by skipping web search augmentation for marginal retrievals, but you risk propagating lower-quality retrievals to the generator. In practice, you would calibrate τ_upper on a validation set where you can measure downstream answer quality, not just retrieval confidence."
+    },
+    {
+      "id": "q5-3",
+      "type": "multiple_choice",
+      "points": 12,
+      "question": "A deep research agent's planner produces sub-questions with a dependency DAG. Sub-question A has no dependencies, B depends on A, C has no dependencies, and D depends on both B and C. What is the minimum number of sequential execution rounds needed?",
+      "options": [
+        "1 — all can run in parallel",
+        "2 — (A, C) in parallel, then (B, D) in parallel",
+        "3 — A and C in parallel, then B, then D",
+        "4 — A, then B, then C, then D"
+      ],
+      "correct": 2,
+      "explanation": "The dependency DAG is: A→B→D and C→D. The critical path is A→B→D which has length 3. In round 1, A and C execute in parallel (neither has dependencies). In round 2, B executes (its dependency A is complete). In round 3, D executes (its dependencies B and C are both complete). C finishes in round 1 but D must wait for B, which must wait for A. This is the classic critical path analysis from DAG scheduling — the minimum sequential rounds equals the length of the longest path in the dependency graph."
+    },
+    {
+      "id": "q5-4",
+      "type": "multiple_choice",
+      "points": 13,
+      "question": "In the MCP (Model Context Protocol) architecture, which of the following correctly describes the relationship between the three core primitives?",
+      "options": [
+        "Resources are read-only data exposed by servers, Tools are functions the model can invoke on servers, and Prompts are pre-built templates — Resources flow server→client, Tools are invoked client→server, and Prompts flow server→client",
+        "Resources, Tools, and Prompts all flow bidirectionally between client and server",
+        "Tools expose data while Resources expose functions, and Prompts are only used internally by the server",
+        "Resources and Tools are identical in functionality, differing only in naming convention"
+      ],
+      "correct": 0,
+      "explanation": "MCP has clear directionality for its primitives. Resources are data that servers expose for clients to read (like GET endpoints) — they flow from server to client. Tools are functions that servers expose and clients can invoke (like POST endpoints) — the invocation goes from client to server. Prompts are pre-built prompt templates that servers provide to help the model use the server's capabilities effectively — they flow from server to client. This clean separation of concerns (read data, execute actions, provide usage guidance) is what makes MCP composable across different tool providers."
+    },
+    {
+      "id": "q5-5",
+      "type": "multiple_choice",
+      "points": 13,
+      "question": "An agentic RAG system uses a circuit breaker pattern for its retrieval service. The circuit breaker has a failure threshold of 5 and a recovery timeout of 30 seconds. After 5 consecutive failures, the circuit opens. What happens when a new retrieval request arrives 10 seconds after the circuit opened?",
+      "options": [
+        "The request is routed to the retrieval service normally",
+        "The request immediately fails with a circuit breaker error without calling the retrieval service, because the recovery timeout has not elapsed",
+        "The request is queued until the recovery timeout expires",
+        "The circuit breaker resets and allows the request through"
+      ],
+      "correct": 1,
+      "explanation": "When a circuit breaker is in the 'open' state, it rejects all requests immediately without calling the downstream service. This is the entire point — protecting a failing service from additional load and providing fast failure to the caller. The circuit stays open until the recovery timeout expires (30 seconds in this case). After 30 seconds, it transitions to 'half-open' state, where it allows a single test request through. If that request succeeds, the circuit closes (normal operation). If it fails, the circuit re-opens for another timeout period. At 10 seconds post-opening, the recovery timeout has not elapsed, so the request is immediately rejected."
+    },
+    {
+      "id": "q5-6",
+      "type": "multiple_choice",
+      "points": 13,
+      "question": "A deep research agent encounters contradictory information: Source A (a 2024 peer-reviewed paper) says 'DPO consistently outperforms RLHF on models under 7B parameters', while Source B (a 2024 peer-reviewed paper from a different group) says 'RLHF maintains an advantage over DPO for models under 10B parameters'. What should the reader component do?",
+      "options": [
+        "Discard both claims as the contradiction makes them unreliable",
+        "Prefer Source A because it uses a more specific parameter threshold",
+        "Present both claims with their sources, noting the disagreement without resolving it, and flag that experimental conditions or evaluation criteria may differ",
+        "Average the claims: 'DPO and RLHF perform similarly for small models'"
+      ],
+      "correct": 2,
+      "explanation": "Contradictions between credible sources are informative, not noise. Both are peer-reviewed papers from 2024, so neither can be dismissed on authority or recency grounds. The correct approach is epistemic honesty: present both positions with full attribution, note the contradiction explicitly, and suggest possible explanations (different benchmarks, different definitions of 'outperforms', different training setups). Averaging destroys information. Picking one arbitrarily introduces bias. The human reader has domain context that the agent lacks and can make an informed judgment — or recognize that the field genuinely has not converged on this question."
+    },
+    {
+      "id": "q5-7",
+      "type": "multiple_choice",
+      "points": 13,
+      "question": "Adaptive retrieval uses the formula: retrieve if and only if U_R(q) - U_P(q) > c, where U_R is retrieval utility, U_P is parametric utility, and c is a cost term. Mallen et al. (2023) found that Wikipedia page view count is a useful proxy for deciding when to retrieve. Why does this work?",
+      "options": [
+        "High page view entities have more documents in the corpus, making retrieval faster",
+        "Popular entities are more likely to appear frequently in pre-training data, so the LLM's parametric knowledge is more reliable for them — making retrieval unnecessary — while long-tail entities are underrepresented in training data and benefit from retrieval",
+        "Wikipedia page views correlate with query difficulty, and harder queries always need retrieval",
+        "Popular entities change more frequently, so retrieval provides fresher information"
+      ],
+      "correct": 1,
+      "explanation": "LLMs learn from internet text, and popular entities (high Wikipedia page views) appear in many documents across the training corpus. The model has seen so many mentions of 'Barack Obama' or 'Python programming language' that its parametric knowledge is highly accurate for these entities. In contrast, long-tail entities (a specific small-town mayor, a niche academic concept) appear rarely in training data, so the model's knowledge is sparse, stale, or fabricated. For these entities, U_P(q) is low and U_R(q) is high, making retrieval valuable. Page view count is a brilliantly simple proxy for this: it correlates with training data frequency without requiring access to the actual training corpus."
+    },
+    {
+      "id": "q5-8",
+      "type": "multiple_choice",
+      "points": 12,
+      "question": "You are designing an agentic RAG system that needs to answer questions requiring information from 3-4 documents that are individually insufficient. Basic top-k retrieval with k=5 frequently fails because the relevant documents have low pairwise similarity to the query but high collective coverage. Which technique most directly addresses this?",
+      "options": [
+        "Increasing k from 5 to 20 to capture more documents",
+        "Using query decomposition to break the question into sub-queries targeting each required piece of information, then retrieving separately for each sub-query",
+        "Switching from cosine similarity to Euclidean distance for retrieval",
+        "Using a larger embedding model with higher dimensionality"
+      ],
+      "correct": 1,
+      "explanation": "This is the classic multi-hop retrieval problem. The information needed is distributed across multiple documents, each of which is only partially relevant to the full query. A single query embedding cannot capture all the aspects, so many relevant documents fall below the similarity threshold. Query decomposition addresses this directly: by breaking 'What are the trade-offs between X, Y, and Z for approach A vs B?' into targeted sub-queries ('What is X for approach A?', 'What is Y for approach B?', etc.), each sub-query has a much higher chance of retrieving its specific relevant document. Simply increasing k is a brute-force approach that adds noise proportionally to signal, and changing distance metrics or embedding dimensions does not solve the fundamental issue of query-document alignment for complex, multi-aspect questions."
+    }
+  ]
+}

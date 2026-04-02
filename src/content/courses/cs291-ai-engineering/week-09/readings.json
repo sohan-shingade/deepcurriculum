@@ -1,0 +1,39 @@
+{
+  "readings": [
+    {
+      "title": "Building LLM-Powered Applications: Lessons from the Field",
+      "url": "https://huyenchip.com/2023/04/11/llm-engineering.html",
+      "type": "blog",
+      "description": "Chip Huyen's comprehensive overview of production LLM application patterns, covering prompt engineering, RAG architectures, model evaluation, and the operational challenges of deploying LLM-powered systems at scale. Essential context for understanding the gap between demo and production.",
+      "estimatedMinutes": 30
+    },
+    {
+      "title": "Emerging Architectures for LLM Applications (a16z)",
+      "url": "https://a16z.com/emerging-architectures-for-llm-applications/",
+      "type": "article",
+      "description": "Andreessen Horowitz's reference architecture for LLM applications, synthesized from hundreds of enterprise deployments. Covers the common component stack — embedding models, vector databases, orchestration frameworks, caching layers, and evaluation systems — and explains when each component is justified.",
+      "estimatedMinutes": 25
+    },
+    {
+      "title": "Inside GitHub Copilot: Technical Deep Dive",
+      "url": "https://github.blog/2023-05-17-inside-github-how-we-use-copilot/",
+      "type": "blog",
+      "description": "GitHub's engineering team describes how Copilot's prompt construction, context assembly, and suggestion ranking work in production. Covers the latency constraints, model routing decisions, and the feedback loop between user acceptance data and model improvements.",
+      "estimatedMinutes": 20
+    },
+    {
+      "title": "Patterns for Building LLM-based Systems & Products (Eugene Yan)",
+      "url": "https://eugeneyan.com/writing/llm-patterns/",
+      "type": "article",
+      "description": "A taxonomy of seven proven patterns for production LLM systems: evals, RAG, fine-tuning, caching, guardrails, defensive UX, and data collection flywheel. Each pattern is illustrated with real-world examples from companies including Netflix, Grab, and LinkedIn.",
+      "estimatedMinutes": 35
+    },
+    {
+      "title": "System Design for Recommendations and Search (Google Research)",
+      "url": "https://developers.google.com/machine-learning/recommendation",
+      "type": "course",
+      "description": "Google's machine learning crash course module on recommendation and search system design. While focused on traditional ML rather than LLMs, the systematic approach to requirements analysis, component selection, and evaluation methodology translates directly to AI system design. The sections on candidate generation, scoring, and re-ranking are particularly relevant.",
+      "estimatedMinutes": 45
+    }
+  ]
+}

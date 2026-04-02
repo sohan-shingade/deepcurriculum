@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A sequence detector FSM needs to recognize the pattern '1011' on a serial input. Using a Moore machine, how many states are required (including the initial state and the accepting state)?",
+      "options": [
+        "4 states",
+        "5 states",
+        "6 states",
+        "3 states"
+      ],
+      "correct": 1,
+      "explanation": "A Moore machine for detecting '1011' needs 5 states: S0 (initial, no progress), S1 (seen '1'), S2 (seen '10'), S3 (seen '101'), and S4 (seen '1011', output=1). We need a separate state for each prefix of the pattern, plus the accepting state. A Mealy machine could do this with 4 states (the accepting state would be merged with a transition output), but Moore machines require one additional state because the output is associated with the state rather than the transition. The transition function also needs careful handling of overlapping matches — for example, from S4, if the next input is '1', we should transition to S1 (since the '1' could be the start of a new '1011' pattern)."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "For a UART transmitter operating at 115200 baud with a 100 MHz system clock, how many clock cycles should the baud rate counter count per bit period?",
+      "options": [
+        "115200 cycles",
+        "868 cycles",
+        "1042 cycles",
+        "521 cycles"
+      ],
+      "correct": 1,
+      "explanation": "The baud rate counter divides the system clock to produce the correct bit period. Counts per bit = system_clock / baud_rate = 100,000,000 / 115,200 = 868.06, which rounds to 868 cycles. The fractional error is 0.06/868 = 0.007%, which over a 10-bit UART frame (start + 8 data + stop) accumulates to 0.07% total error. UART receivers can tolerate up to about 2-3% timing error, so this is well within spec. At each tick of the baud counter, the FSM advances to the next state (start bit -> data bit 0 -> data bit 1 -> ... -> stop bit)."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A processor control unit can be implemented with hardwired logic or microprogramming. Which statement best characterizes the tradeoff?",
+      "options": [
+        "Microprogramming is always faster because it uses lookup tables",
+        "Hardwired control is faster but inflexible; microprogramming is slower but easier to modify, which is why CISC processors use microcode for complex instructions",
+        "Hardwired control requires more silicon area because it uses more gates",
+        "There is no meaningful difference in performance; the choice is purely about design convenience"
+      ],
+      "correct": 1,
+      "explanation": "Hardwired control implements the FSM transitions and outputs directly in combinational logic, which is fast (single gate delay) but difficult to change — any modification requires re-designing and re-verifying the logic. Microprogramming stores the control sequence in a ROM/RAM (the control store), which is slower (requires a memory read per cycle) but can be changed by simply rewriting the contents. Modern x86 processors like those from Intel and AMD use hardwired control for simple, frequently-executed instructions (ADD, MOV, branches) and microcode for complex instructions (CPUID, string operations, complex addressing modes). RISC architectures like RISC-V and ARM use almost entirely hardwired control because their regular instruction formats make this tractable."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A candidate response scores BLEU=0.42 against the reference, while an alternative response scores BLEU=0.15. However, the second response is judged by human evaluators as significantly better. Which scenario BEST explains this?",
+      "options": [
+        "The human evaluators made an error in their assessment",
+        "The second response uses different vocabulary to express the same correct information, while the first response shares many n-grams with the reference but is factually incorrect",
+        "BLEU is always unreliable and should never be used",
+        "The first response is objectively better because it matches the reference more closely"
+      ],
+      "correct": 1,
+      "explanation": "BLEU measures n-gram overlap, not semantic correctness. A response that shares many surface-level words with the reference (e.g., 'The return window is 90 days' vs reference 'The return window is 30 days') gets a high BLEU score despite being factually wrong. Meanwhile, a semantically equivalent response using different phrasing (e.g., 'You have a month to return items') gets a low BLEU score despite being correct. This is a fundamental limitation of lexical metrics and the primary motivation for using LLM-as-judge and semantic similarity-based metrics like those in RAGAS."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In the RAGAS framework, your RAG system shows high context relevancy (0.92) but low faithfulness (0.45). What does this diagnostic pattern indicate?",
+      "options": [
+        "The retrieval system is returning irrelevant documents",
+        "The generation model is hallucinating — ignoring or contradicting the retrieved context despite receiving relevant documents",
+        "The user's questions are poorly formed and ambiguous",
+        "The evaluation metrics are miscalibrated and need to be re-tuned"
+      ],
+      "correct": 1,
+      "explanation": "RAGAS decomposes quality into component metrics precisely to enable this kind of diagnosis. High context relevancy means the retrieval stage is working well — the right documents are being found. Low faithfulness means the generation model is making claims that are not supported by those documents — it is hallucinating. The fix targets the generation stage: stronger system prompts emphasizing grounding, chain-of-thought prompting to force the model to quote context, or post-generation faithfulness checking. If context relevancy were low, you would fix retrieval. This decomposition is the key insight of RAGAS."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "You are designing an A/B test for a new prompt variant. Your power analysis says you need 5,000 samples per group for a traditional system, but the AI team recommends 12,000 per group. What is the MOST likely reason for the larger sample size?",
+      "options": [
+        "AI systems have more features to test, requiring more samples",
+        "The non-deterministic nature of LLM outputs increases response variance, requiring more samples to achieve the same statistical power",
+        "AI A/B tests require testing on more user segments",
+        "The larger sample size is needed because LLM responses take longer to evaluate"
+      ],
+      "correct": 1,
+      "explanation": "The minimum sample size formula n = 2(z_alpha + z_beta)^2 * sigma^2 / delta^2 shows that sample size scales linearly with variance (sigma^2). LLM outputs are non-deterministic — the same input can produce different outputs across calls. This inherent randomness adds to the measurement variance, requiring more observations to achieve the same statistical power (ability to detect a true difference). The 2-3x multiplier is a common rule of thumb in AI A/B testing. This is why proxy metrics with lower variance (e.g., binary task completion) are often preferred over continuous quality scores."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Your eval suite shows an overall pass rate of 88%. When stratified by category: factual queries pass at 95%, conversational at 90%, reasoning at 72%, and adversarial at 45%. What should you prioritize?",
+      "options": [
+        "Improving the overall pass rate to 95% by adding more easy factual test cases",
+        "Focusing on adversarial robustness since 45% is a security concern, then addressing reasoning failures",
+        "Removing adversarial and reasoning cases from the eval suite since they are unfairly hard",
+        "Reporting only the overall pass rate since it represents the true system performance"
+      ],
+      "correct": 1,
+      "explanation": "Stratified evaluation exists precisely to surface these hidden failures. A 45% pass rate on adversarial inputs means the system is vulnerable to prompt injection, jailbreaking, or manipulation — this is a security concern that could cause reputational or legal damage. The 72% on reasoning is the next priority since it indicates a systematic weakness in handling complex queries. Adding easy test cases to inflate the overall score (option A) is gaming the metric. Removing hard categories (option C) is willful blindness. Reporting only overall rates (option D) hides the problem. The correct response is to prioritize by risk: security first, then capability gaps."
+    }
+  ]
+}

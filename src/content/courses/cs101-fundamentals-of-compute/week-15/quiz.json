@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 14: FPGA Architecture",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An FPGA's 6-LUT stores its truth table in SRAM. If you want to implement a 7-input Boolean function, what is the minimum number of 6-LUTs required?",
+      "options": [
+        "1 (a 6-LUT can handle 7 inputs with output sharing)",
+        "2 (split into two 6-input sub-functions, combine with a mux)",
+        "7 (one LUT per input)",
+        "128 (one LUT per truth table entry of a 7-input function)"
+      ],
+      "correct": 1,
+      "explanation": "A 7-input function can be decomposed using Shannon expansion: $f(x_0..x_6) = \\overline{x_6} \\cdot f(x_0..x_5, 0) + x_6 \\cdot f(x_0..x_5, 1)$. Each cofactor is a 6-input function that fits in one 6-LUT. A multiplexer (F7MUX, built into the CLB) selects between them based on $x_6$. Total: 2 LUTs + 1 mux. This is exactly how FPGAs extend beyond the native LUT size -- Xilinx CLBs include F7MUX and F8MUX resources for 7 and 8-input functions."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The AMD Versal VP1902 contains 8,460,288 LUTs on a TSMC 7nm process. Approximately how many transistors does a single 6-LUT require (considering the 64 SRAM cells, multiplexer tree, and configuration logic)?",
+      "options": [
+        "6 transistors (one per input)",
+        "64 transistors (one per truth table bit)",
+        "Approximately 100-200 transistors (64 SRAM cells at ~6T each for the truth table, plus a 64:1 mux tree)",
+        "Approximately 400-500 transistors (including the flip-flops and carry chain in the same slice)"
+      ],
+      "correct": 2,
+      "explanation": "Each SRAM bit requires approximately 6 transistors (standard 6T SRAM cell). The truth table has 64 entries: $64 \\times 6 = 384$ transistors just for storage. However, a simplified estimate considers the 64:1 multiplexer tree (~60 pass transistors/transmission gates) plus input buffers, giving roughly 100-200 transistors for the core LUT function. The full CLB slice (with flip-flops, carry chain, wide muxes) uses substantially more, but the LUT itself is the ~100-200T core. This is why FPGAs have 20-35x area overhead versus ASICs -- all that configuration SRAM."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A design uses 500 BRAMs (36 Kb each). What is the total on-chip storage provided by these BRAMs?",
+      "options": [
+        "500 KB",
+        "18 Mb (2.25 MB)",
+        "18,000 Kb (2.197 MB)",
+        "500 Mb (62.5 MB)"
+      ],
+      "correct": 2,
+      "explanation": "$500 \\times 36\\text{ Kb} = 18{,}000\\text{ Kb} = 18{,}000 / 8 = 2{,}250\\text{ KB} \\approx 2.197\\text{ MB}$. Each 36 Kb BRAM stores 36,864 bits = 4,608 bytes. This is a significant amount of on-chip SRAM -- enough for large lookup tables, order book data in HFT, or buffering hundreds of network packets. The VP1902 provides 239 Mb of Block RAM, equivalent to nearly 30 MB of on-chip storage."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why does routing consume over 70% of an FPGA's die area?",
+      "options": [
+        "Because routing wires are wider than transistors",
+        "Because the programmable interconnect requires SRAM configuration bits at every switch point -- each programmable connection needs its own SRAM cell and pass transistor, and there are far more connections than logic elements",
+        "Because FPGAs use separate metal layers for routing that are thicker than in ASICs",
+        "Because clock distribution networks consume most of the area"
+      ],
+      "correct": 1,
+      "explanation": "An FPGA's interconnect is programmable: at every switch box where wires can connect, there is an SRAM configuration bit controlling a pass transistor (or multiplexer). A single CLB might have hundreds of possible connections to the routing fabric. Across millions of CLBs, the number of programmable connection points (and their SRAM cells) vastly exceeds the number of logic elements. The Kuon and Rose study (University of Toronto) measured the FPGA-to-ASIC gap and found that routing overhead is the dominant contributor to the ~20-35x area penalty. This is the fundamental cost of programmability."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Verilog, what hardware does `assign y = (sel) ? a : b;` synthesize to?",
+      "options": [
+        "An AND gate",
+        "A latch",
+        "A 2:1 multiplexer with sel as the control input",
+        "A flip-flop triggered by sel"
+      ],
+      "correct": 2,
+      "explanation": "The ternary operator `(sel) ? a : b` is a conditional select: output `a` when `sel=1`, output `b` when `sel=0`. This is exactly the definition of a 2:1 multiplexer. Since it is a continuous `assign` statement, it is combinational -- no clock, no state. In a single 6-LUT, this mux operation fits trivially (3 inputs: sel, a, b), consuming just one LUT."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A Vitis HLS design has a loop that processes 1024 data points. Each iteration requires 4 multiply-accumulate operations and the loop is pipelined with `#pragma HLS pipeline II=1`. What is the maximum throughput in data points per second at 200 MHz?",
+      "options": [
+        "50 million data points/sec (200M / 4 MACs)",
+        "200 million data points/sec (one per clock cycle with II=1)",
+        "800 million data points/sec (4 MACs per cycle)",
+        "51.2 billion data points/sec (200M * 1024 / 4)"
+      ],
+      "correct": 1,
+      "explanation": "With pipeline $II=1$, the pipeline accepts one new data point every clock cycle, regardless of how many operations each iteration requires internally. The 4 MAC operations are spread across pipeline stages -- they all execute concurrently on different data points. At 200 MHz, that means $200 \\times 10^6$ data points per second = 200 million/sec. The pipeline initiation interval determines throughput; the pipeline depth (number of stages) determines latency for a single point. This is the fundamental insight of pipelining: throughput = $1 / (II \\times T_{clk})$."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which HLS pragma would you use to allow a function that reads 8 elements from an array every cycle, given that BRAM is limited to 2 reads per cycle (dual-port)?",
+      "options": [
+        "`#pragma HLS pipeline II=4` (spread reads across 4 cycles)",
+        "`#pragma HLS array_partition variable=arr type=cyclic factor=4` (create 4 banks, each dual-port = 8 reads/cycle)",
+        "`#pragma HLS unroll factor=8` (replicate the function 8 times)",
+        "`#pragma HLS interface mode=m_axi` (use external DRAM instead)"
+      ],
+      "correct": 1,
+      "explanation": "A single BRAM has 2 ports, allowing 2 reads per cycle. To read 8 elements per cycle, you need 4 BRAM banks (4 banks x 2 ports = 8 reads). `array_partition type=cyclic factor=4` distributes array elements round-robin across 4 banks: element 0 goes to bank 0, element 1 to bank 1, ..., element 4 to bank 0 again. If your access pattern reads consecutive elements, the reads are spread across different banks with no conflicts. Option A reduces throughput (bad). Option C replicates compute but doesn't solve the memory bandwidth bottleneck. Option D adds DRAM latency (100+ ns)."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An ASIC design at 5nm costs approximately $416-$449 million in NRE. A competing FPGA solution costs $2,000 per unit. For a high-frequency trading firm deploying 50 FPGA boards, what is the total FPGA cost, and how does it compare to the ASIC NRE alone?",
+      "options": [
+        "FPGA: $100,000 total. This is 4,000x cheaper than the ASIC NRE alone.",
+        "FPGA: $1,000,000 total. ASIC NRE is 400x more expensive.",
+        "FPGA: $100,000 total. But the ASIC would be cheaper per unit at this volume.",
+        "FPGA: $10,000,000 total. ASIC NRE is only 40x more expensive."
+      ],
+      "correct": 0,
+      "explanation": "FPGA total: $50 \\times \\$2{,}000 = \\$100{,}000$. ASIC NRE alone (before a single chip is manufactured): $\\$416M-\\$449M$. The ratio is approximately $\\$430M / \\$100K \\approx 4{,}300\\times$. This is why HFT firms universally use FPGAs rather than ASICs. The volumes are tiny (tens to hundreds of boards), strategies change frequently (requiring reprogramming), and the NRE for a custom ASIC would be absurd. Even if the ASIC delivered 2x better performance, no trading firm would wait 2-3 years and spend half a billion dollars for a chip that cannot be updated when exchange protocols change."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Intel Agilex 7 uses HyperFlex architecture with bypassable registers in the routing fabric. What is the primary benefit?",
+      "options": [
+        "Reduced power consumption by clock gating unused registers",
+        "Allows the place-and-route tools to insert pipeline stages directly into the interconnect, reducing critical path delays and enabling higher clock frequencies (400-800 MHz)",
+        "Provides additional flip-flops for user logic, increasing register count",
+        "Eliminates the need for explicit pipelining in HDL code"
+      ],
+      "correct": 1,
+      "explanation": "HyperFlex places optional (bypassable) registers at every routing segment. The retiming and place-and-route tools can automatically insert pipeline stages into the routing fabric without requiring any RTL changes. This breaks long routing paths into shorter segments, each meeting timing at higher clock frequencies. Traditional FPGAs are limited by the longest wire delay between registers; HyperFlex adds register resources exactly where the timing bottleneck is -- in the routing. The result: Agilex achieves 400-800 MHz operating frequencies, compared to 200-400 MHz for traditional architectures. The designer writes the same RTL; the tools do the optimization."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A constant left shift `<< 3` in Verilog synthesizes to zero logic (just rewiring). A variable left shift `<< n` synthesizes to a barrel shifter. Why the difference?",
+      "options": [
+        "Constant shifts are optimized away by the synthesis tool as dead code",
+        "A constant shift by 3 simply reroutes each bit to a position 3 higher in the wire bundle -- no gates needed. A variable shift requires a multiplexer tree (barrel shifter) because the routing must handle any possible shift amount.",
+        "Variable shifts require flip-flops to store the shift amount",
+        "Constant shifts use DSP blocks which are free, while variable shifts use LUTs"
+      ],
+      "correct": 1,
+      "explanation": "In hardware, shifting by a constant is purely a wiring operation. `y = x << 3` means: connect bit 0 of x to bit 3 of y, bit 1 to bit 4, etc. Set bits 0-2 of y to ground (zero). No gates, no LUTs, no delay -- it is literally free. But `y = x << n` requires the hardware to select between different wiring configurations depending on `n`. This is implemented as a barrel shifter: a cascade of multiplexers that conditionally shift by $2^0$, $2^1$, $2^2$, etc. A barrel shifter for an 8-bit value with 3-bit shift amount needs $3 \\times 8 = 24$ multiplexers. This is a beautiful example of how hardware differs from software: in software, both shifts are one instruction."
+    }
+  ]
+}

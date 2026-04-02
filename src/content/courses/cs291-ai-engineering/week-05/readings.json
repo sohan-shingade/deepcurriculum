@@ -1,0 +1,49 @@
+{
+  "readings": [
+    {
+      "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+      "authors": "Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, Hannaneh Hajishirzi",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2310.11511",
+      "type": "paper",
+      "description": "Introduces Self-RAG, a framework that trains a single LLM to adaptively retrieve, generate, and self-reflect using special reflection tokens. The model learns to decide when retrieval is needed, assess retrieved passage relevance, and evaluate whether its own generation is supported by evidence. Key reading for understanding how intrinsic self-assessment replaces external quality pipelines.",
+      "priority": "required"
+    },
+    {
+      "title": "Corrective Retrieval Augmented Generation",
+      "authors": "Shi-Qi Yan, Jia-Chen Gu, Yun Zhu, Zhen-Hua Ling",
+      "year": 2024,
+      "url": "https://arxiv.org/abs/2401.15884",
+      "type": "paper",
+      "description": "Proposes CRAG, which introduces a retrieval evaluator that assesses retrieved document quality and triggers corrective actions — using retrieved documents directly, augmenting with web search, or discarding retrieval entirely. Demonstrates the value of explicit quality gates between retrieval and generation.",
+      "priority": "required"
+    },
+    {
+      "title": "Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions",
+      "authors": "Harsh Trivedi, Niranjan Balasubramanian, Tushar Khot, Ashish Sabharwal",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2212.10509",
+      "type": "paper",
+      "description": "Introduces IRCoT, which interleaves chain-of-thought reasoning with retrieval at each reasoning step. Instead of retrieving once and generating, the model reasons about what it knows, retrieves when it identifies a knowledge gap, then continues reasoning. Essential reading for understanding iterative, multi-hop retrieval in agentic RAG systems.",
+      "priority": "recommended"
+    },
+    {
+      "title": "When Not to Trust Language Models: Investigating Effectiveness of Parametric and Non-Parametric Memories",
+      "authors": "Alex Mallen, Akari Asai, Victor Zhong, Rajarshi Das, Daniel Khashabi, Hannaneh Hajishirzi",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2212.10511",
+      "type": "paper",
+      "description": "Investigates when LLMs can be trusted to answer from parametric knowledge versus when retrieval is necessary. Finds that entity popularity (measured by Wikipedia page views) is a strong predictor of parametric knowledge reliability. Foundational for adaptive retrieval — knowing when NOT to retrieve is as important as knowing how to retrieve well.",
+      "priority": "recommended"
+    },
+    {
+      "title": "Model Context Protocol (MCP) Specification",
+      "authors": "Anthropic",
+      "year": 2024,
+      "url": "https://modelcontextprotocol.io/specification",
+      "type": "specification",
+      "description": "The official specification for MCP, defining how AI applications connect to external data sources and tools via a standardized protocol. Covers the host-client-server architecture, the three core primitives (resources, tools, prompts), and the transport layer. Essential reference for building interoperable agentic systems.",
+      "priority": "recommended"
+    }
+  ]
+}

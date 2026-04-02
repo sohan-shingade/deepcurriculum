@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A 6-input LUT (6-LUT) stores a truth table in SRAM. How many SRAM bits are required, and how many distinct Boolean functions can it implement?",
+      "options": [
+        "6 SRAM bits, $6! = 720$ distinct functions",
+        "64 SRAM bits, $2^{64} \\approx 1.8 \\times 10^{19}$ distinct functions",
+        "64 SRAM bits, $2^{6} = 64$ distinct functions",
+        "32 SRAM bits, $2^{32} \\approx 4.3 \\times 10^{9}$ distinct functions"
+      ],
+      "correct": 1,
+      "explanation": "A $k$-input LUT has $2^k$ entries in its truth table, one for each possible input combination. For $k=6$: $2^6 = 64$ SRAM bits. Each of those 64 bits can independently be 0 or 1, so the number of distinct truth tables (and thus distinct Boolean functions) is $2^{64} \\approx 1.8 \\times 10^{19}$. This is why FPGAs are universal: a single 6-LUT can implement ANY Boolean function of 6 inputs -- AND, OR, XOR, majority, parity, or any of the $\\sim 10^{19}$ other possibilities."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A design requires 128 parallel 18-bit multiplications per clock cycle for a FIR filter. Which FPGA resource should the synthesis tool map these operations to, and why?",
+      "options": [
+        "LUTs -- they can implement any function including multiplication",
+        "BRAMs -- pre-compute all products in lookup tables stored in block RAM",
+        "DSP blocks -- hardened multiply-accumulate units are faster, use less area, and achieve higher clock frequencies than LUT-based multipliers",
+        "Routing fabric -- constant-shift multiplications are free in wiring"
+      ],
+      "correct": 2,
+      "explanation": "DSP blocks (DSP58 in Versal, DSP blocks in Agilex) are dedicated silicon for multiply-accumulate operations. An 18x18 LUT-based multiplier would consume hundreds of LUTs and have a longer critical path. A DSP block does the same multiplication in dedicated hardware at the full fabric clock speed (or faster), consuming zero LUTs. With 128 multiplications needed, the design requires 128 DSP blocks -- well within the capacity of devices like the Versal VC1902 (1,968 DSPs) or Agilex AGF027 (8,528 DSPs). FIR filters are one of the primary use cases for DSP cascade chains."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "The AMD Versal VP1902 has 8,460,288 LUTs and the Intel Agilex 7 AGF027 has 2,692,760 logic elements. Which statement best explains why an FPGA running at 300 MHz can achieve lower latency than a CPU running at 5 GHz for certain workloads?",
+      "options": [
+        "FPGAs have more transistors than CPUs, so they compute faster",
+        "FPGAs use a custom pipeline that exactly matches the computation -- no instruction fetch, decode, or cache misses -- so the result is available after a fixed number of short pipeline stages, not thousands of variable-latency instructions",
+        "FPGA clock cycles are fundamentally shorter in real time than CPU clock cycles",
+        "FPGAs can access main memory faster because they have more BRAM than a CPU has L1 cache"
+      ],
+      "correct": 1,
+      "explanation": "A CPU at 5 GHz has a 200 ps clock period, while an FPGA at 300 MHz has a 3.3 ns clock period -- the CPU clock is faster. But a CPU computation involves instruction fetch, decode, operand fetch, execution, and write-back stages, plus potential cache misses (50-100 ns), branch mispredictions (~15 cycles), and OS interrupts. An FPGA implements a custom datapath: the computation might take 10 clock cycles at 3.3 ns each = 33 ns, versus a CPU needing hundreds of instructions with potential stalls. The FPGA's advantage is not clock speed but deterministic, purpose-built computation with zero overhead."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "An ASIC design at 7nm costs approximately $217-$249 million in NRE, while an FPGA costs $500 per unit with zero NRE. At approximately what production volume does the ASIC become cheaper overall (assuming $375 ASIC unit cost)?",
+      "options": [
+        "~10,000 units",
+        "~50,000 units",
+        "~400,000 units",
+        "~4,000,000 units"
+      ],
+      "correct": 2,
+      "explanation": "The breakeven volume is $N = \\text{NRE} / (\\text{FPGA\\_Price} - \\text{ASIC\\_Unit\\_Cost})$. Using NRE = $50M (conservative estimate), FPGA price = $500, ASIC unit cost = $375: $N = 50{,}000{,}000 / (500 - 375) = 400{,}000$ units. Below 400K units, the FPGA total cost is lower. This is why HFT firms use FPGAs (they need dozens of boards, not millions) and consumer electronics use ASICs (smartphones ship billions). Using the full average NRE of $217-$249M for a 7nm chip would push the breakeven even higher, to millions of units."
+    }
+  ]
+}

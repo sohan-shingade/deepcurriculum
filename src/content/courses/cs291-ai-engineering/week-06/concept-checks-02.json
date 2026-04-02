@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "Two security analysis agents concurrently write to a shared blackboard key 'vulnerabilities'. Agent A finds ['SQL injection', 'XSS'] and Agent B finds ['XSS', 'CSRF']. Using a 'union' merge strategy for conflict resolution, what is the final value?",
+      "options": [
+        "['SQL injection', 'XSS'] — Agent A wrote first, so last-writer-wins gives Agent A's result",
+        "['XSS', 'CSRF'] — last-writer-wins gives Agent B's result",
+        "['SQL injection', 'XSS', 'CSRF'] — union of both lists, deduplicated",
+        "An error — concurrent writes to the same key are not allowed"
+      ],
+      "correct": 2,
+      "explanation": "The union merge strategy combines both lists and deduplicates. This is the correct conflict resolution strategy for additive data like vulnerability lists — you want all findings from all agents, without duplicates. Last-writer-wins would lose Agent A's unique finding (SQL injection). The union merge approach is inspired by CRDTs (Conflict-free Replicated Data Types) from distributed systems, specifically the G-Set (grow-only set) which guarantees convergence regardless of write order."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In a multi-agent system, agents A and B run concurrently. Agent B needs to make a decision that depends on Agent A's latest output. Which consistency model should you use for the shared state?",
+      "options": [
+        "Eventual consistency — it's always faster and the coordinator will fix any issues",
+        "Strong consistency — Agent B must see Agent A's most recent write before making its decision",
+        "No consistency guarantees needed — agents should be fully independent",
+        "Causal consistency — only writes that are causally related need to be ordered"
+      ],
+      "correct": 1,
+      "explanation": "When Agent B's work is invalidated by stale data from Agent A, you need strong consistency. If B reads an outdated value from A and makes a decision based on it, that decision could be wrong, wasting B's compute and potentially corrupting the final output. The decision rule from the lecture: if agent B's work is invalidated by agent A's concurrent write, use strong consistency. If B's work is still valid regardless, eventual consistency is fine. Causal consistency (option D) is a valid intermediate option in general distributed systems, but in this scenario the dependency is direct, making strong consistency the clear choice."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "What is the key difference between MCP (Model Context Protocol) and A2A (Agent-to-Agent protocol)?",
+      "options": [
+        "MCP is for local agents and A2A is for remote agents",
+        "MCP standardizes agent-to-tool communication (passive resources); A2A standardizes agent-to-agent communication (autonomous actors)",
+        "MCP is Google's protocol and A2A is Anthropic's protocol",
+        "MCP handles synchronous communication and A2A handles asynchronous communication"
+      ],
+      "correct": 1,
+      "explanation": "MCP and A2A are complementary protocols addressing different communication patterns. MCP standardizes how an agent accesses tools and resources — the tool server is a passive resource provider that responds to requests (read a file, query a database). A2A standardizes how agents communicate with each other — the remote agent is an autonomous actor that reasons, plans, and may use its own tools to complete a task. The analogy: MCP is how an agent uses a screwdriver; A2A is how an agent asks another agent to build a bookshelf. Both can be used in the same system — an agent receives a task via A2A and uses MCP to access the tools it needs to complete that task."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A multi-agent system has 4 agents, each with 92% individual success rate. Tasks require all 4 agents to succeed. What is the system's success rate, and what does this imply?",
+      "options": [
+        "92% — the system is as reliable as each agent",
+        "About 72% — reliability compounds multiplicatively, making retry logic essential",
+        "About 84% — take the average reliability minus some overhead",
+        "About 98% — redundancy across 4 agents improves reliability"
+      ],
+      "correct": 1,
+      "explanation": "When success requires all agents to succeed and agents fail independently, the system success rate is the product of individual rates: 0.92^4 ≈ 0.716, or about 72%. This is dramatically lower than any individual agent's reliability. This multiplicative reliability degradation is a fundamental property of multi-agent systems and is why retry logic, fallback strategies, and failure isolation are not optional — they are essential. With even a simple single-retry policy (bringing each agent's effective reliability to ~99.4%), the system reliability improves to 0.994^4 ≈ 0.976, or about 98%."
+    }
+  ]
+}

@@ -1,0 +1,493 @@
+---
+title: "Real-World AI System Case Studies"
+week: 9
+lecture: 1
+estimatedMinutes: 60
+---
+
+# Real-World AI System Case Studies
+
+You have spent eight weeks learning the components: LLMs, retrieval, agents, multi-agent orchestration, deployment, observability, evaluation. This week we put it all together. The best way to learn system design is to study systems that work — systems serving millions of users, handling billions of tokens per day, and making money doing it. Not toy demos. Not blog post architectures. Real products.
+
+This lecture dissects five production AI systems. For each, we analyze the architecture, the key engineering decisions, the tradeoffs those decisions create, and the scale at which the system operates. You will notice recurring patterns: every system uses some form of retrieval-augmented generation, every system is obsessed with latency, every system has a more sophisticated evaluation story than you would guess from the outside.
+
+A warning before we begin: the companies behind these systems publish selectively. What follows is a synthesis of published papers, engineering blog posts, conference talks, patent filings, and informed inference from observable behavior. Where I am speculating, I will say so.
+
+---
+
+## 1. GitHub Copilot
+
+GitHub Copilot is the most commercially successful AI coding assistant as of early 2026, with tens of millions of active users. It is also one of the most instructive case studies in production AI engineering because the constraints are brutal: the system must produce useful code completions in under 300 milliseconds, using context extracted from a live editor session that the user has not explicitly curated.
+
+### 1.1 Prompt Construction from Editor Context
+
+The core engineering challenge of Copilot is not the model — it is the prompt. When you are typing in VS Code and Copilot offers a suggestion, the system must decide in real time what context to include in the prompt. The naive approach — send the entire file — fails immediately. Files can be tens of thousands of lines. The context window has a hard limit. Most of the file is irrelevant to the current cursor position.
+
+Copilot's prompt construction pipeline works roughly as follows. First, extract the **cursor context**: the code immediately above and below the cursor position. This is the highest-priority context because locality of reference dominates in code. Second, extract **import and header context**: the import statements at the top of the file, type definitions, and function signatures that establish the vocabulary of the current module. Third, extract **neighboring file context**: snippets from files that are open in adjacent editor tabs, recently edited, or imported by the current file. This last category is where the system gets clever — it uses a lightweight relevance scoring function to rank snippets from neighboring files by their likely utility for the current completion.
+
+The prompt is assembled with a strict token budget. The allocation follows a priority scheme:
+
+```python
+# Simplified Copilot-style prompt budget allocation
+def allocate_context_budget(total_tokens=2048):
+    budget = {
+        "suffix_context": int(total_tokens * 0.15),   # Code after cursor
+        "prefix_context": int(total_tokens * 0.50),   # Code before cursor (highest priority)
+        "imports_and_types": int(total_tokens * 0.15), # File header
+        "neighbor_files": int(total_tokens * 0.15),    # Related open files
+        "instructions": int(total_tokens * 0.05),      # System prompt / fill-in-middle markers
+    }
+    return budget
+
+budget = allocate_context_budget(2048)
+for section, tokens in budget.items():
+    print(f"{section}: {tokens} tokens")
+```
+
+The key insight is that **prefix context** (code before the cursor) gets half the budget. This is not arbitrary — empirical analysis of completion quality shows that the code immediately preceding the cursor is by far the strongest predictor of what comes next.
+
+### 1.2 Model Routing and Latency Budget
+
+Early Copilot used OpenAI Codex (a fine-tuned GPT-3). The current system uses a tiered model architecture. For inline completions (the ghost text that appears as you type), the system uses a smaller, faster model — likely a distilled variant optimized for code completion with sub-200ms latency. For Copilot Chat and more complex multi-line suggestions, the system routes to GPT-4-class models.
+
+This **model routing** decision is critical. The system maintains a latency budget:
+
+- **Inline completions**: Target p50 latency < 150ms, p99 < 400ms. Users will not wait. A completion that arrives after the user has typed the next character is worse than no completion at all.
+- **Chat responses**: Target time-to-first-token < 500ms, streaming thereafter. Users expect conversational latency.
+
+The routing logic considers the complexity of the completion request, the user's typing speed (fast typists trigger fewer completions to avoid wasted compute), and the estimated token count of the response.
+
+### 1.3 Suggestion Ranking and Filtering
+
+Copilot does not show you the first completion the model generates. It generates multiple candidates (typically 3-10 for inline completions) and ranks them using a secondary model — a lightweight classifier trained on acceptance/rejection data from millions of real user interactions. This is a classic **reranking** pattern.
+
+The ranking signal incorporates: syntactic validity (does the suggestion parse?), semantic coherence (does it match the surrounding code style?), historical acceptance rate for similar suggestion types, and a confidence score from the generation model itself. Suggestions below a confidence threshold are suppressed entirely — showing nothing is better than showing garbage.
+
+<ConceptCheck id="cc-1" />
+
+### 1.4 Scale and Tradeoffs
+
+Copilot processes billions of completion requests per day. The key tradeoffs:
+
+- **Context window vs. latency**: More context improves quality but increases inference time. The token budget is a compression of this tradeoff into a single parameter.
+- **Suggestion frequency vs. annoyance**: Too many suggestions interrupt flow. Too few miss opportunities. The typing-speed-based throttling is a heuristic solution.
+- **Model size vs. speed**: The tiered architecture (fast small model for completions, large model for chat) is an explicit acknowledgment that one model cannot serve both use cases.
+
+---
+
+## 2. Cursor
+
+Cursor is the most technically ambitious AI code editor as of 2026. Where Copilot adds AI to an existing editor, Cursor rebuilt the editor around AI. The key differentiator is **multi-file context** — Cursor understands your entire codebase, not just the open file.
+
+### 2.1 Codebase Indexing
+
+When you open a project in Cursor, it indexes the entire codebase. This index is not a simple text search index — it is a semantic embedding index. The system computes embeddings for code chunks (functions, classes, modules) and stores them in a local vector index. This enables the system to retrieve contextually relevant code from anywhere in the codebase when constructing prompts.
+
+The indexing pipeline:
+
+1. **Chunking**: Split files into semantically meaningful units (functions, classes, top-level blocks) using tree-sitter parsing. This is better than fixed-size chunking because code has natural boundaries.
+2. **Embedding**: Compute embeddings using a code-specialized embedding model. These are smaller and faster than general-purpose embeddings because they are optimized for code similarity.
+3. **Incremental updates**: When files change, only the affected chunks are re-embedded. Full re-indexing on every save would be intractable.
+
+```python
+# Simplified codebase indexing pipeline
+import json
+from dataclasses import dataclass, field, asdict
+
+@dataclass
+class CodeChunk:
+    file_path: str
+    chunk_type: str  # "function", "class", "module"
+    name: str
+    start_line: int
+    end_line: int
+    content: str
+    embedding: list = field(default_factory=list)
+
+def chunk_python_file(file_path: str, source: str) -> list:
+    """Chunk a Python file into semantic units using simple heuristics."""
+    chunks = []
+    lines = source.split('\n')
+    current_chunk_start = 0
+    current_chunk_type = "module"
+    current_chunk_name = file_path
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('def ') or stripped.startswith('class '):
+            # Save previous chunk
+            if i > current_chunk_start:
+                chunks.append(CodeChunk(
+                    file_path=file_path,
+                    chunk_type=current_chunk_type,
+                    name=current_chunk_name,
+                    start_line=current_chunk_start,
+                    end_line=i - 1,
+                    content='\n'.join(lines[current_chunk_start:i])
+                ))
+            current_chunk_start = i
+            current_chunk_type = "function" if stripped.startswith('def ') else "class"
+            current_chunk_name = stripped.split('(')[0].split(':')[0].replace('def ', '').replace('class ', '')
+
+    # Final chunk
+    if current_chunk_start < len(lines):
+        chunks.append(CodeChunk(
+            file_path=file_path,
+            chunk_type=current_chunk_type,
+            name=current_chunk_name,
+            start_line=current_chunk_start,
+            end_line=len(lines) - 1,
+            content='\n'.join(lines[current_chunk_start:])
+        ))
+
+    return chunks
+
+# Example
+source_code = '''import math
+
+def calculate_area(radius):
+    return math.pi * radius ** 2
+
+class Circle:
+    def __init__(self, radius):
+        self.radius = radius
+
+    def area(self):
+        return calculate_area(self.radius)
+'''
+
+chunks = chunk_python_file("geometry.py", source_code)
+for c in chunks:
+    print(f"[{c.chunk_type}] {c.name}: lines {c.start_line}-{c.end_line}")
+```
+
+### 2.2 Diff-Based Editing
+
+Cursor's most distinctive UX feature is diff-based editing. When you ask Cursor to modify code, it does not replace the entire file — it shows you a diff, exactly like a code review. This is not just a UI choice; it reflects a deep architectural decision about how the model generates edits.
+
+The system prompts the model to produce **edit instructions** rather than complete files. This has three advantages: (1) the output is shorter, reducing latency and cost; (2) the user can review exactly what changed; (3) the system can apply edits to large files without regenerating unchanged portions. The edit instruction format is essentially a structured diff — specifying which lines to replace and with what.
+
+### 2.3 Tab Completion vs. Chat Modes
+
+Cursor operates in two distinct modes that use different models and different prompt construction strategies:
+
+- **Tab completion**: Similar to Copilot but with codebase-aware context retrieval. The system retrieves relevant chunks from the semantic index and includes them in the prompt. This runs against a fast model with a tight latency budget.
+- **Chat / Cmd+K**: Uses a larger model (Claude or GPT-4 class) with a much larger context window. The system can include dozens of relevant code chunks, the full conversation history, and explicit user instructions. Latency budget is relaxed to seconds.
+
+The transition between these modes is where Cursor's UX shines — the system preloads relevant context for both modes simultaneously, so switching from tab-completing to asking a question feels instantaneous.
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 3. Perplexity
+
+Perplexity is the clearest production example of real-time Retrieval-Augmented Generation. It is a search engine where the "results" are synthesized answers with inline citations to sources. The system must crawl the web in real time, retrieve relevant documents, and synthesize a coherent answer — all in under 5 seconds.
+
+### 3.1 Real-Time Web RAG Architecture
+
+Perplexity's architecture has four stages, executed in a tight pipeline:
+
+1. **Query analysis**: Parse the user's question, identify key entities and search intents, and generate 2-5 search queries. This is an LLM call, but a fast one — using a small model or a fine-tuned classifier.
+2. **Web retrieval**: Execute search queries against a search index (Perplexity operates its own web crawler and index, supplemented by search API providers). Retrieve 20-50 candidate URLs.
+3. **Document processing**: Fetch, parse, and chunk the top candidate pages. Extract the relevant passages using a combination of BM25 scoring and semantic reranking. This stage must handle the full messiness of the web: paywalls, JavaScript-rendered pages, malformed HTML, duplicate content.
+4. **Answer synthesis**: Feed the retrieved passages plus the original query to a large language model. The model generates an answer with inline citations referencing specific source passages.
+
+```python
+# Simplified Perplexity-style RAG pipeline
+from dataclasses import dataclass
+
+@dataclass
+class SearchResult:
+    url: str
+    title: str
+    snippet: str
+    relevance_score: float
+
+@dataclass
+class RetrievedPassage:
+    source_url: str
+    source_title: str
+    text: str
+    relevance_score: float
+
+def simulate_perplexity_pipeline(user_query: str):
+    """Simulate the 4-stage Perplexity pipeline."""
+
+    # Stage 1: Query analysis
+    search_queries = analyze_query(user_query)
+    print(f"Stage 1 - Generated {len(search_queries)} search queries")
+
+    # Stage 2: Web retrieval
+    raw_results = []
+    for q in search_queries:
+        raw_results.extend(web_search(q))
+    # Deduplicate by URL
+    seen_urls = set()
+    unique_results = []
+    for r in raw_results:
+        if r.url not in seen_urls:
+            seen_urls.add(r.url)
+            unique_results.append(r)
+    print(f"Stage 2 - Retrieved {len(unique_results)} unique results")
+
+    # Stage 3: Document processing & reranking
+    passages = []
+    for result in sorted(unique_results, key=lambda x: x.relevance_score, reverse=True)[:10]:
+        passages.append(RetrievedPassage(
+            source_url=result.url,
+            source_title=result.title,
+            text=result.snippet,
+            relevance_score=result.relevance_score,
+        ))
+    passages.sort(key=lambda x: x.relevance_score, reverse=True)
+    top_passages = passages[:5]
+    print(f"Stage 3 - Selected {len(top_passages)} top passages")
+
+    # Stage 4: Answer synthesis (simulated)
+    context = "\n\n".join(
+        f"[Source {i+1}: {p.source_title}] {p.text}"
+        for i, p in enumerate(top_passages)
+    )
+    print(f"Stage 4 - Synthesizing answer from {len(top_passages)} sources")
+    return {"query": user_query, "num_sources": len(top_passages), "context_length": len(context)}
+
+
+def analyze_query(query: str) -> list:
+    """Decompose user query into search queries."""
+    words = query.lower().split()
+    queries = [query]
+    if len(words) > 4:
+        queries.append(" ".join(words[:len(words)//2]))
+        queries.append(" ".join(words[len(words)//2:]))
+    return queries
+
+def web_search(query: str) -> list:
+    """Simulate web search results."""
+    return [
+        SearchResult(
+            url=f"https://example.com/{i}",
+            title=f"Result {i} for: {query[:30]}",
+            snippet=f"Relevant content about {query[:20]}...",
+            relevance_score=1.0 / (i + 1),
+        )
+        for i in range(5)
+    ]
+
+result = simulate_perplexity_pipeline("What are the tradeoffs of using RAG vs fine-tuning for domain adaptation?")
+print(f"\nPipeline result: {result}")
+```
+
+### 3.2 Source Ranking and Citation Quality
+
+The hardest problem in Perplexity's system is not retrieval — it is **source quality assessment**. The web is full of garbage: SEO-optimized filler, outdated information, outright misinformation. Perplexity must rank sources not just by relevance (does this page discuss the query topic?) but by authority (is this a trustworthy source?), freshness (is this information current?), and information density (does this page actually contain substantive content?).
+
+The source ranking model is likely a learned ranker trained on human quality judgments. Observable behavior suggests it heavily weights: known authoritative domains, recency for time-sensitive queries, citation density (pages that themselves cite sources tend to be more authoritative), and content-to-boilerplate ratio.
+
+### 3.3 Latency Architecture
+
+Perplexity's latency budget is approximately 3-5 seconds for a full answer. This is remarkably tight given that the pipeline involves network I/O (web fetching), multiple model inference calls, and document processing. The system achieves this through aggressive parallelism: search queries execute in parallel, page fetching executes in parallel, and the answer generation begins streaming as soon as sufficient context is available — it does not wait for all sources to be fully processed.
+
+---
+
+## 4. ChatGPT: Tools and Memory
+
+ChatGPT is the most widely used AI application in history. While it appears simple — a chat interface — the production system behind it is a sophisticated multi-modal pipeline with tool use, persistent memory, and code execution capabilities.
+
+### 4.1 Plugin Architecture and Tool Use
+
+ChatGPT's tool use follows the ReAct (Reasoning + Acting) pattern discussed in Week 4. When a user's message requires external capabilities — running code, searching the web, generating images, reading files — the model decides which tools to invoke. This decision is made by the model itself, not by a rule-based router.
+
+The tool dispatch system works as follows:
+
+1. The system prompt includes descriptions of available tools (code interpreter, web browser, DALL-E, file reader, etc.).
+2. The model generates a structured tool call (function name + arguments) when it determines a tool is needed.
+3. The orchestration layer executes the tool call and feeds the result back to the model.
+4. The model generates the final response incorporating the tool result.
+
+This can chain: the model might search the web, then write code to analyze the search results, then generate a visualization of the analysis. Each step is a separate tool call with the full conversation context maintained.
+
+### 4.2 Code Interpreter Sandboxing
+
+The Code Interpreter (now called Advanced Data Analysis) is one of the most impressive production sandboxing systems in consumer software. It runs arbitrary Python code submitted by users — in a secure, isolated environment that cannot access the internet, cannot persist state across sessions (by default), and cannot affect other users' environments.
+
+The sandbox architecture uses container-based isolation: each user session gets a fresh container with a pre-configured Python environment (NumPy, Pandas, Matplotlib, etc.). The container has resource limits (CPU time, memory, disk), and the execution is monitored for runaway processes. File I/O is scoped to a session-specific directory.
+
+The key engineering decision is **what to include in the sandbox**. Too few libraries and users cannot do useful work. Too many and the container image becomes enormous, slow to start, and increases the attack surface. The chosen set (scientific Python stack + common data formats) covers roughly 90% of user needs while keeping the container image manageable.
+
+### 4.3 Persistent Memory
+
+ChatGPT's memory system is a production example of long-term memory for conversational AI. The system maintains a per-user memory store — a collection of facts extracted from conversations that persist across sessions.
+
+The memory pipeline:
+1. After each conversation, a background process analyzes the exchange for memorable facts ("user is a Python developer", "user prefers concise explanations").
+2. Facts are extracted, deduplicated against existing memory, and stored.
+3. At the start of each new conversation, relevant memories are retrieved and injected into the system prompt.
+
+This is, architecturally, a specialized RAG system where the "documents" are extracted facts and the "query" is the current conversation context.
+
+<ConceptCheck id="cc-3" />
+
+### 4.4 Multi-Modal Pipeline
+
+The multi-modal pipeline (vision, audio, image generation) is a routing layer: the system classifies the input modality, routes to the appropriate model (GPT-4V for vision, Whisper for audio, DALL-E for image generation), and integrates the results back into the conversation context. The challenge is maintaining coherent conversation state across modality switches — when a user uploads an image, asks a question about it, then asks a follow-up question about the text in the image, the system must maintain the visual context across turns.
+
+---
+
+## 5. Enterprise Support Bots
+
+Enterprise customer support bots are less glamorous than the previous examples but arguably more instructive. They operate under constraints that consumer products do not: strict compliance requirements, integration with legacy systems, human escalation paths, and the need to handle 90% of queries automatically while seamlessly handing off the remaining 10% to human agents.
+
+### 5.1 The Three-Stage Architecture
+
+The dominant architecture for enterprise support bots follows a three-stage pipeline:
+
+**Stage 1: Intent Classification.** Classify the user's message into a predefined taxonomy of intents (billing question, technical support, account management, complaint, etc.). This can be an LLM call with a structured output schema, a fine-tuned classifier, or a hybrid. The intent determines the routing.
+
+**Stage 2: RAG-Based Response Generation.** For each intent category, there is a curated knowledge base — product documentation, FAQ databases, policy documents, troubleshooting guides. The system retrieves relevant passages and generates a response grounded in the knowledge base. This grounding is non-negotiable in enterprise contexts: the bot must not hallucinate policy information.
+
+**Stage 3: Agent Escalation.** When the system detects that it cannot confidently resolve the query (low confidence score, user frustration signals, explicit escalation request, query touches sensitive topics), it hands off to a human agent. The handoff includes the full conversation history, the retrieved knowledge base passages, and the system's assessment of the query — so the human agent does not start from scratch.
+
+```python
+# Enterprise support bot: three-stage routing
+from dataclasses import dataclass
+
+@dataclass
+class SupportTicket:
+    user_message: str
+    intent: str = ""
+    confidence: float = 0.0
+    response: str = ""
+    escalated: bool = False
+    escalation_reason: str = ""
+
+INTENT_KEYWORDS = {
+    "billing": ["bill", "charge", "payment", "invoice", "refund", "subscription"],
+    "technical": ["error", "bug", "crash", "not working", "broken", "fix"],
+    "account": ["password", "login", "account", "profile", "settings"],
+    "general": ["how", "what", "when", "where", "help"],
+}
+
+KNOWLEDGE_BASE = {
+    "billing": "Billing issues can be resolved in Settings > Billing. Refunds are processed within 5-7 business days.",
+    "technical": "Please try clearing your cache and restarting. If the issue persists, include error logs.",
+    "account": "Password resets are available at /reset-password. Account changes require email verification.",
+    "general": "Visit our help center at help.example.com for detailed guides.",
+}
+
+ESCALATION_TRIGGERS = ["angry", "frustrated", "lawyer", "cancel", "speak to human", "manager"]
+
+def classify_intent(message: str) -> tuple:
+    """Simple keyword-based intent classification."""
+    message_lower = message.lower()
+    scores = {}
+    for intent, keywords in INTENT_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in message_lower)
+        scores[intent] = score
+    best_intent = max(scores, key=scores.get)
+    total = sum(scores.values()) or 1
+    confidence = scores[best_intent] / total
+    return best_intent, confidence
+
+def check_escalation(message: str, confidence: float) -> tuple:
+    """Check if the query should be escalated to a human."""
+    message_lower = message.lower()
+    for trigger in ESCALATION_TRIGGERS:
+        if trigger in message_lower:
+            return True, f"Escalation trigger detected: '{trigger}'"
+    if confidence < 0.4:
+        return True, f"Low confidence: {confidence:.2f}"
+    return False, ""
+
+def process_support_query(message: str) -> SupportTicket:
+    """Process a support query through the three-stage pipeline."""
+    ticket = SupportTicket(user_message=message)
+
+    # Stage 1: Intent classification
+    ticket.intent, ticket.confidence = classify_intent(message)
+
+    # Stage 2: Check escalation
+    ticket.escalated, ticket.escalation_reason = check_escalation(message, ticket.confidence)
+
+    if ticket.escalated:
+        ticket.response = "I'm connecting you with a support specialist who can help further."
+    else:
+        # Stage 3: RAG-based response (simplified)
+        ticket.response = KNOWLEDGE_BASE.get(ticket.intent, KNOWLEDGE_BASE["general"])
+
+    return ticket
+
+# Test
+queries = [
+    "I was charged twice for my subscription",
+    "The app keeps crashing when I open settings",
+    "I'm so frustrated, I want to speak to a human!",
+    "How do I change my profile picture?",
+]
+
+for q in queries:
+    ticket = process_support_query(q)
+    status = "ESCALATED" if ticket.escalated else "AUTO-RESOLVED"
+    print(f"[{status}] Intent: {ticket.intent} (conf: {ticket.confidence:.2f}) | {q[:50]}")
+```
+
+### 5.2 Compliance Constraints
+
+Enterprise bots operate under regulatory constraints that consumer AI products do not. In financial services, the bot cannot provide investment advice. In healthcare, it cannot diagnose conditions. In any regulated industry, the bot must not promise things the company cannot deliver.
+
+These constraints are enforced through multiple layers: system prompt instructions (soft guardrails), output classifiers that check responses before delivery (hard guardrails), and intent-based routing that redirects sensitive topics to human agents (architectural guardrails). Defense in depth. No single layer is sufficient.
+
+### 5.3 Human Handoff Design
+
+The handoff from bot to human is where most enterprise deployments fail. A bad handoff forces the user to repeat everything. A good handoff gives the human agent: (1) the full conversation transcript, (2) the classified intent, (3) the retrieved knowledge base passages, (4) the bot's attempted responses, and (5) a suggested resolution path.
+
+The best systems also provide **warm handoff** — the bot tells the user "I'm connecting you with a specialist in billing, and I've shared our conversation with them so you won't need to repeat yourself." This single sentence dramatically improves user satisfaction.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 6. Cross-Cutting Themes
+
+Having dissected five very different systems, let us extract the patterns that recur across all of them.
+
+### 6.1 Universal Use of Retrieval
+
+Every system we examined uses some form of retrieval-augmented generation, even when it is not obvious:
+
+| System | Retrieval Source | Retrieval Method |
+|--------|-----------------|------------------|
+| Copilot | Open editor tabs, codebase | Heuristic + relevance scoring |
+| Cursor | Full codebase semantic index | Vector similarity search |
+| Perplexity | Live web | BM25 + neural reranking |
+| ChatGPT | User memory store | Fact retrieval by relevance |
+| Enterprise bots | Knowledge base documents | Standard RAG pipeline |
+
+RAG is not a feature. It is a **fundamental architectural pattern** for connecting LLMs to contextual information. Every production system uses it in some form.
+
+### 6.2 Latency Is Architecture
+
+Every system we examined has an explicit latency budget that shapes its architecture. Copilot's 150ms budget forces a small model for inline completions. Perplexity's 3-5 second budget forces aggressive parallelism. ChatGPT's streaming approach masks latency through progressive rendering.
+
+The latency budget is not a performance optimization — it is an architectural constraint that determines which designs are feasible. A system that must respond in 150ms cannot use a 70B-parameter model. A system that has 5 seconds can afford a web crawl. Start every design with the latency budget.
+
+### 6.3 Evaluation Is Continuous
+
+None of these systems shipped once and stopped measuring. Every system has continuous evaluation:
+
+- **Copilot** measures acceptance rate — the fraction of suggestions users accept. This is the ultimate metric because it captures quality, relevance, and timing in a single number.
+- **Perplexity** measures answer quality through citation accuracy, factual correctness (verified against sources), and user engagement (click-through on sources).
+- **ChatGPT** uses human preference data (thumbs up/down) to continuously improve through RLHF and direct preference optimization.
+- **Enterprise bots** measure resolution rate, escalation rate, customer satisfaction scores, and compliance audit pass rates.
+
+Evaluation is not a phase. It is a system component that runs continuously and feeds back into every other component.
+
+### 6.4 Model Routing Is Standard
+
+No production system uses a single model for all tasks. Every system routes between models based on task complexity, latency requirements, and cost constraints. This is not an optimization — it is a requirement. The model that gives the best quality is too slow for real-time completions. The model that is fast enough for real-time completions is not good enough for complex reasoning. Routing is the architectural pattern that reconciles this tension.
+
+---
+
+## Summary
+
+The five systems we studied — Copilot, Cursor, Perplexity, ChatGPT, and enterprise support bots — look very different on the surface. But at the architectural level, they share deep structural similarities: retrieval-augmented generation as a core pattern, explicit latency budgets that shape architecture, continuous evaluation feedback loops, and multi-model routing. In Lecture 2, we will formalize these patterns into a systematic design framework that you can apply to any AI system.

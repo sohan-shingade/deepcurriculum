@@ -1,0 +1,52 @@
+{
+  "readings": [
+    {
+      "title": "A Primer on Memory Consistency and Cache Coherence (2nd Edition)",
+      "authors": "Vijay Nagarajan, Daniel J. Sorin, Mark D. Hill, David A. Wood",
+      "type": "textbook",
+      "url": "https://link.springer.com/book/10.1007/978-3-031-01764-3",
+      "description": "The definitive reference on cache coherence protocols. Chapters 6-9 cover MESI, directory protocols, and snooping in detail. Free PDF available from the authors.",
+      "required": true
+    },
+    {
+      "title": "The Art of Multiprocessor Programming (Revised Edition)",
+      "authors": "Maurice Herlihy, Nir Shavit",
+      "type": "textbook",
+      "url": "https://www.elsevier.com/books/the-art-of-multiprocessor-programming/herlihy/978-0-12-415950-1",
+      "description": "Chapters 5-7 cover spinlocks (TAS, TTAS, MCS), and Chapters 10-11 cover lock-free data structures (Treiber stack, Michael-Scott queue). Excellent treatment of the ABA problem.",
+      "required": true
+    },
+    {
+      "title": "Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors",
+      "authors": "John M. Mellor-Crummey, Michael L. Scott",
+      "type": "paper",
+      "url": "https://dl.acm.org/doi/10.1145/103727.103729",
+      "description": "The original 1991 paper introducing the MCS lock. Won the Dijkstra Prize in Distributed Computing (2006). Clearly presents the queue-based lock algorithm and proves its scalability properties.",
+      "required": false
+    },
+    {
+      "title": "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms",
+      "authors": "Maged M. Michael, Michael L. Scott",
+      "type": "paper",
+      "url": "https://www.cs.rochester.edu/~scott/papers/1996_PODC_queues.pdf",
+      "description": "The 1996 paper introducing the Michael-Scott lock-free queue, which remains the standard lock-free FIFO queue algorithm used in Java's ConcurrentLinkedQueue and many other libraries.",
+      "required": false
+    },
+    {
+      "title": "CXL Consortium: About CXL",
+      "authors": "CXL Consortium",
+      "type": "specification",
+      "url": "https://computeexpresslink.org/about-cxl/",
+      "description": "Official overview of CXL technology including device types, sub-protocols (CXL.io, CXL.cache, CXL.mem), and the memory pooling/sharing capabilities introduced in CXL 3.0.",
+      "required": false
+    },
+    {
+      "title": "What Every Programmer Should Know About Memory",
+      "authors": "Ulrich Drepper",
+      "type": "paper",
+      "url": "https://people.freebsd.org/~lstewart/articles/cpumemory.pdf",
+      "description": "Comprehensive 114-page paper covering DRAM, caches, NUMA, and practical optimization techniques. Section 6 covers multi-processor support and NUMA-aware programming in detail.",
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A Compare-and-Swap (CAS) operation attempts CAS(addr, expected=5, new=10). The current value at addr is 7. What happens?",
+      "options": [
+        "The value at addr is set to 10 and CAS returns True",
+        "The value at addr is set to 10 and CAS returns False",
+        "The value at addr remains 7 and CAS returns False",
+        "The value at addr is set to 5 and CAS returns True"
+      ],
+      "correct": 2,
+      "explanation": "CAS compares the current value at the address (7) with the expected value (5). Since $7 \\neq 5$, the comparison fails. The memory location is left unchanged (still 7), and CAS returns False. The calling code would typically retry with the new current value. This is the fundamental pattern of optimistic concurrency: prepare an update assuming no conflict, attempt the CAS, and retry if someone else modified the value in the meantime."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Why does the Test-and-Test-and-Set (TTAS) lock generate less bus traffic than a simple Test-and-Set (TAS) lock under contention?",
+      "options": [
+        "TTAS uses fewer atomic instructions overall",
+        "TTAS spins on a local cached copy (Shared state) instead of issuing atomic bus transactions on every iteration",
+        "TTAS acquires the cache line in Exclusive state, preventing other cores from accessing it",
+        "TTAS uses a different cache coherence protocol that is more efficient"
+      ],
+      "correct": 1,
+      "explanation": "In a TAS lock, every spin iteration executes an atomic exchange, which requires the cache line in Modified state. With N cores spinning, the line bounces between all N cores on every iteration (each atomic exchange is a bus transaction). In TTAS, the spinning phase uses a regular load (non-atomic read) that hits the local cache in Shared state --- no bus traffic. Only when the load sees the lock is free (value = 0) does the thread attempt the expensive atomic exchange. While the lock is held, N cores spin silently in their local caches. This reduces bus transactions from O(N) per iteration to O(N) per lock release."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In a Treiber stack, Thread A reads head=X and head.next=Y, then gets preempted. Thread B pops X, pops Y, pushes X back. Thread A resumes and successfully CAS(head, X, Y). What problem does this illustrate?",
+      "options": [
+        "Deadlock --- both threads are waiting for each other",
+        "Priority inversion --- Thread A should have higher priority",
+        "The ABA problem --- CAS succeeds but the data structure state has changed",
+        "A race condition due to missing memory fences"
+      ],
+      "correct": 2,
+      "explanation": "This is the ABA problem. Thread A's CAS succeeds because head is still X (the A-B-A pattern: value was X, changed to something else, changed back to X). But Y is no longer the correct next node --- it was popped and may have been freed or reused. Thread A sets head=Y, corrupting the stack. The CAS cannot distinguish 'unchanged' from 'changed and changed back.' Solutions include tagged pointers (pairing the pointer with a monotonically increasing version counter so the CAS fails even if the pointer value recurs) and hazard pointers (preventing premature memory reclamation)."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "On x86 (TSO memory model), which of the following reorderings is allowed by the hardware?",
+      "options": [
+        "A load can be reordered before a preceding store to a different address",
+        "Two stores to different addresses can be reordered",
+        "Two loads from different addresses can be reordered",
+        "A store can be reordered before a preceding load to a different address"
+      ],
+      "correct": 0,
+      "explanation": "Total Store Order (TSO) allows exactly one type of reordering: a load can be satisfied from the core's store buffer before a preceding store to a different address becomes visible to other cores (store-to-load reordering). Stores are never reordered with respect to other stores (store-store order is preserved). Loads are never reordered with respect to other loads (load-load order is preserved). And a load always returns the most recent store to the same address (store-load forwarding from the store buffer). This makes x86 much easier to program than ARM or RISC-V, which allow all four types of reordering."
+    }
+  ]
+}

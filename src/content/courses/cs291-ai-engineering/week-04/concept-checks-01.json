@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In the ReAct paradigm, what is the key advantage of interleaving reasoning traces (Thoughts) with tool calls (Actions) rather than separating them?",
+      "options": [
+        "It reduces the number of tokens needed per interaction",
+        "It allows the model to ground its reasoning in real observations and make informed decisions about next steps",
+        "It eliminates the possibility of hallucination",
+        "It allows parallel execution of multiple tool calls"
+      ],
+      "correct": 1,
+      "explanation": "The core insight of ReAct (Yao et al. 2022) is that interleaving reasoning and acting allows the model to reason about observations from tool calls before deciding the next action. Without reasoning traces, the model makes blind tool calls. Without actions, the model reasons without grounding in real data. The interleaving creates a feedback loop where each thought is informed by the latest observation, and each action is justified by explicit reasoning. This does NOT eliminate hallucination or reduce tokens — it actually increases token usage — but it dramatically improves decision quality."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A user asks an agent: 'Compare the stock prices of AAPL, GOOGL, and MSFT.' The agent has a `get_stock_price(ticker)` tool. Which architecture pattern is MOST appropriate?",
+      "options": [
+        "ReAct (simple loop) — call get_stock_price three times sequentially",
+        "Plan-then-Execute — create a plan document first, then execute each step",
+        "LLM Compiler (parallel execution) — call all three get_stock_price lookups in parallel, then compare",
+        "No agent needed — hard-code the three API calls in a pipeline"
+      ],
+      "correct": 2,
+      "explanation": "The three stock price lookups are independent of each other — AAPL's price does not depend on GOOGL's. This is a textbook case for the LLM Compiler pattern: identify independent operations, execute them in parallel, then merge results. Sequential ReAct would work but adds unnecessary latency (3x the wall-clock time). Plan-then-Execute adds overhead for a simple task. A hard-coded pipeline would work too, but lacks flexibility for follow-up questions. The parallel pattern gives the best latency while maintaining agent flexibility."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An agent has been running for 15 steps and the actions for the last 6 steps are: [search('X'), calculate(Y), search('X'), calculate(Y), search('X'), calculate(Y)]. What failure mode is this, and what is the primary mitigation?",
+      "options": [
+        "Context window exhaustion — increase the context window size",
+        "Tool misuse — improve tool descriptions and add examples",
+        "Infinite loop — implement loop detection and a hard step limit",
+        "Hallucinated tool names — add strict tool name validation"
+      ],
+      "correct": 2,
+      "explanation": "This is a classic infinite loop: the agent is repeating the same sequence of actions (search followed by calculate) without making progress. The observations from these tools are apparently not changing the agent's behavior. Primary mitigations are: (1) loop detection — compare recent action sequences to detect repeating patterns, and (2) hard step limits — terminate the agent after a maximum number of steps regardless. In this case, a window-3 loop detector would catch the repeating [search, calculate, search] pattern. Step limits are the ultimate safety net and should always be present in production systems."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "You are building a customer support agent that answers questions about billing. Users ask the same 20 types of questions 90% of the time. Which approach is most appropriate?",
+      "options": [
+        "A full ReAct agent with tools for database lookup, calculation, and email",
+        "A deterministic pipeline that classifies the question type and routes to a pre-built handler, with an agent fallback for the 10% edge cases",
+        "An LLM Compiler agent that parallelizes all possible lookups upfront",
+        "A Plan-then-Execute agent that creates a detailed plan for each question"
+      ],
+      "correct": 1,
+      "explanation": "This is one of the 'when NOT to use an agent' cases. If 90% of questions fall into 20 known categories, a deterministic pipeline is faster, cheaper, more reliable, and easier to debug. Classify the question, route to the right handler, done. For the 10% that don't match a known pattern, fall back to an agent. This hybrid approach gives you the reliability of deterministic code for common cases and the flexibility of an agent for edge cases. Using a full agent for every question wastes tokens, adds latency, and introduces unnecessary failure modes for the 90% of questions that could be handled deterministically."
+    }
+  ]
+}

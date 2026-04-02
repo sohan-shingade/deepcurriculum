@@ -1,0 +1,64 @@
+{
+  "readings": [
+    {
+      "title": "Build Fast, Trade Fast: FPGA-Based High-Frequency Trading Using High-Level Synthesis",
+      "authors": "Andrew Boutros, Abdelrahman Eldamaty, Muhsen Owaida, et al.",
+      "url": "https://ieeexplore.ieee.org/document/8279781/",
+      "note": "The definitive academic paper demonstrating a complete HFT system in HLS. Achieved 270 ns average tick-to-trade latency (42 clock cycles at 156.2 MHz) with <8% logic and ~22% BRAM utilization on Kintex UltraScale. Includes network stack, FAST parser, order book, strategy, and order gateway."
+    },
+    {
+      "title": "A Low-Latency Library in FPGA Hardware for High-Frequency Trading",
+      "authors": "John W. Lockwood and Aditya Gupte",
+      "url": "https://ieeexplore.ieee.org/document/6299067/",
+      "note": "IEEE HOTI 2012 paper establishing the foundational library approach to FPGA trading systems. Demonstrated 1 microsecond end-to-end latency at 10 Gbps, 2 orders of magnitude faster than software. Introduced reusable IP blocks for networking and financial protocols."
+    },
+    {
+      "title": "Low Latency Book Handling in FPGA for High Frequency Trading",
+      "authors": "Lockwood et al.",
+      "url": "https://ieeexplore.ieee.org/document/6868785/",
+      "note": "Achieved 253 ns average order book latency across 119,275 instruments using cuckoo hashing and 144 Mbit QDR SRAM. Demonstrates O(1) worst-case lookup for symbol-to-book mapping -- critical for multi-instrument market making."
+    },
+    {
+      "title": "FPGA for High-Frequency Trading: Reducing Latency in Financial Systems (IEEE 2024)",
+      "authors": "IEEE",
+      "url": "https://ieeexplore.ieee.org/document/10841781/",
+      "note": "Recent IEEE publication demonstrating 480 ns average latency using FPGA hardware acceleration, with 'significant improvement over CPU and GPU-based implementations.' Represents the current state of published academic results."
+    },
+    {
+      "title": "Building Low-Latency Order Books with Hybrid Binary-Linear Search on FPGAs",
+      "authors": "IEEE 2023",
+      "url": "https://ieeexplore.ieee.org/document/10296447/",
+      "note": "Novel hybrid data structure: linear search for top-of-book levels (where 90%+ of activity occurs) combined with binary search for deeper levels. Demonstrates how exploiting empirical market microstructure patterns can optimize hardware designs."
+    },
+    {
+      "title": "How Are FPGAs Used in Trading?",
+      "authors": "IMC Trading",
+      "url": "https://www.imc.com/us/articles/how-are-fpgas-used-in-trading",
+      "note": "First-person perspective from one of the world's largest market-making firms on building FPGA infrastructure in-house. Discusses the CPU-FPGA-ASIC trade-off, the 2-3 hour compilation cycle, and why hardware-software co-design is essential. Rare transparency from a top-tier prop trading firm."
+    },
+    {
+      "title": "What is Tick-to-Trade Latency?",
+      "authors": "Databento",
+      "url": "https://databento.com/microstructure/tick-to-trade",
+      "note": "Precise definition of tick-to-trade latency and current industry benchmarks. Notes that top-tier firms achieve 'single-digit nanosecond' latency as of 2024 and that moving from software to FPGA delivers ~500 ns improvement -- a 'massive leap in trading terms.'"
+    },
+    {
+      "title": "FIX Trading Community -- FAST Protocol Specification",
+      "authors": "FIX Trading Community",
+      "url": "https://www.fixtrading.org/standards/fast-online/",
+      "note": "Official specification for the FAST (FIX Adapted for STreaming) protocol. Covers stop-bit encoding, presence maps, field operators (constant, copy, delta, increment), template structure, and data types. Essential reference for implementing feed decoders."
+    },
+    {
+      "title": "ICE Global Network -- Colocation Mahwah Technical Specifications",
+      "authors": "Intercontinental Exchange (ICE)",
+      "url": "https://www.theice.com/publicdocs/IGN_Colocation_Mahwah_Technical_Specs.pdf",
+      "note": "Official NYSE/ICE colocation specifications including cable equalization policy, Optical Backscatter Reflectometry verification, and the principle that 'a foot of cable equates to one nanosecond's difference.' Documents the physical infrastructure of modern electronic markets."
+    },
+    {
+      "title": "FPGA Acceleration in HFT: Architecture and Implementation",
+      "authors": "Shailesh Nair",
+      "url": "https://medium.com/@shailamie/fpga-acceleration-in-hft-architecture-and-implementation-68adab59f7af",
+      "note": "Detailed per-stage latency breakdown of an FPGA trading pipeline on Xilinx Virtex UltraScale+. Documents ITCH feed processing at 8.3M messages/sec, 20-25 ns parsing latency, and 35% LUT / 25% BRAM utilization. Good complement to the academic papers."
+    }
+  ]
+}

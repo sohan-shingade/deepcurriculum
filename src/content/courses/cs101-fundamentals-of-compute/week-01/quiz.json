@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 1: Transistors and Logic",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Silicon has a bandgap of 1.12 eV. The intrinsic carrier concentration at room temperature is approximately $1.5 \\times 10^{10}$ cm$^{-3}$, while silicon has $5 \\times 10^{22}$ atoms/cm$^3$. What fraction of silicon atoms contribute free carriers at room temperature?",
+      "options": [
+        "About 1 in every $10^6$ atoms",
+        "About 1 in every $10^{12}$ atoms",
+        "About 1 in every $10^{18}$ atoms",
+        "About 1 in every $10^3$ atoms"
+      ],
+      "correct": 1,
+      "explanation": "The fraction is $n_i / N_{atoms} = 1.5 \\times 10^{10} / 5 \\times 10^{22} = 3 \\times 10^{-13}$, meaning roughly 1 in every $3 \\times 10^{12}$ atoms contributes a free carrier. This is why pure (intrinsic) silicon is a poor conductor — the bandgap is large enough that thermal energy at room temperature frees very few electrons. Doping at $10^{17}$ cm$^{-3}$ increases the carrier count by seven orders of magnitude, making silicon useful for electronics."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An NMOS transistor with $V_{th} = 0.4$ V is biased at $V_{GS} = 0.9$ V and $V_{DS} = 0.3$ V. In which region does the transistor operate?",
+      "options": [
+        "Cutoff, because $V_{DS}$ is too low",
+        "Saturation, because $V_{GS} > V_{th}$",
+        "Linear (triode), because $V_{DS} < V_{GS} - V_{th}$",
+        "Breakdown, because $V_{GS}$ is too high"
+      ],
+      "correct": 2,
+      "explanation": "First check: $V_{GS} = 0.9$ V $> V_{th} = 0.4$ V, so the transistor is ON (not cutoff). Next, compute $V_{GS} - V_{th} = 0.9 - 0.4 = 0.5$ V. Since $V_{DS} = 0.3$ V $< 0.5$ V $= V_{GS} - V_{th}$, the channel extends fully from source to drain (not pinched off), and the transistor is in the linear (triode) region. The current follows $I_D = \\mu_n C_{ox} \\frac{W}{L}[(V_{GS} - V_{th})V_{DS} - V_{DS}^2/2]$, which makes the transistor behave approximately as a voltage-controlled resistor."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a CMOS inverter, what happens when the input transitions from 0 to 1?",
+      "options": [
+        "PMOS turns on, NMOS turns off, output rises to $V_{DD}$",
+        "PMOS turns off, NMOS turns on, output falls to ground",
+        "Both PMOS and NMOS turn on, creating a short circuit",
+        "Both PMOS and NMOS turn off, leaving the output floating"
+      ],
+      "correct": 1,
+      "explanation": "When input = 1 ($V_{DD}$): for the NMOS, $V_{GS} = V_{DD} > V_{th}$, so it turns ON, connecting the output to ground. For the PMOS, $V_{GS} = V_{DD} - V_{DD} = 0$, meaning $|V_{GS}| = 0 < |V_{th}|$, so it turns OFF. The output is pulled to ground (logic 0), which is the complement of the input. During the transition, there is a brief moment when both transistors are partially on (causing short-circuit current $P_{SC}$), but in the steady state, exactly one transistor conducts."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the CMOS dynamic power equation $P_{dyn} = \\alpha C_L V_{DD}^2 f$, reducing the supply voltage $V_{DD}$ from 0.8 V to 0.6 V (a 25% reduction) results in what approximate power reduction?",
+      "options": [
+        "25% power reduction",
+        "44% power reduction",
+        "50% power reduction",
+        "56% power reduction"
+      ],
+      "correct": 1,
+      "explanation": "Power scales with $V_{DD}^2$. Original: $P_1 \\propto (0.8)^2 = 0.64$. New: $P_2 \\propto (0.6)^2 = 0.36$. Reduction: $(0.64 - 0.36)/0.64 = 0.4375 \\approx 44\\%$. This quadratic relationship is why voltage scaling is the most powerful lever for reducing dynamic power. However, reducing $V_{DD}$ also reduces the gate overdrive $(V_{GS} - V_{th})$, slowing the transistors. And reducing $V_{th}$ to compensate increases subthreshold leakage exponentially. This is the fundamental power-performance tradeoff in CMOS design."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why did the semiconductor industry transition from planar MOSFETs to FinFETs at the 22nm node?",
+      "options": [
+        "FinFETs are cheaper to manufacture than planar transistors",
+        "Planar transistors could not be made smaller than 22nm",
+        "The planar gate lost electrostatic control of the channel at short gate lengths, causing excessive leakage from short-channel effects",
+        "FinFETs use less silicon area per transistor"
+      ],
+      "correct": 2,
+      "explanation": "In a planar MOSFET, the gate controls the channel from only one side (the top). As gate lengths shrank below ~30nm, the electric field from the drain began to dominate the channel (short-channel effects), causing drain-induced barrier lowering (DIBL), increased subthreshold leakage, and unreliable threshold voltages. The FinFET wraps the gate around three sides of a thin vertical fin, providing much better electrostatic control. This reduced leakage from 30-40% of total power at 28nm planar to 15-25% at 16/14nm FinFET. FinFETs are actually more expensive to manufacture, not cheaper."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the output of a 2-input CMOS NOR gate when input A = 0 and input B = 1?",
+      "options": [
+        "Output = 1 (both PMOS transistors conduct)",
+        "Output = 0 (NMOS_B conducts, creating path to ground)",
+        "Output = undefined (both networks conduct simultaneously)",
+        "Output = 1 (PMOS_A conducts, creating path to $V_{DD}$)"
+      ],
+      "correct": 1,
+      "explanation": "In a CMOS NOR gate, the NMOS transistors are in parallel and the PMOS transistors are in series. With B = 1, NMOS_B turns ON, creating a path from output to ground regardless of NMOS_A. Meanwhile, for the PMOS series path: PMOS_A turns ON (input A = 0), but PMOS_B turns OFF (input B = 1). Since the PMOS transistors are in series, both must be ON for a path from $V_{DD}$, so the PUN is disconnected. The output is pulled to ground: Y = 0. This matches NOR: $\\overline{0 + 1} = \\overline{1} = 0$."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Apply De Morgan's law to simplify $\\overline{\\overline{A} \\cdot \\overline{B}}$.",
+      "options": [
+        "$\\overline{A} + \\overline{B}$",
+        "$A \\cdot B$",
+        "$A + B$",
+        "$\\overline{A + B}$"
+      ],
+      "correct": 2,
+      "explanation": "By De Morgan's first law: $\\overline{X \\cdot Y} = \\overline{X} + \\overline{Y}$. Here $X = \\overline{A}$ and $Y = \\overline{B}$. So $\\overline{\\overline{A} \\cdot \\overline{B}} = \\overline{\\overline{A}} + \\overline{\\overline{B}} = A + B$. This is exactly the relationship we used to build OR from NAND: $A + B = \\overline{\\overline{A} \\cdot \\overline{B}} = \\text{NAND}(\\text{NOT}(A), \\text{NOT}(B))$."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following sets of gates is NOT functionally complete (universal)?",
+      "options": [
+        "{NAND}",
+        "{NOR}",
+        "{AND, NOT}",
+        "{AND, OR}"
+      ],
+      "correct": 3,
+      "explanation": "{AND, OR} without NOT is NOT functionally complete. You cannot produce the complement of any signal using only AND and OR. Formally, both AND and OR are monotone functions: if any input increases (0 to 1), the output can only increase or stay the same. But NOT is anti-monotone. Since no composition of monotone functions can produce a non-monotone function, {AND, OR} cannot implement NOT. In contrast, {NAND} alone is universal (we proved it in lecture), {NOR} is universal (by dual arguments), and {AND, NOT} is universal because OR can be derived via De Morgan's: $A + B = \\overline{\\overline{A} \\cdot \\overline{B}}$."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "TSMC N2 uses GAA nanosheet transistors with a density of approximately 350 MTr/mm$^2$. Intel 18A uses RibbonFET (GAA) with PowerVia (BSPDN) at approximately 238 MTr/mm$^2$. What key advantage does Intel 18A's PowerVia provide despite its lower raw density?",
+      "options": [
+        "PowerVia enables higher clock frequencies by reducing gate oxide thickness",
+        "PowerVia moves power wiring to the backside of the wafer, freeing front-side metal for signal routing and reducing IR drop",
+        "PowerVia eliminates the need for FinFET structures",
+        "PowerVia reduces the minimum gate pitch to below 40nm"
+      ],
+      "correct": 1,
+      "explanation": "PowerVia is Intel's backside power delivery network (BSPDN) technology. In conventional chips, power and signal wiring share the same front-side metal layers, competing for routing resources. PowerVia moves power supply wiring (VDD and ground) to the back of the wafer. This provides two major benefits: (1) front-side metal layers are freed for signal routing, reducing wire length and interconnect delay, and (2) power delivery resistance is lower, reducing IR drop across the chip. Intel claims an 8-10% density benefit from PowerVia alone. TSMC's N2P variant also adds BSPDN, recognizing its importance. At advanced nodes, wire delay increasingly dominates gate delay, making routing efficiency as important as transistor density."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Given the 4-variable K-map below, what is a valid minimized sum-of-products expression?\n\n```\n           CD=00  CD=01  CD=11  CD=10\n  AB=00  |  1   |  0   |  0   |  1   |\n  AB=01  |  1   |  0   |  0   |  1   |\n  AB=11  |  1   |  0   |  0   |  1   |\n  AB=10  |  1   |  0   |  0   |  1   |\n```",
+      "options": [
+        "$F = \\overline{C}\\overline{D} + C\\overline{D}$",
+        "$F = \\overline{D}$",
+        "$F = \\overline{C}$",
+        "$F = \\overline{C} + \\overline{D}$"
+      ],
+      "correct": 1,
+      "explanation": "Looking at the K-map, the 1s appear in columns CD=00 and CD=10 — these are exactly the columns where D=0. The 1s span all four rows (all values of A and B), so variables A and B are eliminated. The group covers 8 cells (the entire left column and right column, which are adjacent due to Gray code wrapping), yielding the single term $\\overline{D}$. Option A ($\\overline{C}\\overline{D} + C\\overline{D}$) is logically equivalent but not minimized — it factors to $\\overline{D}(\\overline{C} + C) = \\overline{D}$. The K-map makes this simplification visually obvious: one large group covering all 8 cells."
+    }
+  ]
+}

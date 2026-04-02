@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "Attention Is All You Need",
+      "authors": "Vaswani et al. 2017",
+      "url": "https://arxiv.org/abs/1706.03762",
+      "note": "The original transformer paper. Read sections 1-3 carefully — the architecture described here is the foundation of every modern LLM. Pay particular attention to the scaled dot-product attention derivation and the multi-head attention formulation."
+    },
+    {
+      "title": "Scaling Laws for Neural Language Models",
+      "authors": "Kaplan et al. 2020",
+      "url": "https://arxiv.org/abs/2001.08361",
+      "note": "OpenAI's empirical study establishing power-law relationships between model performance and compute, data, and parameters. Key insight: performance is predictable as a function of scale, enabling informed decisions about training budgets."
+    },
+    {
+      "title": "Training Compute-Optimal Large Language Models (Chinchilla)",
+      "authors": "Hoffmann et al. 2022",
+      "url": "https://arxiv.org/abs/2203.15556",
+      "note": "DeepMind's correction to Kaplan's scaling laws, demonstrating that most LLMs were undertrained. The Chinchilla-optimal ratio of roughly 20 training tokens per parameter reshaped how the industry trains models."
+    },
+    {
+      "title": "Neural Machine Translation of Rare Words with Subword Units",
+      "authors": "Sennrich, Haddow, and Birch 2016",
+      "url": "https://arxiv.org/abs/1508.07909",
+      "note": "The paper that introduced Byte Pair Encoding (BPE) for NLP tokenization. Understanding BPE is essential for reasoning about token counts, costs, and model behavior on different types of input."
+    },
+    {
+      "title": "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness",
+      "authors": "Dao et al. 2022",
+      "url": "https://arxiv.org/abs/2205.14135",
+      "note": "The key systems paper that made long-context LLMs practical. FlashAttention computes exact attention without materializing the full n×n attention matrix in HBM, achieving 2-4x speedups. Understanding this helps explain why context windows have grown dramatically."
+    }
+  ]
+}

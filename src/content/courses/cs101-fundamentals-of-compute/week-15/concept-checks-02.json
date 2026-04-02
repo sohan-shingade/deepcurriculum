@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "Consider this Verilog code:\n```verilog\nalways @(*) begin\n    if (sel)\n        out = a;\nend\n```\nWhat hardware does this synthesize to, and why is it likely a bug?",
+      "options": [
+        "A 2:1 multiplexer selecting between `a` and ground -- correct and efficient",
+        "A latch that holds `out` at its previous value when `sel=0` -- usually unintended because combinational blocks should not have memory",
+        "A flip-flop that captures `a` on the rising edge of `sel`",
+        "Nothing -- the synthesis tool optimizes it away because the else branch is missing"
+      ],
+      "correct": 1,
+      "explanation": "When `sel=1`, `out` gets `a`. When `sel=0`, the code does not assign `out`, so the synthesis tool must preserve its previous value. The only combinational element that can hold a value is a latch. Latches are level-sensitive (not edge-triggered like flip-flops) and are almost always unintended in FPGA designs -- they cause timing analysis difficulties, are sensitive to glitches, and indicate the designer forgot an `else` branch. The fix: `always @(*) begin if (sel) out = a; else out = b; end` -- this synthesizes to a proper 2:1 mux."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In this Verilog code, what happens if you replace `<=` with `=` in the sequential block?\n```verilog\nalways @(posedge clk) begin\n    b <= a;\n    c <= b;\nend\n```",
+      "options": [
+        "No difference -- both create the same hardware",
+        "With `<=` (non-blocking), `b` and `c` capture the OLD values of `a` and `b` simultaneously, creating a 2-stage shift register. With `=` (blocking), `c` gets the NEW value of `b` (which is `a`), so both `b` and `c` get `a` -- the shift register breaks.",
+        "With `=`, the code won't compile",
+        "With `<=`, only `c` is updated; `b` is not"
+      ],
+      "correct": 1,
+      "explanation": "Non-blocking assignments (`<=`) model the physical behavior of flip-flops: all right-hand sides are evaluated using values from BEFORE the clock edge, then all left-hand sides are updated simultaneously. So `b` gets the old `a`, and `c` gets the old `b` -- a proper 2-stage pipeline/shift register. With blocking assignments (`=`), `b = a` executes first and immediately updates `b`, then `c = b` uses the NEW value of `b` (which is `a`). Result: both `b` and `c` get `a` in the same cycle. The pipeline is destroyed. This is why the golden rule exists: use `<=` in sequential blocks, `=` in combinational blocks."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A Vitis HLS loop processes 1000 iterations, each requiring 8 clock cycles of computation. Without pipelining, total latency is 8,000 cycles. If you add `#pragma HLS pipeline II=1`, what is the new total latency?",
+      "options": [
+        "1,000 cycles (8x speedup, one iteration per cycle)",
+        "1,007 cycles (pipeline fill of 7 cycles + 1000 iterations at II=1)",
+        "8,000 cycles (pipelining doesn't reduce total latency)",
+        "125 cycles (factor of 8 from 8 pipeline stages)"
+      ],
+      "correct": 1,
+      "explanation": "With pipeline $II=1$, a new iteration starts every clock cycle. The pipeline has 8 stages (since each iteration takes 8 cycles). The first result emerges after 8 cycles (pipeline latency). After that, one result emerges every cycle for the remaining 999 iterations. Total: $8 + (1000 - 1) \\times 1 = 1007$ cycles. The throughput improvement is $8000/1007 \\approx 7.9\\times$, nearly equal to the pipeline depth. This is the single most impactful HLS optimization. The trade-off: 8 sets of pipeline registers are inserted between stages, increasing area."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In an HFT FPGA system, the network stack and protocol parser are typically implemented in hand-written RTL, while the trading strategy may use HLS. Why?",
+      "options": [
+        "HLS cannot implement network protocols",
+        "RTL is always faster than HLS for all components",
+        "The network stack requires cycle-exact, deterministic behavior (clock domain crossing, custom PHY, precise timing) that HLS cannot guarantee, while strategy logic prioritizes development speed over the last nanoseconds of latency",
+        "HLS uses too much power for networking"
+      ],
+      "correct": 2,
+      "explanation": "HLS generates single-clock designs, cannot handle clock domain crossings, cannot instantiate vendor hard IP (Ethernet MACs, SerDes PHYs), and its scheduling may add unwanted latency to protocol state machines. For the network stack, you need cycle-by-cycle control over every wire. However, HLS adds only 2-3x area overhead versus hand-written RTL while reducing development time by 5-10x. The Boutros et al. study (IEEE FPT 2017) showed that an ALL-HLS trading system achieved 270ns average tick-to-trade latency -- proving HLS is viable even for latency-critical work. The practical trade-off: use RTL where every nanosecond counts and cycle-exact control is required, use HLS where faster iteration on strategy logic matters more."
+    }
+  ]
+}

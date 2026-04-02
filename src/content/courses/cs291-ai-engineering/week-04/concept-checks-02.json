@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "When designing a tool schema for an LLM agent, which of the following is MOST important for reliable tool use?",
+      "options": [
+        "Making tool names as short as possible to save tokens",
+        "Using descriptive verb-noun names, typed parameters with descriptions, and clear documentation of what the tool returns",
+        "Providing as many optional parameters as possible so the tool is flexible",
+        "Making the tool accept natural language strings for all parameters to maximize usability"
+      ],
+      "correct": 1,
+      "explanation": "Tool schema design is critical for agent reliability. Descriptive names (e.g., 'search_documents' not 'fn_23') help the model select the right tool. Typed parameters with descriptions enable correct argument construction. Clear return documentation helps the model interpret results. Short names save trivial token counts but hurt selection accuracy. Too many optional parameters confuse the model. Natural language parameters push the parsing problem into the tool, increasing fragility. Patil et al. (2023) in the Gorilla paper showed that schema quality is the single biggest factor in tool use accuracy."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "An agent system has tools for `read_database`, `send_email`, and `delete_record`. From a security perspective, which is the most appropriate trust boundary design?",
+      "options": [
+        "All tools run with the same permissions — the agent is trusted",
+        "`read_database` runs freely, `send_email` requires human confirmation, `delete_record` is disabled entirely in the agent",
+        "`delete_record` requires confirmation, other tools run freely",
+        "All tools require human confirmation for every call"
+      ],
+      "correct": 1,
+      "explanation": "The principle of least privilege demands different trust levels for different risk levels. `read_database` is read-only with no side effects — it is safe to run autonomously. `send_email` has irreversible side effects (you cannot unsend an email) — human confirmation is appropriate. `delete_record` is destructive and high-risk — in most agent architectures, destructive operations should be disabled or require multi-factor confirmation. Requiring confirmation for every tool call (option D) makes the agent useless — the human is doing all the work. Trusting all tools equally (option A) is a security disaster waiting to happen."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the memory scoring formula: score(m) = alpha * recency(m) + beta * importance(m) + gamma * relevance(m, q), what happens if you set alpha = 1, beta = 0, gamma = 0?",
+      "options": [
+        "The system only retrieves the most important memories regardless of when they occurred",
+        "The system retrieves memories most semantically similar to the current query",
+        "The system always retrieves the most recent memories, regardless of their importance or relevance to the current task",
+        "The system retrieves a balanced mix of recent, important, and relevant memories"
+      ],
+      "correct": 2,
+      "explanation": "With alpha=1 (recency weight), beta=0 (importance weight), gamma=0 (relevance weight), the scoring function reduces to score(m) = recency(m). This means only how recently a memory was created matters — the system always returns the newest memories. This is equivalent to a simple sliding window with no semantic awareness. It is the cheapest to compute but the least intelligent: a critical insight from 50 steps ago is discarded in favor of a trivial observation from 2 steps ago. Production systems typically use balanced weights, with relevance getting the highest weight (gamma ~0.5) because retrieving memories pertinent to the current task is usually most valuable."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "The Reflexion pattern (Shinn et al. 2023) improves agent performance by:",
+      "options": [
+        "Fine-tuning the LLM weights after each failed attempt",
+        "Storing natural language reflections about past failures in memory and retrieving them for future similar tasks",
+        "Running multiple agents in parallel and picking the best result",
+        "Using a reward model to score each step and training the agent with reinforcement learning"
+      ],
+      "correct": 1,
+      "explanation": "Reflexion is a training-free approach to agent self-improvement. After a task attempt, the agent generates a natural language reflection ('I searched with too broad a query and wasted 3 steps'). This reflection is stored in episodic memory. On future tasks, relevant reflections are retrieved and included in the prompt, allowing the agent to avoid past mistakes. Crucially, this does NOT involve gradient updates, fine-tuning, or RL — it is purely retrieval-based learning. Shinn et al. showed this simple approach improved HumanEval coding performance from 67% to 91% over several iterations, demonstrating that in-context learning from past experience is surprisingly powerful."
+    }
+  ]
+}

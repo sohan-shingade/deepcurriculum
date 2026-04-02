@@ -1,0 +1,58 @@
+{
+  "readings": [
+    {
+      "title": "A Study of Branch Prediction Strategies",
+      "authors": "James E. Smith",
+      "url": "https://dl.acm.org/doi/10.1145/800052.801871",
+      "note": "The foundational 1981 paper introducing 2-bit saturating counters for branch prediction. Establishes the theoretical framework for dynamic branch prediction that all subsequent work builds upon."
+    },
+    {
+      "title": "Combining Branch Predictors (Technical Report TN-36)",
+      "authors": "Scott McFarling",
+      "url": "https://www.hpl.hp.com/techreports/Compaq-DEC/WRL-TN-36.pdf",
+      "note": "Introduces the gshare predictor and the tournament (hybrid) predictor. The gshare design -- XORing global history with PC to index a prediction table -- remains a foundational technique used in all modern predictors."
+    },
+    {
+      "title": "A Case for (Partially) TAgged GEometric History Length Branch Prediction",
+      "authors": "Andre Seznec",
+      "url": "https://jilp.org/vol8/v8paper1.pdf",
+      "note": "The original TAGE paper (2006). Introduces the idea of tagged predictor tables with geometrically increasing history lengths, which has dominated every Championship Branch Prediction competition since its introduction."
+    },
+    {
+      "title": "Dynamic Branch Prediction with Perceptrons",
+      "authors": "Daniel A. Jimenez and Calvin Lin",
+      "url": "https://www.cs.utexas.edu/~lin/papers/hpca01.pdf",
+      "note": "The HPCA 2001 paper that applies single-layer neural networks (perceptrons) to branch prediction. Key insight: linear scaling with history length versus exponential for table-based designs."
+    },
+    {
+      "title": "Validity of the Single Processor Approach to Achieving Large Scale Computing Capabilities",
+      "authors": "Gene M. Amdahl",
+      "url": "https://dl.acm.org/doi/10.1145/1465482.1465560",
+      "note": "Amdahl's seminal 1967 paper establishing the fundamental limit on speedup from parallelism. Required reading for understanding why the serial fraction dominates performance scaling."
+    },
+    {
+      "title": "Reevaluating Amdahl's Law",
+      "authors": "John L. Gustafson",
+      "url": "https://dl.acm.org/doi/10.1145/42411.42415",
+      "note": "The 1988 paper that complements Amdahl's Law with a scaled (weak scaling) perspective: if you scale the problem size with processor count, the serial fraction becomes less dominant."
+    },
+    {
+      "title": "Branch Prediction Is Not A Solved Problem",
+      "authors": "Various",
+      "url": "https://arxiv.org/pdf/1906.08170",
+      "note": "A 2019 study showing that even with state-of-the-art TAGE-SC-L predictors, modern server workloads still waste an average of 9.2% of cycles due to branch mispredictions. Motivates continued research."
+    },
+    {
+      "title": "Computer Organization and Design: RISC-V Edition, Chapter 4 (The Processor)",
+      "authors": "David A. Patterson and John L. Hennessy",
+      "url": "https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6",
+      "note": "The standard textbook treatment of pipelining, hazards, forwarding, and stalling. Chapter 4 covers the 5-stage RISC-V pipeline in detail with complete datapath diagrams."
+    },
+    {
+      "title": "Zen 5's 2-Ahead Branch Predictor Unit: How a 30-Year-Old Idea Allows for New Tricks",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/zen-5s-2-ahead-branch-predictor-unit-how-30-year-old-idea-allows-for-new-tricks",
+      "note": "Detailed analysis of AMD Zen 5's innovative 2-ahead branch predictor that predicts two taken branches per cycle, doubling fetch throughput for branch-heavy code."
+    }
+  ]
+}

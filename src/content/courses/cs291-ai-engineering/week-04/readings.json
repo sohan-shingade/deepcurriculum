@@ -1,0 +1,59 @@
+{
+  "readings": [
+    {
+      "id": "r1",
+      "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+      "authors": "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao",
+      "year": 2022,
+      "url": "https://arxiv.org/abs/2210.03629",
+      "type": "paper",
+      "description": "The foundational paper that introduced the ReAct paradigm — interleaving reasoning traces (Thoughts) with tool-calling actions in LLM agents. Demonstrates that combining chain-of-thought reasoning with grounded actions outperforms either approach alone on knowledge-intensive tasks (HotpotQA, FEVER) and decision-making tasks (ALFWorld, WebShop). Essential reading for understanding the agent loop that most production systems are built on.",
+      "estimatedMinutes": 45,
+      "priority": "required"
+    },
+    {
+      "id": "r2",
+      "title": "Reflexion: Language Agents with Verbal Reinforcement Learning",
+      "authors": "Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, Shunyu Yao",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2303.11366",
+      "type": "paper",
+      "description": "Introduces the Reflexion framework where agents improve through natural language self-reflection rather than gradient updates. After task attempts, the agent generates verbal reflections about what went wrong and stores them in episodic memory for future retrieval. Achieves 91% pass@1 on HumanEval (up from 67%) and state-of-the-art on AlfWorld and HotpotQA. Key insight: in-context learning from stored reflections can substitute for RL fine-tuning.",
+      "estimatedMinutes": 40,
+      "priority": "required"
+    },
+    {
+      "id": "r3",
+      "title": "Gorilla: Large Language Model Connected with Massive APIs",
+      "authors": "Shishir G. Patil, Tianjun Zhang, Xin Wang, Joseph E. Gonzalez",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2305.15334",
+      "type": "paper",
+      "description": "Addresses the practical challenge of LLM tool use at scale: how do models select and call the right API from thousands of options? Introduces a fine-tuned model and evaluation framework for API calling, demonstrating that tool naming, schema design, and documentation quality significantly impact tool-use accuracy. Important for understanding why tool design is as critical as agent logic.",
+      "estimatedMinutes": 35,
+      "priority": "recommended"
+    },
+    {
+      "id": "r4",
+      "title": "Cognitive Architectures for Language Agents",
+      "authors": "Theodore R. Sumers, Shunyu Yao, Karthik Narasimhan, Thomas L. Griffiths",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2309.02427",
+      "type": "paper",
+      "description": "A comprehensive survey and framework for understanding LLM agent architectures through the lens of cognitive science. Proposes the CoALA (Cognitive Architectures for Language Agents) framework with modules for memory (sensory, working, episodic, semantic), action (grounding, retrieval, reasoning, learning), and decision-making. Provides the taxonomic foundation for the memory systems discussed in lecture.",
+      "estimatedMinutes": 50,
+      "priority": "required"
+    },
+    {
+      "id": "r5",
+      "title": "Generative Agents: Interactive Simulacra of Human Behavior",
+      "authors": "Joon Sung Park, Joseph C. O'Brien, Carrie J. Cai, Meredith Ringel Morris, Percy Liang, Michael S. Bernstein",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2304.03442",
+      "type": "paper",
+      "description": "Demonstrates a complete agent memory architecture in the context of a simulated town of 25 AI agents. Implements a memory stream with observation recording, importance scoring (LLM-rated 1-10), retrieval with recency/importance/relevance weighting, and hierarchical reflection. While the application domain is simulation, the memory architecture patterns are directly applicable to production agent systems. The retrieval scoring function (alpha * recency + beta * importance + gamma * relevance) is now a standard pattern.",
+      "estimatedMinutes": 45,
+      "priority": "recommended"
+    }
+  ]
+}

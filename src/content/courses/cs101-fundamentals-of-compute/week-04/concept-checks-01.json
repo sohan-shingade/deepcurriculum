@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A 6T SRAM cell is approximately 100-150x larger per bit than a 1T1C DRAM cell. Why is SRAM still used for processor caches instead of DRAM?",
+      "options": [
+        "SRAM uses less power than DRAM",
+        "SRAM is faster (sub-nanosecond access) and does not require refresh, making it suitable for the speed requirements of L1/L2 caches despite higher area cost",
+        "SRAM is cheaper to manufacture at advanced process nodes",
+        "DRAM cannot be integrated on the same die as the processor"
+      ],
+      "correct": 1,
+      "explanation": "SRAM provides sub-nanosecond access times (0.2-0.5 ns at 3-7nm nodes) because the data is held by active transistors in a bistable latch -- there is no charge-sharing or refresh overhead. DRAM requires 60-100 ns for access (including row activation and sense amplification) and must be periodically refreshed every 32-64 ms. For L1 caches that must respond within 3-5 clock cycles (0.7-1.0 ns at modern frequencies), DRAM is simply too slow. The 100-150x area penalty of SRAM is accepted because caches are relatively small (KBs to tens of MBs), while main memory requires GBs where DRAM's density advantage is essential."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "For DDR5-6400 with a 64-bit bus, what is the peak bandwidth per module?",
+      "options": [
+        "25.6 GB/s",
+        "38.4 GB/s",
+        "51.2 GB/s",
+        "64.0 GB/s"
+      ],
+      "correct": 2,
+      "explanation": "DDR5 bandwidth is calculated as: BW = (Transfer Rate x Bus Width) / 8. For DDR5-6400: BW = (6400 MT/s x 64 bits) / 8 bits/byte = 6400 x 8 = 51,200 MB/s = 51.2 GB/s per module. The '6400' in DDR5-6400 means 6400 megatransfers per second. DDR (Double Data Rate) transfers data on both the rising and falling edges of the clock, so the actual clock frequency is 6400/2 = 3200 MHz. The 64-bit bus width comes from two independent 32-bit sub-channels, each delivering 25.6 GB/s."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In a Hamming(7,4) code, the syndrome after receiving a codeword is 101 (binary, = 5 decimal). What does this indicate?",
+      "options": [
+        "No error was detected",
+        "Bit position 5 contains an error and should be flipped to correct it",
+        "Two bits are in error, which can be detected but not corrected",
+        "The syndrome is invalid and the codeword must be retransmitted"
+      ],
+      "correct": 1,
+      "explanation": "In a Hamming code, the syndrome is computed by checking the parity of specific bit groups. If the syndrome is non-zero, its binary value gives the position of the single-bit error. A syndrome of 101 (binary) = 5 (decimal) means bit position 5 is in error. Flipping bit 5 corrects the error. This is the elegant property of Hamming codes: the parity check bits are placed at power-of-2 positions (1, 2, 4), and their overlap pattern is designed so that the syndrome directly encodes the error position in binary. A syndrome of 000 means no error. For SEC-DED (with an additional overall parity bit), a non-zero syndrome with correct overall parity indicates a double error (detectable but uncorrectable)."
+    }
+  ]
+}

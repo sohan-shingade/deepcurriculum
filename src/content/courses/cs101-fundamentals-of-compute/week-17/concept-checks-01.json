@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "El Capitan uses MI300A APUs instead of discrete GPUs. What is the primary architectural advantage of this approach?",
+      "options": [
+        "MI300A has more compute cores than discrete GPUs",
+        "MI300A eliminates the PCIe bottleneck by integrating CPU and GPU on a single package with shared HBM3 memory",
+        "MI300A uses less power than discrete GPU solutions",
+        "MI300A supports higher clock frequencies than discrete GPUs"
+      ],
+      "correct": 1,
+      "explanation": "The MI300A integrates 24 Zen4 CPU cores and CDNA3 GPU compute dies on a single package with unified access to 128 GB HBM3. In a traditional discrete GPU node, data must cross the PCIe bus (64 GB/s per direction for Gen5) to move between CPU memory and GPU memory. The MI300A eliminates this bottleneck entirely because CPU and GPU share the same memory controllers and HBM3 memory pool. This is particularly important for workloads with frequent CPU-GPU data exchange."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A Google TPU v4 MXU is a 128x128 systolic array. How many multiply-accumulate operations does it perform per clock cycle?",
+      "options": [
+        "128 (one per row)",
+        "256 (128 multiplies + 128 accumulates)",
+        "16,384 (128 x 128 multiply-accumulates)",
+        "32,768 (128 x 128 x 2 for multiply and accumulate separately)"
+      ],
+      "correct": 2,
+      "explanation": "Each cell in the 128x128 systolic array performs one multiply-accumulate operation per cycle: it multiplies an input from the left by an input from the top and adds the result to a running sum flowing through. With 128 x 128 = 16,384 cells, the MXU performs 16,384 multiply-accumulate operations per cycle. If we count multiply and accumulate as separate floating-point operations, that is 32,768 FLOPs per cycle, but the standard convention for MACs is to count each multiply-accumulate as a single operation (or sometimes two FLOPs). The TPU spec sheets typically count 2 FLOPs per MAC, yielding 32,768 FLOPs/cycle, but the number of MAC operations is 16,384."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An AMD EPYC Genoa processor is configured with NPS4 (4 NUMA nodes per socket). Each NUMA node has 3 CCDs and 3 DDR5 memory channels. A thread on CCD 0 (NUMA node 0) accesses memory attached to NUMA node 3. What is the expected latency penalty?",
+      "options": [
+        "No penalty -- NPS4 is transparent to the application",
+        "Approximately 50-75% higher latency because the access must cross the IOD to a remote NUMA node's memory channels",
+        "Exactly 2x latency due to double-hop through the IOD",
+        "The access will fail because NUMA node 0 cannot address memory on NUMA node 3"
+      ],
+      "correct": 1,
+      "explanation": "In NPS4 mode, the IOD's 12 DDR5 memory channels are partitioned into 4 groups of 3 channels. A thread on CCD 0 (NUMA node 0) accessing memory on NUMA node 3 must traverse the Infinity Fabric through the IOD to reach the remote channels. Research shows local vs remote NUMA memory latency ratios of approximately 1.5-2x, meaning a 50-75% penalty. The access does not fail -- NUMA is cache-coherent and all memory is addressable from any core -- but the performance penalty is significant. This is why NUMA-aware memory allocation (first-touch policy, numactl --membind) is critical for HPC performance."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Frontier achieves $R_{\\max} = 1.353$ EFlop/s with $R_{\\text{peak}} = 1.68$ EFlop/s. Its HPCG score is approximately 14.05 PFlop/s. What do these numbers reveal about memory-bound vs. compute-bound workloads?",
+      "options": [
+        "HPL efficiency (80.5%) is high, showing the machine is well-balanced for all workloads",
+        "The 96x gap between HPL and HPCG performance shows that real applications with irregular memory access patterns achieve only ~1% of peak, demonstrating that memory bandwidth and latency -- not raw FLOPS -- limit most scientific workloads",
+        "HPCG is simply a less optimized benchmark, and the gap would close with better software",
+        "The gap shows that Frontier's MI250X GPUs are poorly designed for sparse computation"
+      ],
+      "correct": 1,
+      "explanation": "HPL (dense matrix multiply) is compute-bound with high arithmetic intensity and regular memory access. HPCG (sparse conjugate gradients) is memory-bound with irregular access patterns, poor cache reuse, and low arithmetic intensity. Frontier achieves 80.5% of $R_{\\text{peak}}$ on HPL but only about 0.84% on HPCG. This 96x gap is not a software deficiency -- it reflects a fundamental architectural reality: real scientific applications (PDE solvers, graph analytics, sparse linear algebra) are limited by memory bandwidth and latency, not floating-point throughput. This is precisely why the roofline model, which plots achievable performance against arithmetic intensity, is essential for understanding real workload performance."
+    }
+  ]
+}

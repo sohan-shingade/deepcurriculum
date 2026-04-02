@@ -1,0 +1,686 @@
+---
+title: "Multi-Agent Architectures"
+week: 6
+lecture: 1
+estimatedMinutes: 50
+---
+
+# Multi-Agent Architectures
+
+In Weeks 4 and 5, we built single agents that reason, use tools, and retrieve information. These agents are impressive in isolation, but they hit a ceiling. A single agent trying to plan a software architecture, write the code, test it, review it for security vulnerabilities, and deploy it is like asking one person to be the architect, developer, QA engineer, security analyst, and DevOps engineer simultaneously. The context window fills up, the system prompt becomes unwieldy, and performance degrades because the model is being asked to maintain too many personas and objectives at once.
+
+Multi-agent systems solve this by decomposing complex tasks across multiple specialized agents, each with a focused system prompt, a constrained tool set, and a well-defined responsibility. This is not a new idea — the multi-agent systems literature in AI goes back to the 1980s with Hewitt's Actor Model and the Contract Net Protocol (Smith, 1980). What is new is that LLMs make it practical. Before LLMs, building an agent that could handle flexible natural language tasks required hand-engineering state machines for every domain. Now, you can spin up a specialized agent by writing a system prompt and handing it a few tools.
+
+But multi-agent systems introduce real engineering complexity: coordination overhead, failure propagation, debugging difficulty, and cost multiplication. This lecture provides the decision framework and architectural patterns you need to use them effectively — and, equally important, to know when *not* to use them.
+
+---
+
+## 1. When to Use Multi-Agent Systems: A Decision Framework
+
+The first question is always: **do you actually need multiple agents?** Most tasks do not benefit from multi-agent architectures. The overhead of coordinating agents — serializing messages, managing shared state, handling partial failures — is non-trivial. A single well-prompted agent with good tools will outperform a poorly designed multi-agent system every time.
+
+Use multi-agent systems when the task exhibits one or more of these characteristics:
+
+**Characteristic 1: Role specialization.** The task requires fundamentally different expertise or personas. A code review agent needs to think about correctness, readability, and maintainability. A security audit agent needs to think about injection attacks, authentication bypasses, and data leaks. Cramming both into one system prompt dilutes both.
+
+**Characteristic 2: Parallel decomposability.** The task can be split into independent subtasks that can execute concurrently. Researching three different topics for a report, analyzing code across multiple files, or evaluating a system against multiple criteria. If subtask B depends on the output of subtask A, you still gain from specialization, but you lose the parallelism benefit.
+
+**Characteristic 3: Context window pressure.** The total information needed exceeds what fits in a single context window, or the task requires processing so much information that the model's attention degrades. A single agent trying to analyze a 50-file codebase will lose track of details. Five agents each analyzing 10 files will produce better results.
+
+**Characteristic 4: Adversarial verification.** You need one agent to check another's work. This is the "critic" pattern — a generator produces output and a separate critic evaluates it. The critic needs a different perspective (literally, a different system prompt) to be effective; otherwise, it just agrees with itself.
+
+Let us formalize the decision. Define the task complexity as $C$, the single-agent capability as $S$, and the coordination overhead as $O(n)$ for $n$ agents. The expected quality with $n$ agents is:
+
+$$Q(n) = \min\left(1, \frac{C}{S}\right) \cdot \text{coverage}(n) - O(n)$$
+
+where $\text{coverage}(n)$ captures the benefit of specialization and parallelism, and $O(n)$ captures the coordination cost. In practice, $O(n)$ grows at least linearly (each agent pair needs a communication channel) and can grow quadratically if agents need to coordinate pairwise. The sweet spot for most production systems is $n \in [2, 7]$ — enough for meaningful specialization, few enough to keep coordination tractable.
+
+```python
+import math
+from dataclasses import dataclass
+
+@dataclass
+class MultiAgentDecision:
+    """Framework for deciding whether to use multi-agent architecture."""
+    task_complexity: float       # 0-1: how complex is the task
+    role_specialization: float   # 0-1: how much do subtasks differ
+    parallelizability: float     # 0-1: fraction of work that can run in parallel
+    context_pressure: float      # 0-1: how close to context window limits
+    verification_need: float     # 0-1: how much adversarial checking is needed
+
+    def single_agent_score(self) -> float:
+        """Expected quality from a single agent."""
+        base = 1.0 - self.task_complexity * 0.5
+        context_penalty = self.context_pressure * 0.3
+        return max(0, base - context_penalty)
+
+    def multi_agent_score(self, n_agents: int) -> float:
+        """Expected quality from n agents, accounting for overhead."""
+        # Benefits: specialization and parallelism
+        specialization_gain = self.role_specialization * math.log2(n_agents) * 0.15
+        parallel_gain = self.parallelizability * (1 - 1/n_agents) * 0.1
+        context_relief = self.context_pressure * (1 - 1/n_agents) * 0.2
+        verification_gain = self.verification_need * min(1, (n_agents - 1) * 0.3) * 0.1
+
+        # Cost: coordination overhead grows with agent count
+        # O(n) communication + potential O(n^2) pairwise coordination
+        coordination_overhead = 0.05 * n_agents + 0.01 * n_agents * (n_agents - 1) / 2
+
+        base = self.single_agent_score()
+        return base + specialization_gain + parallel_gain + context_relief + verification_gain - coordination_overhead
+
+    def recommend(self) -> dict:
+        """Recommend single vs multi-agent and optimal agent count."""
+        single = self.single_agent_score()
+        best_n, best_score = 1, single
+
+        for n in range(2, 10):
+            score = self.multi_agent_score(n)
+            if score > best_score:
+                best_n, best_score = n, score
+
+        return {
+            "recommended_agents": best_n,
+            "single_agent_score": round(single, 3),
+            "best_multi_agent_score": round(best_score, 3),
+            "use_multi_agent": best_n > 1,
+            "improvement": round((best_score - single) / single * 100, 1) if single > 0 else 0
+        }
+
+
+# Example: Complex code review task
+code_review = MultiAgentDecision(
+    task_complexity=0.8,
+    role_specialization=0.9,   # Security, correctness, style are very different
+    parallelizability=0.7,     # Can review different aspects in parallel
+    context_pressure=0.6,      # Large codebase
+    verification_need=0.8      # Want multiple perspectives
+)
+result = code_review.recommend()
+print(f"Code review recommendation: {result}")
+
+# Example: Simple Q&A task
+simple_qa = MultiAgentDecision(
+    task_complexity=0.2,
+    role_specialization=0.1,
+    parallelizability=0.0,
+    context_pressure=0.1,
+    verification_need=0.1
+)
+result = simple_qa.recommend()
+print(f"Simple Q&A recommendation: {result}")
+```
+
+The output demonstrates what experienced practitioners know intuitively: simple tasks should use a single agent, while complex tasks with distinct subtask roles benefit from multiple agents. The exact numbers in this model are illustrative, but the *shape* of the tradeoff is real.
+
+<ConceptCheck id="cc-1" />
+
+---
+
+## 2. Architecture Patterns
+
+There are four fundamental multi-agent architecture patterns. Every production system I have seen is one of these, a composition of them, or a mistake.
+
+### 2.1 Hierarchical (Manager-Worker)
+
+The most common pattern. A **coordinator agent** (the manager) receives the task, decomposes it into subtasks, delegates each subtask to a **worker agent**, collects results, and synthesizes a final output.
+
+```
+         ┌──────────┐
+         │Coordinator│
+         └─────┬─────┘
+        ┌──────┼──────┐
+        ▼      ▼      ▼
+   ┌────────┐┌────────┐┌────────┐
+   │Worker A││Worker B││Worker C│
+   └────────┘└────────┘└────────┘
+```
+
+**When to use:** The task has a clear decomposition strategy, subtasks are relatively independent, and one agent can assess the quality of another's output.
+
+**Strengths:** Clear authority and control flow. The coordinator can retry failed subtasks, redistribute work, and merge results with full visibility. Easy to reason about and debug.
+
+**Weaknesses:** The coordinator is a single point of failure and a potential bottleneck. If the coordinator's decomposition is wrong, all downstream work is wasted. The coordinator must be capable enough to judge worker output — in practice, this means the coordinator often needs to be the strongest model.
+
+**Real-world example:** GitHub Copilot Workspace uses a hierarchical architecture. A planning agent decomposes a coding task into file-level changes, implementation agents write the code for each file, and a verification agent runs tests and checks consistency.
+
+```python
+from dataclasses import dataclass, field
+from typing import Callable
+import json
+
+@dataclass
+class WorkerAgent:
+    """A specialized worker agent with a defined role."""
+    name: str
+    role: str
+    capabilities: list[str]
+
+    def execute(self, task: str) -> dict:
+        """Simulate agent execution. In production, this calls an LLM."""
+        # Simulated — in production, this sends a prompt to an LLM
+        return {
+            "agent": self.name,
+            "task": task,
+            "status": "completed",
+            "result": f"[{self.role}] Processed: {task[:50]}..."
+        }
+
+
+@dataclass
+class CoordinatorAgent:
+    """Hierarchical coordinator that decomposes and delegates tasks."""
+    workers: list[WorkerAgent] = field(default_factory=list)
+    task_log: list[dict] = field(default_factory=list)
+
+    def register_worker(self, worker: WorkerAgent):
+        self.workers.append(worker)
+
+    def decompose_task(self, task: str) -> list[dict]:
+        """Break task into subtasks assigned to workers.
+
+        In production, the coordinator LLM would generate this decomposition.
+        Here we simulate with a rule-based approach.
+        """
+        subtasks = []
+        for worker in self.workers:
+            subtasks.append({
+                "assigned_to": worker.name,
+                "subtask": f"[{worker.role}] Handle relevant aspects of: {task}",
+                "priority": 1
+            })
+        return subtasks
+
+    def execute(self, task: str) -> dict:
+        """Full coordinator execution cycle."""
+        # Step 1: Decompose
+        subtasks = self.decompose_task(task)
+        self.task_log.append({"phase": "decomposition", "subtasks": len(subtasks)})
+
+        # Step 2: Delegate and collect results
+        results = []
+        for subtask in subtasks:
+            worker = next(w for w in self.workers if w.name == subtask["assigned_to"])
+            result = worker.execute(subtask["subtask"])
+            results.append(result)
+            self.task_log.append({"phase": "execution", "worker": worker.name, "status": result["status"]})
+
+        # Step 3: Synthesize
+        synthesis = {
+            "task": task,
+            "status": "completed",
+            "worker_results": results,
+            "total_workers_used": len(results),
+            "all_succeeded": all(r["status"] == "completed" for r in results)
+        }
+        self.task_log.append({"phase": "synthesis", "success": synthesis["all_succeeded"]})
+        return synthesis
+
+
+# Build a code review system
+coordinator = CoordinatorAgent()
+coordinator.register_worker(WorkerAgent("security-reviewer", "Security Analyst", ["vulnerability scanning", "auth checks"]))
+coordinator.register_worker(WorkerAgent("code-quality", "Code Quality Reviewer", ["style", "complexity", "maintainability"]))
+coordinator.register_worker(WorkerAgent("test-coverage", "Test Analyst", ["test coverage", "edge cases", "test quality"]))
+
+result = coordinator.execute("Review the authentication module for the payment service")
+print(f"Task completed: {result['all_succeeded']}")
+print(f"Workers used: {result['total_workers_used']}")
+for r in result["worker_results"]:
+    print(f"  {r['agent']}: {r['status']}")
+```
+
+### 2.2 Peer-to-Peer (Collaborative)
+
+No central authority. Agents communicate directly with each other, negotiating and collaborating as equals. This is inspired by the Contract Net Protocol (Smith, 1980) where agents announce tasks, bid on them, and award contracts.
+
+```
+   ┌────────┐     ┌────────┐
+   │Agent A │◄───►│Agent B │
+   └───┬────┘     └───┬────┘
+       │    ◄────►    │
+       ▼              ▼
+   ┌────────┐     ┌────────┐
+   │Agent C │◄───►│Agent D │
+   └────────┘     └────────┘
+```
+
+**When to use:** Tasks where no single agent has enough knowledge to coordinate effectively, or where the decomposition itself is emergent (e.g., debate, collaborative writing, consensus-building).
+
+**Strengths:** No single point of failure. Emergent coordination can handle tasks that resist top-down decomposition. More resilient — if one agent goes down, others can compensate.
+
+**Weaknesses:** Harder to debug, harder to predict behavior, potential for infinite loops or deadlocks, higher communication overhead ($O(n^2)$ message complexity in the worst case). Convergence is not guaranteed.
+
+**Real-world example:** AI debate systems where two agents argue opposing positions and a judge agent evaluates. The debaters are peers — neither has authority over the other.
+
+### 2.3 Pipeline (Sequential)
+
+Agents are arranged in a fixed sequence where each agent's output becomes the next agent's input. This is the assembly line of multi-agent architectures.
+
+```
+   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
+   │Agent A │──►│Agent B │──►│Agent C │──►│Agent D │
+   └────────┘   └────────┘   └────────┘   └────────┘
+   (Research)   (Draft)       (Review)     (Polish)
+```
+
+**When to use:** The task has natural sequential stages where each stage transforms or refines the previous output. Writing pipelines (research, draft, edit, polish), data processing pipelines, or any workflow where the order of operations matters.
+
+**Strengths:** Simple to implement and debug. Clear data flow. Each agent can be optimized independently. Easy to insert new stages or swap implementations.
+
+**Weaknesses:** Total latency is the *sum* of all stage latencies — no parallelism within a single task. A failure at any stage blocks downstream stages. Information loss at each handoff if the intermediate representation is lossy.
+
+**Throughput analysis:** If each stage takes time $t_i$, the latency for a single task is $L = \sum_{i=1}^{n} t_i$. But for a stream of $m$ tasks, the throughput approaches $\frac{m}{\max(t_i)}$ as the pipeline fills up (Little's Law applied to pipelines). This means pipelines are latency-heavy for individual requests but can achieve high throughput.
+
+<ConceptCheck id="cc-2" />
+
+### 2.4 Blackboard (Shared State)
+
+All agents read from and write to a shared data structure (the "blackboard"). Agents independently monitor the blackboard for conditions that match their expertise, contribute when they can, and stop when the problem is solved.
+
+```
+   ┌────────┐  ┌────────┐  ┌────────┐
+   │Agent A │  │Agent B │  │Agent C │
+   └───┬────┘  └───┬────┘  └───┬────┘
+       │           │           │
+       ▼           ▼           ▼
+   ┌──────────────────────────────┐
+   │         BLACKBOARD           │
+   │  (shared state / knowledge)  │
+   └──────────────────────────────┘
+```
+
+**When to use:** The problem-solving process is iterative and opportunistic — agents contribute when they recognize a pattern or can make progress, rather than following a predetermined plan. Good for complex analysis where the solution emerges from incremental contributions.
+
+**Strengths:** Highly flexible. Agents decouple — they don't need to know about each other, only about the blackboard. New agents can be added without changing existing ones. Natural fit for problems where the decomposition isn't known in advance.
+
+**Weaknesses:** Requires careful concurrency control to avoid race conditions and conflicting writes. The blackboard can become a bottleneck. Harder to predict termination — when is the problem "solved enough"?
+
+**Real-world example:** A research synthesis system where different agents are experts in different domains (statistics, domain knowledge, methodology). They each read the current state of a report on the blackboard, contribute sections or corrections they can, and iterate until convergence.
+
+---
+
+## 3. Choosing the Right Architecture
+
+Here is the decision matrix I use in practice:
+
+| Factor | Hierarchical | Peer-to-Peer | Pipeline | Blackboard |
+|--------|-------------|-------------|----------|-----------|
+| Task decomposition known upfront? | Yes | No | Yes (sequential) | No |
+| Need parallelism? | Yes | Yes | No (per task) | Yes |
+| Single point of failure acceptable? | Yes | No | Per stage | No |
+| Communication pattern | Star (hub-spoke) | Mesh | Linear | Pub-sub |
+| Debugging ease | High | Low | High | Medium |
+| Typical agent count | 3-7 | 2-5 | 2-6 | 3-8 |
+| Best for | Task delegation | Debate/consensus | Refinement chains | Complex analysis |
+
+In practice, production systems often **compose** patterns. A common composition is a hierarchical coordinator that delegates to pipeline sub-systems. For example, a coordinator assigns "write a blog post" to a writing pipeline (research agent -> draft agent -> edit agent), "create illustrations" to an image agent, and "optimize for SEO" to an SEO agent. The coordinator runs the writing pipeline and image generation in parallel, then passes both outputs to the SEO agent.
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class ArchitectureSelector:
+    """Select the best multi-agent architecture for a given task."""
+
+    # Task characteristics (0-1 scale)
+    decomposition_clarity: float    # How well-defined is the subtask breakdown
+    parallelism_potential: float    # Can subtasks run independently
+    sequential_dependency: float    # Do subtasks form a natural pipeline
+    emergent_solution: float        # Does the solution emerge iteratively
+    failure_tolerance: float        # How critical is avoiding single points of failure
+
+    def score_architectures(self) -> dict[str, float]:
+        """Score each architecture pattern for this task."""
+        scores = {}
+
+        # Hierarchical: best when decomposition is clear and parallelism helps
+        scores["hierarchical"] = (
+            self.decomposition_clarity * 0.35 +
+            self.parallelism_potential * 0.25 +
+            (1 - self.emergent_solution) * 0.2 +
+            (1 - self.failure_tolerance) * 0.2  # Accepts single point of failure
+        )
+
+        # Peer-to-peer: best for emergent, failure-tolerant scenarios
+        scores["peer_to_peer"] = (
+            (1 - self.decomposition_clarity) * 0.25 +
+            self.failure_tolerance * 0.3 +
+            self.emergent_solution * 0.3 +
+            (1 - self.sequential_dependency) * 0.15
+        )
+
+        # Pipeline: best for sequential, well-defined processes
+        scores["pipeline"] = (
+            self.sequential_dependency * 0.4 +
+            self.decomposition_clarity * 0.25 +
+            (1 - self.parallelism_potential) * 0.2 +
+            (1 - self.emergent_solution) * 0.15
+        )
+
+        # Blackboard: best for emergent, iterative problems
+        scores["blackboard"] = (
+            self.emergent_solution * 0.35 +
+            (1 - self.decomposition_clarity) * 0.2 +
+            self.parallelism_potential * 0.2 +
+            self.failure_tolerance * 0.25
+        )
+
+        return {k: round(v, 3) for k, v in scores.items()}
+
+    def recommend(self) -> str:
+        scores = self.score_architectures()
+        return max(scores, key=scores.get)
+
+
+# Code review: clear decomposition, parallelizable, can tolerate coordinator
+task1 = ArchitectureSelector(
+    decomposition_clarity=0.9, parallelism_potential=0.8,
+    sequential_dependency=0.2, emergent_solution=0.1, failure_tolerance=0.3
+)
+print(f"Code review: {task1.recommend()} — scores: {task1.score_architectures()}")
+
+# Research synthesis: emergent, iterative, needs multiple perspectives
+task2 = ArchitectureSelector(
+    decomposition_clarity=0.3, parallelism_potential=0.6,
+    sequential_dependency=0.2, emergent_solution=0.9, failure_tolerance=0.7
+)
+print(f"Research synthesis: {task2.recommend()} — scores: {task2.score_architectures()}")
+
+# Content writing: natural sequential stages
+task3 = ArchitectureSelector(
+    decomposition_clarity=0.8, parallelism_potential=0.2,
+    sequential_dependency=0.9, emergent_solution=0.1, failure_tolerance=0.2
+)
+print(f"Content pipeline: {task3.recommend()} — scores: {task3.score_architectures()}")
+```
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 4. Task Decomposition and Delegation
+
+The coordinator pattern only works if the coordinator can effectively decompose tasks. This is the hardest part of multi-agent system design, and it is where most systems fail.
+
+### 4.1 Decomposition Strategies
+
+**Functional decomposition:** Split by *what kind of work* is needed. A software development task decomposes into design, implementation, testing, and review. Each subtask goes to a specialist agent.
+
+**Data decomposition:** Split by *what data* needs to be processed. Analyzing 100 documents? Send 20 to each of 5 agents. This works when the processing logic is uniform but the data volume is high.
+
+**Aspect decomposition:** Split by *what dimension* of quality to evaluate. A code review might decompose into security aspects, performance aspects, maintainability aspects, and correctness aspects. Each agent evaluates the same artifact from a different perspective.
+
+### 4.2 Delegation Protocol
+
+A robust delegation protocol needs four components:
+
+1. **Task specification:** What the worker should do, with clear success criteria
+2. **Context transfer:** What information the worker needs (minimal, to avoid bloating the worker's context)
+3. **Output schema:** What format the worker should return results in
+4. **Failure handling:** What the worker should do if it cannot complete the task
+
+```python
+from dataclasses import dataclass
+import json
+
+@dataclass
+class TaskSpecification:
+    """A well-structured task to delegate to a worker agent."""
+    task_id: str
+    description: str
+    success_criteria: list[str]
+    context: dict                # Minimal context the worker needs
+    output_schema: dict          # Expected output format
+    max_retries: int = 2
+    timeout_seconds: int = 60
+
+    def to_prompt(self) -> str:
+        """Convert to a prompt for the worker agent."""
+        criteria_str = "\n".join(f"  - {c}" for c in self.success_criteria)
+        return f"""## Task: {self.task_id}
+
+{self.description}
+
+### Success Criteria
+{criteria_str}
+
+### Context
+{json.dumps(self.context, indent=2)}
+
+### Output Format
+Return a JSON object matching this schema:
+{json.dumps(self.output_schema, indent=2)}"""
+
+
+# Example: delegating a security review subtask
+security_task = TaskSpecification(
+    task_id="security-review-auth-module",
+    description="Review the authentication module for security vulnerabilities. Focus on injection attacks, authentication bypasses, and sensitive data exposure.",
+    success_criteria=[
+        "Identify all potential SQL/NoSQL injection points",
+        "Verify password hashing uses bcrypt or argon2",
+        "Check for hardcoded secrets or API keys",
+        "Verify session management follows OWASP guidelines"
+    ],
+    context={
+        "language": "Python",
+        "framework": "FastAPI",
+        "auth_method": "JWT",
+        "file_count": 5
+    },
+    output_schema={
+        "vulnerabilities": [{"severity": "str", "description": "str", "location": "str", "recommendation": "str"}],
+        "risk_score": "float (0-10)",
+        "summary": "str"
+    }
+)
+
+prompt = security_task.to_prompt()
+print(prompt)
+```
+
+### 4.3 The Context Transfer Problem
+
+This is subtle but critical. When a coordinator delegates to a worker, it must decide what context to include. Too little context and the worker cannot do its job. Too much context and you pay in tokens, latency, and attention degradation.
+
+The rule of thumb: **transfer the minimum viable context.** Include what the worker needs to know to complete *its specific subtask*, not the full history of the conversation or the coordinator's internal reasoning. In practice, this means:
+
+- Include the specific artifact to process (the code to review, the document to analyze)
+- Include relevant metadata (programming language, framework, constraints)
+- Include the output schema so the worker knows what to return
+- Do **not** include what other workers are doing, the coordinator's decomposition strategy, or previous conversation history unless directly relevant
+
+---
+
+## 5. Coordination Overhead Analysis
+
+Let us quantify the cost of multi-agent systems. Define:
+
+- $C_{\text{single}}$: cost of solving the task with a single agent
+- $C_{\text{coord}}$: cost of the coordinator's decomposition and synthesis
+- $C_{w_i}$: cost of worker $i$'s execution
+- $C_{\text{comm}}$: cost of all inter-agent communication (token transfer)
+
+The total cost of a multi-agent system is:
+
+$$C_{\text{multi}} = C_{\text{coord}} + \sum_{i=1}^{n} C_{w_i} + C_{\text{comm}}$$
+
+The communication cost depends on the architecture:
+
+- **Hierarchical:** $C_{\text{comm}} = O(n)$ — coordinator sends one message to each worker and receives one back
+- **Peer-to-peer:** $C_{\text{comm}} = O(n^2)$ — every agent may communicate with every other
+- **Pipeline:** $C_{\text{comm}} = O(n)$ — each agent passes output to the next
+- **Blackboard:** $C_{\text{comm}} = O(n \cdot r)$ — each agent reads/writes $r$ times on average
+
+In practice, multi-agent systems cost 2-5x more tokens than a single agent on the same task. The question is whether the quality improvement justifies the cost. For tasks where single-agent quality drops below an acceptable threshold — complex multi-file code changes, multi-perspective analysis, or tasks exceeding context windows — the answer is yes.
+
+---
+
+## 6. Anti-Patterns
+
+I want to be explicit about what not to do, because I have seen each of these mistakes in production.
+
+**Anti-pattern 1: Over-decomposition.** Splitting a task into 15 subtasks when 4 would suffice. Each additional agent adds coordination overhead, increases cost, and introduces failure points. If a subtask is so small that the worker agent finishes in one LLM call with tokens to spare, it probably should not be a separate agent.
+
+**Anti-pattern 2: Chatty agents.** Agents that send multiple rounds of back-and-forth messages to clarify the task. Every message costs tokens and adds latency. If a worker needs to ask the coordinator for clarification, the task specification was inadequate. Fix the spec, do not add a conversation loop.
+
+**Anti-pattern 3: Single-point-of-failure coordinator.** If the coordinator agent hallucinates a bad decomposition, every worker does useless work. Mitigate this with decomposition validation (have the coordinator verify its plan against the original task before executing), or use a two-phase commit where workers signal readiness before executing.
+
+**Anti-pattern 4: Homogeneous agents pretending to be specialized.** If all your "specialized" agents have the same model, the same tools, and system prompts that differ by only a few words, you do not have a multi-agent system — you have a single agent called multiple times with extra overhead. Specialization must be real: different tools, different context, meaningfully different instructions.
+
+**Anti-pattern 5: No termination condition.** Iterative multi-agent systems (especially blackboard and peer-to-peer) need explicit termination criteria. "Keep iterating until the answer is good" is not a termination condition. Define concrete criteria: maximum iterations, quality score threshold, no-change detection, or timeout.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 7. The Coordinator Pattern in Depth
+
+The coordinator is the workhorse of production multi-agent systems. Let us build a more complete implementation that handles the key challenges: dynamic worker selection, failure recovery, and result synthesis.
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+import json
+
+class TaskStatus(Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RETRYING = "retrying"
+
+@dataclass
+class AgentCapability:
+    """Describes what an agent can do."""
+    name: str
+    description: str
+    input_types: list[str]
+    output_type: str
+    estimated_cost: float  # estimated tokens (thousands)
+    estimated_latency: float  # estimated seconds
+
+@dataclass
+class WorkerResult:
+    worker_name: str
+    status: TaskStatus
+    result: Any = None
+    error: str = None
+    tokens_used: int = 0
+    latency_ms: int = 0
+
+@dataclass
+class RobustCoordinator:
+    """Production-grade coordinator with failure handling and cost tracking."""
+    workers: dict[str, AgentCapability] = field(default_factory=dict)
+    results: list[WorkerResult] = field(default_factory=list)
+    total_tokens: int = 0
+    max_retries: int = 2
+
+    def register(self, capability: AgentCapability):
+        self.workers[capability.name] = capability
+
+    def select_workers(self, task: str, required_capabilities: list[str]) -> list[str]:
+        """Select workers whose capabilities match the task requirements."""
+        selected = []
+        for cap_needed in required_capabilities:
+            matches = [
+                name for name, cap in self.workers.items()
+                if cap_needed.lower() in cap.description.lower()
+                or cap_needed.lower() in [t.lower() for t in cap.input_types]
+            ]
+            selected.extend(matches)
+        return list(set(selected))  # deduplicate
+
+    def estimate_cost(self, worker_names: list[str]) -> dict:
+        """Estimate total cost and latency before execution."""
+        total_tokens = sum(self.workers[n].estimated_cost for n in worker_names)
+        # Parallel execution: latency is the max, not the sum
+        max_latency = max(self.workers[n].estimated_latency for n in worker_names)
+        return {
+            "estimated_tokens_k": round(total_tokens, 1),
+            "estimated_latency_s": round(max_latency, 1),
+            "worker_count": len(worker_names)
+        }
+
+    def execute_with_retry(self, worker_name: str, task: str) -> WorkerResult:
+        """Execute a worker task with retry logic."""
+        for attempt in range(self.max_retries + 1):
+            # Simulate execution — in production, call LLM API
+            # Simulate: 90% success rate
+            import random
+            random.seed(hash(worker_name + task + str(attempt)) % 2**32)
+            success = random.random() < 0.9
+
+            if success:
+                result = WorkerResult(
+                    worker_name=worker_name,
+                    status=TaskStatus.COMPLETED,
+                    result=f"Analysis complete by {worker_name}",
+                    tokens_used=int(self.workers[worker_name].estimated_cost * 1000),
+                    latency_ms=int(self.workers[worker_name].estimated_latency * 1000)
+                )
+                self.total_tokens += result.tokens_used
+                return result
+
+        return WorkerResult(
+            worker_name=worker_name,
+            status=TaskStatus.FAILED,
+            error=f"Failed after {self.max_retries + 1} attempts"
+        )
+
+    def run(self, task: str, required_capabilities: list[str]) -> dict:
+        """Full coordination cycle."""
+        # 1. Select workers
+        worker_names = self.select_workers(task, required_capabilities)
+        if not worker_names:
+            return {"error": "No workers match required capabilities"}
+
+        # 2. Estimate cost
+        estimate = self.estimate_cost(worker_names)
+
+        # 3. Execute all workers (would be parallel in production)
+        self.results = []
+        for name in worker_names:
+            result = self.execute_with_retry(name, task)
+            self.results.append(result)
+
+        # 4. Synthesize
+        succeeded = [r for r in self.results if r.status == TaskStatus.COMPLETED]
+        failed = [r for r in self.results if r.status == TaskStatus.FAILED]
+
+        return {
+            "task": task,
+            "workers_selected": worker_names,
+            "estimate": estimate,
+            "succeeded": len(succeeded),
+            "failed": len(failed),
+            "total_tokens": self.total_tokens,
+            "results": [{"worker": r.worker_name, "status": r.status.value} for r in self.results]
+        }
+
+
+# Build the system
+coord = RobustCoordinator()
+coord.register(AgentCapability("security", "Security vulnerability analysis", ["code", "config"], "report", 3.5, 8.0))
+coord.register(AgentCapability("performance", "Performance and scalability analysis", ["code", "metrics"], "report", 2.0, 5.0))
+coord.register(AgentCapability("correctness", "Logic and correctness verification", ["code", "tests"], "report", 4.0, 10.0))
+
+result = coord.run(
+    task="Review the payment processing module",
+    required_capabilities=["code", "security"]
+)
+print(json.dumps(result, indent=2))
+```
+
+---
+
+## Summary
+
+Multi-agent systems are a powerful tool, but they are not a default choice. The decision framework is straightforward: if the task benefits from role specialization, parallel execution, or adversarial verification, and the expected quality improvement outweighs the coordination overhead, use multiple agents. Otherwise, use a single well-prompted agent.
+
+The four architecture patterns — hierarchical, peer-to-peer, pipeline, and blackboard — cover the design space. In practice, hierarchical (manager-worker) dominates because it is the easiest to build, debug, and reason about. The coordinator pattern, when implemented with proper task specification, dynamic worker selection, failure handling, and cost tracking, handles the vast majority of production multi-agent use cases.
+
+Next lecture, we will tackle the harder problems: how agents actually communicate, how to manage shared state without conflicts, the A2A protocol for standardizing inter-agent communication, and how to debug systems where no single agent has the full picture.

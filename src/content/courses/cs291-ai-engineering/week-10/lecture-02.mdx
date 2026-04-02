@@ -1,0 +1,291 @@
+---
+title: "The Future of AI Engineering"
+week: 10
+lecture: 2
+estimatedMinutes: 40
+---
+
+# The Future of AI Engineering
+
+This is the last lecture of CS 291. You now have a foundation in production AI engineering: LLM architecture, RAG systems, agents, multi-agent coordination, deployment, observability, evaluation, and system design. But this field is moving faster than any field I have seen in two decades of computer science. What you have learned will remain valuable — systems thinking, evaluation rigor, and production discipline do not expire — but the specific tools and patterns will evolve. This lecture is about where things are headed and how to stay ahead.
+
+I will be opinionated here. Predictions are a fool's game, but informed opinions are the currency of engineering leadership. Take what follows as directional, not definitive.
+
+---
+
+## 1. Model Commoditization: The Model Is the Least Important Part
+
+Here is the most counterintuitive claim in AI engineering: **the model does not matter that much**. Or more precisely: the model matters less every quarter.
+
+In 2023, there was a massive capability gap between GPT-4 and everything else. By mid-2024, Claude 3.5 Sonnet, Gemini 1.5 Pro, and Llama 3.1 405B had closed much of that gap. By 2025, we saw open-weight models from Meta, Mistral, DeepSeek, and others reaching near-parity with frontier closed models on most practical benchmarks. The trend is unmistakable: model capabilities are converging.
+
+What does this mean for you as an engineer? Several things:
+
+**Architecture matters more than model selection.** A well-designed RAG pipeline with a good retrieval stack, proper chunking, and quality re-ranking will outperform a naive "throw everything into the context window" approach, regardless of which frontier model you use. We demonstrated this repeatedly in Weeks 2-3.
+
+**Evaluation methodology is your moat.** If you can rigorously measure what "good" means for your use case and systematically improve it, you will build better products than competitors who rely on vibes and anecdotal testing. This does not change when models improve — it becomes more important, because the marginal quality gains get harder to measure.
+
+**System engineering is the durable skill.** Caching, retrieval, orchestration, error handling, cost optimization, observability — these skills transfer across models. Prompt engineering for a specific model does not.
+
+```python
+# Model commoditization in practice: same system, swap the model
+from dataclasses import dataclass
+
+@dataclass
+class ModelConfig:
+    name: str
+    cost_per_1k_input: float
+    cost_per_1k_output: float
+    avg_latency_ms: int
+    quality_score: float  # 0-1, measured on your eval suite
+
+# Hypothetical comparison for a legal QA task (illustrative numbers)
+models = [
+    ModelConfig("GPT-4o", 0.0025, 0.01, 800, 0.91),
+    ModelConfig("Claude 3.5 Sonnet", 0.003, 0.015, 650, 0.93),
+    ModelConfig("Llama 3.3 70B", 0.0004, 0.0004, 400, 0.87),
+    ModelConfig("Gemini 2.0 Flash", 0.0001, 0.0004, 300, 0.85),
+    ModelConfig("DeepSeek-V3", 0.0002, 0.0008, 500, 0.86),
+]
+
+print("Model Comparison for Legal QA (100K queries/day, avg 2K in + 500 out tokens):")
+print(f"{'Model':<25} {'Quality':>8} {'Daily Cost':>12} {'P50 Latency':>12}")
+print("-" * 60)
+
+daily_queries = 100_000
+avg_input_tokens = 2_000
+avg_output_tokens = 500
+
+for m in models:
+    daily_cost = daily_queries * (
+        (avg_input_tokens / 1000) * m.cost_per_1k_input +
+        (avg_output_tokens / 1000) * m.cost_per_1k_output
+    )
+    print(f"{m.name:<25} {m.quality_score:>7.2f} ${daily_cost:>10,.2f} {m.avg_latency_ms:>9}ms")
+
+print("\nKey insight: Quality gap is small. Cost gap is 10-50x.")
+print("A good retrieval pipeline closes most of the quality gap.")
+```
+
+The strategic implication is clear: invest in your retrieval, evaluation, and orchestration infrastructure. Treat the model as a swappable component behind an interface. Build model-agnostic systems from day one.
+
+<ConceptCheck id="cc-1" />
+
+---
+
+## 2. Agentic AI Goes Mainstream
+
+We studied agents in Weeks 4-6. Over the next two years, agents will transition from a niche pattern to the default architecture for most AI applications. Several converging forces drive this:
+
+**Tool use is now reliable.** When we started this course, tool calling was flaky — models would hallucinate tool names, pass wrong argument types, call tools in nonsensical orders. With structured outputs, improved function calling, and frameworks like Anthropic's Claude tool use, tool reliability has crossed the threshold where you can build user-facing products on it.
+
+**Protocols are maturing.** The Model Context Protocol (MCP) and Agent-to-Agent (A2A) protocol that we covered in Weeks 5-6 are establishing standardized interfaces. This matters because it enables interoperability — an agent built with one framework can use tools built for another.
+
+**User expectations are shifting.** Users are increasingly comfortable with AI systems that take actions, not just generate text. "Book a flight," "file this expense report," "draft and send the email" — these are agent interactions, and users already expect them from tools like ChatGPT, Claude, and Google's Gemini.
+
+What changes for engineers when every app has agents:
+
+**Error handling becomes paramount.** When an LLM generates bad text, the user sees it and moves on. When an agent takes a bad action — sends the wrong email, books the wrong flight, modifies the wrong database record — the consequences are real and potentially irreversible. You need confirmation steps, undo mechanisms, and audit trails.
+
+**Evaluation becomes harder.** Evaluating a chatbot response is relatively straightforward. Evaluating a multi-step agent trajectory — did it take the right actions, in the right order, with the right parameters, and achieve the right outcome? — requires trajectory-level evaluation, which we discussed in Week 4.
+
+**Security surface area explodes.** Every tool an agent can call is an attack vector. Prompt injection becomes not just an annoyance but a genuine security vulnerability when agents can write to databases, call APIs, and move money.
+
+---
+
+## 3. Multimodal AI: New Application Patterns
+
+The next wave of AI applications will be multimodal by default. Vision, audio, and video capabilities are no longer separate models bolted together — they are native capabilities of frontier models.
+
+**Vision-language models** unlock applications we could not build before: analyzing medical images alongside patient notes, processing receipts and invoices from photos, interpreting charts and diagrams in technical documents. The RAG patterns you learned extend naturally: instead of only indexing text, you index images with their visual embeddings, and your retrieval pipeline returns both text chunks and relevant images.
+
+**Audio understanding** enables real-time conversation agents, meeting summarization with speaker diarization, and customer service systems that detect emotion from tone of voice. The latency requirements are severe — users expect sub-second response in voice interactions, which changes your architecture fundamentally from the batch-oriented patterns we have studied.
+
+**Video understanding** is the frontier. Analyzing hours of video content, understanding temporal relationships ("what happened after the speaker showed the slide"), and generating summaries that capture both visual and audio information. The token economics are challenging — a minute of video can consume tens of thousands of tokens — but the applications in education, security, healthcare, and entertainment are enormous.
+
+```python
+# Multimodal retrieval: extending RAG to images
+from dataclasses import dataclass, field
+
+@dataclass
+class MultimodalDocument:
+    doc_id: str
+    text_chunks: list[dict] = field(default_factory=list)
+    image_chunks: list[dict] = field(default_factory=list)
+    audio_chunks: list[dict] = field(default_factory=list)
+
+    def total_chunks(self) -> int:
+        return len(self.text_chunks) + len(self.image_chunks) + len(self.audio_chunks)
+
+@dataclass
+class MultimodalRetrievalResult:
+    query: str
+    text_results: list[dict] = field(default_factory=list)
+    image_results: list[dict] = field(default_factory=list)
+    fusion_strategy: str = "reciprocal_rank_fusion"
+
+    def merged_results(self, k: int = 5) -> list[dict]:
+        """Merge text and image results using reciprocal rank fusion."""
+        scores = {}
+        rrf_k = 60  # Standard RRF constant
+
+        for rank, result in enumerate(self.text_results):
+            rid = result.get("id", f"text_{rank}")
+            scores[rid] = scores.get(rid, 0) + 1.0 / (rrf_k + rank + 1)
+            result["_type"] = "text"
+            result["_id"] = rid
+
+        for rank, result in enumerate(self.image_results):
+            rid = result.get("id", f"image_{rank}")
+            scores[rid] = scores.get(rid, 0) + 1.0 / (rrf_k + rank + 1)
+            result["_type"] = "image"
+            result["_id"] = rid
+
+        all_results = self.text_results + self.image_results
+        all_results.sort(key=lambda r: scores.get(r["_id"], 0), reverse=True)
+        return all_results[:k]
+
+
+# Example: Multimodal RAG for a medical case
+doc = MultimodalDocument(
+    doc_id="patient-case-1234",
+    text_chunks=[
+        {"id": "t1", "text": "Patient presents with acute chest pain...", "tokens": 150},
+        {"id": "t2", "text": "ECG shows ST elevation in leads V1-V4...", "tokens": 120},
+    ],
+    image_chunks=[
+        {"id": "i1", "description": "Chest X-ray showing cardiomegaly", "modality": "xray"},
+        {"id": "i2", "description": "ECG strip with ST elevation", "modality": "ecg"},
+    ],
+)
+
+result = MultimodalRetrievalResult(
+    query="What imaging findings support the diagnosis?",
+    text_results=[
+        {"id": "t2", "text": "ECG shows ST elevation in leads V1-V4", "score": 0.89},
+        {"id": "t1", "text": "Patient presents with acute chest pain", "score": 0.72},
+    ],
+    image_results=[
+        {"id": "i2", "description": "ECG strip with ST elevation", "score": 0.91},
+        {"id": "i1", "description": "Chest X-ray showing cardiomegaly", "score": 0.78},
+    ],
+)
+
+merged = result.merged_results(k=3)
+print(f"Document has {doc.total_chunks()} total chunks across modalities")
+print(f"\nTop {len(merged)} multimodal results for: '{result.query}'")
+for i, r in enumerate(merged, 1):
+    print(f"  {i}. [{r['_type'].upper()}] {r.get('text', r.get('description', 'N/A'))[:60]}")
+```
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 4. AI Regulation and Responsible AI
+
+The regulatory landscape is shifting rapidly, and AI engineers need to understand it — not because they are lawyers, but because regulations translate into engineering requirements.
+
+**The EU AI Act**, which began enforcement in 2025, classifies AI systems by risk level. High-risk systems (healthcare, hiring, credit scoring, law enforcement) face mandatory requirements: human oversight, transparency, data governance, accuracy metrics, and robustness testing. As an engineer, this means building audit trails, explainability features, and bias testing into your pipeline, not as afterthoughts but as first-class system requirements.
+
+**In the United States**, the approach has been sector-specific rather than comprehensive: FDA guidance for AI in medical devices, EEOC guidance for AI in hiring, SEC scrutiny of AI in financial services. The practical effect is similar — if you are building AI in a regulated industry, you need compliance infrastructure.
+
+**Responsible AI in practice** means several things for engineers: documenting your data sources and their biases, implementing content filtering and safety classifiers, maintaining audit logs of all AI-generated outputs in high-stakes domains, and conducting regular bias audits. It also means saying "no" when asked to build AI systems that would cause harm — a professional responsibility that transcends any regulation.
+
+---
+
+## 5. AI Engineer Career Paths
+
+The "AI engineer" title is broad. Here is how the field is stratifying, with specific guidance on what to focus on for each path:
+
+**AI Platform Engineer.** You build the infrastructure that other AI engineers use: the evaluation framework, the prompt management system, the feature flag service for models, the observability pipeline. You think about developer experience, API design, and scalability. This role sits at the intersection of platform engineering and ML infrastructure. Skills to develop: distributed systems, API design, developer tooling.
+
+**AI Application Engineer.** You build user-facing AI products: the chatbot, the search system, the code assistant. You think about user experience, product quality, and system design. This is the most common AI engineering role and the one this course has primarily prepared you for. Skills to develop: product sense, UX for AI, evaluation methodology.
+
+**ML Engineer.** You fine-tune models, design training pipelines, and optimize inference. You think about model quality, training data, and performance. This role requires deeper ML knowledge than the other paths. Skills to develop: PyTorch, training infrastructure, model optimization.
+
+**Research Engineer.** You implement research ideas and run experiments. You bridge the gap between a paper and a production system. This role exists primarily at AI labs (Anthropic, OpenAI, Google DeepMind, Meta FAIR) and requires strong research taste. Skills to develop: paper reading, experimental design, rapid prototyping.
+
+```python
+# Career path self-assessment
+from dataclasses import dataclass
+
+@dataclass
+class CareerPath:
+    title: str
+    key_skills: list[str]
+    typical_companies: list[str]
+    recommended_next_learning: list[str]
+
+career_paths = [
+    CareerPath(
+        "AI Platform Engineer",
+        ["Distributed systems", "API design", "Kubernetes", "CI/CD"],
+        ["Anthropic", "OpenAI", "Databricks", "Weights & Biases", "LangSmith"],
+        ["Designing Data-Intensive Applications (Kleppmann)", "Kubernetes in Action", "gRPC internals"],
+    ),
+    CareerPath(
+        "AI Application Engineer",
+        ["System design", "RAG", "Agents", "Evaluation", "Product sense"],
+        ["Any AI startup", "Notion", "Cursor", "Replit", "Vercel"],
+        ["Build 3 production projects", "Study system design interviews", "Learn a frontend framework"],
+    ),
+    CareerPath(
+        "ML Engineer",
+        ["PyTorch", "Fine-tuning", "Training infrastructure", "Model optimization"],
+        ["Anthropic", "Google DeepMind", "Meta FAIR", "Cohere", "Mistral"],
+        ["Andrej Karpathy's Neural Nets: Zero to Hero", "Hugging Face course", "CUDA programming"],
+    ),
+    CareerPath(
+        "Research Engineer",
+        ["Paper implementation", "Experimental design", "Rapid prototyping"],
+        ["Anthropic", "OpenAI", "Google DeepMind", "Allen AI", "EleutherAI"],
+        ["Read 2 papers/week from arxiv", "Reproduce 3 papers", "Contribute to open-source ML"],
+    ),
+]
+
+print("AI Engineering Career Paths\n")
+for path in career_paths:
+    print(f"== {path.title} ==")
+    print(f"  Skills: {', '.join(path.key_skills)}")
+    print(f"  Companies: {', '.join(path.typical_companies)}")
+    print(f"  Next steps: {path.recommended_next_learning[0]}")
+    print()
+```
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 6. What to Learn Next
+
+This course gave you a foundation. Here is what to study next, organized by timeframe:
+
+**This month:** Build one of the capstone projects. Ship it. Put it on GitHub with a good README and eval results. This single action is worth more than any additional coursework.
+
+**This quarter:** Read these papers — not for academic credit, but because they will make you a better engineer:
+- *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks* (Lewis et al., 2020) — the original RAG paper
+- *ReAct: Synergizing Reasoning and Acting in Language Models* (Yao et al., 2023) — the foundation of modern agents
+- *Scaling Laws for Neural Language Models* (Kaplan et al., 2020) — why model behavior is predictable
+- *Constitutional AI* (Bai et al., 2022) — how safety training works
+- *Judging LLM-as-a-Judge* (Zheng et al., 2023) — the basis for automated evaluation
+
+**This year:** Go deep on one sub-field. Pick the career path that excites you most and spend a year building expertise. Depth beats breadth at the intermediate level. Contribute to an open-source project in that area — it is the best way to learn and the best way to get noticed.
+
+**Communities to join:** AI Engineer (community and conference), Latent Space (podcast and Discord), MLOps Community, and the Hugging Face forums. Follow the engineering blogs from Anthropic, OpenAI, Google, and Databricks — they publish detailed technical posts about production AI systems that are more useful than most papers.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 7. Closing Thoughts
+
+Ten weeks ago, you may not have known what a RAG pipeline was or why agent evaluation is hard. Now you can design one from scratch, evaluate it rigorously, deploy it to production, and monitor it in the wild. That is a meaningful accomplishment.
+
+But the field will not wait for you. In the time it took to deliver this course, new model architectures were released, new frameworks gained traction, and new application patterns emerged. The engineers who thrive are not the ones who know the latest framework — they are the ones who understand the fundamentals deeply enough to evaluate new tools critically and adopt them when they genuinely help.
+
+The fundamentals you have learned — information retrieval, distributed systems design, evaluation methodology, production engineering — are decades old. They are the bedrock on which every new framework is built. When the next "revolutionary" AI tool appears, ask yourself: What problem does it solve? How would I evaluate whether it actually works? What are the failure modes? If you can answer those questions, you will navigate this field well.
+
+Build things. Ship them. Measure them. Improve them. That is the entire discipline of production AI engineering, and you are now equipped to practice it.
+
+Good luck.

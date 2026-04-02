@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A 32 KB, 4-way set-associative cache with 64-byte blocks has how many sets? And how many index bits are needed for a 32-bit address?",
+      "options": [
+        "512 sets, 9 index bits",
+        "128 sets, 7 index bits",
+        "256 sets, 8 index bits",
+        "64 sets, 6 index bits"
+      ],
+      "correct": 1,
+      "explanation": "Number of blocks = 32768 / 64 = 512 blocks. Number of sets = 512 / 4 = 128 sets. Index bits = log2(128) = 7 bits. The remaining bits are: offset = log2(64) = 6 bits, tag = 32 - 7 - 6 = 19 bits. So the 32-bit address is decomposed as [19-bit tag | 7-bit index | 6-bit offset]."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A direct-mapped cache and a 4-way set-associative cache have the same total size and block size. Which statement about their miss behavior is correct?",
+      "options": [
+        "The direct-mapped cache always has fewer misses because it is simpler",
+        "The direct-mapped cache will have the same number of compulsory and capacity misses as the 4-way cache, but may have more conflict misses",
+        "The 4-way cache will have more compulsory misses because it takes longer to fill",
+        "Both caches have identical miss rates for all workloads"
+      ],
+      "correct": 1,
+      "explanation": "Compulsory misses depend only on which blocks are accessed for the first time -- identical for both caches. Capacity misses depend on total cache size -- also identical. But conflict misses arise from limited associativity: in a direct-mapped cache (1-way), two blocks mapping to the same index constantly evict each other. The 4-way cache can hold 4 blocks per set, eliminating many of these conflicts. This is why the three-C classification is so useful: it lets you pinpoint whether increasing size (capacity misses) or increasing associativity (conflict misses) would be more beneficial."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An L1 cache has a hit time of 1 ns and a miss rate of 4%. On a miss, the L2 cache is consulted, which has a hit time of 3 ns and a miss rate of 20%. The DRAM latency is 70 ns. What is the AMAT?",
+      "options": [
+        "1.12 ns",
+        "1.68 ns",
+        "1.12 + 0.04 * 70 = 3.92 ns",
+        "1 + 0.04 * (3 + 0.20 * 70) = 1.68 ns"
+      ],
+      "correct": 3,
+      "explanation": "AMAT = HT_L1 + MR_L1 * (HT_L2 + MR_L2 * MP_DRAM) = 1 + 0.04 * (3 + 0.20 * 70) = 1 + 0.04 * (3 + 14) = 1 + 0.04 * 17 = 1 + 0.68 = 1.68 ns. The hierarchical nature of the formula is crucial: the L2 miss penalty is not 70 ns but rather 3 + 0.20 * 70 = 17 ns (L2 hit time plus the probability-weighted DRAM penalty). This shows how multiple cache levels dramatically reduce effective memory latency."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Intel Raptor Cove has a 48 KB L1D cache with 12-way associativity, while Apple M3's P-core has a 128 KB L1D cache. What tradeoff does Apple make by choosing a larger L1?",
+      "options": [
+        "No tradeoff -- larger is always better",
+        "The M3's L1 likely has higher access latency (more comparators, larger SRAM array) but compensates with a dramatically lower miss rate, reducing accesses to the slower L2",
+        "A larger L1 uses less power because it reduces L2 accesses",
+        "Apple's L1 is slower but cheaper to manufacture"
+      ],
+      "correct": 1,
+      "explanation": "A larger L1 cache means a physically larger SRAM array (longer wire delays) and potentially higher associativity (more parallel comparators), both of which increase access latency. Intel's L1D takes ~5 cycles at 5.5 GHz while Apple's takes ~3 cycles at 4.05 GHz -- in nanoseconds, 0.9 ns vs 0.7 ns, so Apple achieves lower absolute latency despite the larger size, partly because of its lower clock frequency (shorter cycles). The 128 KB vs 48 KB size difference significantly reduces miss rate, meaning fewer accesses to the slower L2. This is a classic area-latency-hit-rate tradeoff in cache design."
+    }
+  ]
+}

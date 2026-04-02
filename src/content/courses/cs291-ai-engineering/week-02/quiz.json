@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 2: RAG Fundamentals",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the RAG formulation, what is the key practical approximation that makes the system tractable?",
+      "options": [
+        "Replacing the language model with a smaller, faster model",
+        "Approximating the marginalization over all document subsets by conditioning on the top-k retrieved documents",
+        "Using cosine similarity instead of exact semantic matching",
+        "Caching all possible query-answer pairs at index time"
+      ],
+      "correct": 1,
+      "explanation": "The exact RAG formulation requires marginalizing over all possible subsets of the document corpus D: P(a|q,D) = Σ P(a|q,C)·P(C|q). This is intractable for any non-trivial corpus. The practical approximation replaces this with P(a|q,D) ≈ P(a|q,C_k), where C_k is the top-k documents from the retriever. This 'retrieve-then-read' approximation, introduced by Lewis et al. (2020), is what makes RAG feasible in practice. The quality of the approximation depends entirely on the quality of the retriever — if the top-k documents miss critical information, the generation quality suffers."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The InfoNCE contrastive loss uses in-batch negatives. What is the primary advantage of this approach over explicitly curated negative examples?",
+      "options": [
+        "In-batch negatives produce harder examples that improve training",
+        "In-batch negatives are computationally free — no additional data curation needed, and the number of negatives scales with batch size",
+        "In-batch negatives guarantee that no false negatives are included",
+        "In-batch negatives allow the model to learn from unlabeled data"
+      ],
+      "correct": 1,
+      "explanation": "The elegance of InfoNCE's in-batch negative strategy is efficiency: for a batch of N positive query-document pairs, every non-matched document serves as a negative for every query. This gives N-1 negatives per query without any additional data collection or annotation cost. The number of negatives scales directly with batch size, which is why contrastive learning benefits from large batches. However, in-batch negatives tend to be 'easy' — random documents are usually clearly irrelevant. This is why hard negative mining (using documents that are topically similar but not actually relevant) is critical for training high-quality embedding models, as shown by Wang et al. (2022) in the E5 paper."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A document embedding model was trained using cosine similarity during contrastive learning. At retrieval time, you use L2 distance as your similarity metric. What is the likely impact?",
+      "options": [
+        "No impact — L2 and cosine produce identical rankings for any vectors",
+        "Degraded retrieval quality because the training and inference metrics are mismatched, especially if embeddings are not normalized",
+        "Improved retrieval quality because L2 distance captures more information than cosine similarity",
+        "The system will crash because L2 distance is incompatible with dense embeddings"
+      ],
+      "correct": 1,
+      "explanation": "Training-inference metric mismatch is a real and common source of degradation. For normalized vectors, L2 and cosine produce equivalent rankings (since ||a-b||² = 2(1-cos(a,b))). However, if the embedding model does not explicitly normalize its outputs, the vectors may have varying norms. In this case, cosine similarity (which is norm-invariant) and L2 distance (which is norm-sensitive) can produce different rankings. The model was trained to optimize cosine similarity, so the direction of vectors carries semantic meaning but the magnitude may not. Using L2 distance in this case means magnitude differences (which are noise) can override directional differences (which are signal). Always match your retrieval metric to your training metric."
+    },
+    {
+      "id": "q4",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does the following code output?\n\n```python\nimport math\n\nrelevance = [3, 1, 0, 2]\ndcg = sum(rel / math.log2(i + 2) for i, rel in enumerate(relevance))\nprint(f\"{dcg:.3f}\")\n```",
+      "options": [
+        "3.631",
+        "4.492",
+        "6.000",
+        "5.117"
+      ],
+      "correct": 1,
+      "explanation": "Computing DCG step by step with 0-indexed enumeration (i+2 gives the correct 1-indexed denominator): i=0: 3/log2(2) = 3/1.0 = 3.000. i=1: 1/log2(3) = 1/1.585 = 0.631. i=2: 0/log2(4) = 0/2.0 = 0.000. i=3: 2/log2(5) = 2/2.322 = 0.861. Total: 3.000 + 0.631 + 0.000 + 0.861 = 4.492. The key insight is understanding the DCG discount function: documents at higher positions (lower rank) contribute less to the score due to the logarithmic discount factor log2(i+1). This means a highly relevant document at position 1 contributes its full relevance score, while the same document at position 4 contributes only rel/log2(5) ≈ 43% of its relevance. This logarithmic discounting is why NDCG rewards retrievers that place the best results at the top."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the RAGAS evaluation framework, which metric is MOST critical for detecting whether a RAG system is generating convincing but incorrect answers?",
+      "options": [
+        "Context Recall — whether the retrieved context contains all needed information",
+        "Answer Relevancy — whether the answer addresses the original question",
+        "Faithfulness — whether every claim in the answer is supported by the retrieved context",
+        "Context Relevancy — whether the retrieved context is relevant to the query"
+      ],
+      "correct": 2,
+      "explanation": "Faithfulness is the most critical metric for detecting hallucination — the case where the LLM generates claims that go beyond or contradict the retrieved evidence. It works by extracting individual claims from the generated answer and checking each one against the context. A faithfulness score below 1.0 means the model is generating information not supported by the evidence. This is the most dangerous RAG failure mode because the answers sound authoritative. Context recall catches missing information (retrieval failures), answer relevancy catches off-topic answers, and context relevancy catches noisy retrieval — all important, but none as dangerous as an unfaithful answer that a user trusts."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You observe that your RAG system's quality degrades as you increase the number of retrieved documents from k=3 to k=20. What is the most likely failure mode?",
+      "options": [
+        "Retrieval failure — the retriever cannot find enough relevant documents",
+        "Context window overflow — the LLM loses track of relevant information buried among irrelevant retrieved content",
+        "Stale embeddings — more documents means more outdated content",
+        "Hallucination despite context — more context causes more hallucination"
+      ],
+      "correct": 1,
+      "explanation": "This is a classic symptom of context window overflow (Failure Mode 2). As k increases, the ratio of relevant to irrelevant content in the prompt decreases, and the LLM must find the needle in a growing haystack. Liu et al. (2024) demonstrated the 'lost in the middle' phenomenon: LLMs pay disproportionate attention to the beginning and end of the context, often ignoring information in the middle. The fix is not to blindly increase k — instead, retrieve a larger candidate set, re-rank with a cross-encoder, and select only the highest-quality chunks. Context compression (extracting only the relevant sentences from each chunk) is another effective strategy."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In HNSW, what is the role of the ef_search parameter at query time?",
+      "options": [
+        "It controls the maximum number of results returned to the user",
+        "It sets the beam width during graph traversal — higher values improve recall at the cost of query latency",
+        "It determines how many layers the hierarchical graph has",
+        "It controls the maximum number of connections per node in the graph"
+      ],
+      "correct": 1,
+      "explanation": "ef_search (ef = exploration factor) controls the size of the dynamic candidate list during the greedy search phase. Think of it as beam width: at each step, instead of greedily following only the single nearest neighbor, HNSW maintains a list of the ef_search closest candidates and explores neighbors of all of them. Higher ef_search means more thorough exploration → higher recall (finding the true nearest neighbors) but more distance computations → higher latency. This is the primary knob for the recall-latency tradeoff at query time. Note: M controls max connections per node (a build-time parameter), and ef_construction controls beam width during index building."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Your RAG system uses Product Quantization (PQ) to compress 1536-dimensional float32 embeddings. With M=96 sub-quantizers and 256 centroids per sub-quantizer, what is the approximate compression ratio?",
+      "options": [
+        "16x — each sub-vector is reduced to one byte",
+        "64x — from 6144 bytes to 96 bytes",
+        "256x — from 6144 bytes to 24 bytes",
+        "8x — from 6144 bytes to 768 bytes"
+      ],
+      "correct": 1,
+      "explanation": "Original size: 1536 dimensions × 4 bytes (float32) = 6,144 bytes per vector. With PQ: the vector is split into M=96 sub-vectors, each of dimension 1536/96 = 16. Each sub-vector is replaced by an 8-bit index into a codebook of 256 centroids (2^8 = 256, so 1 byte per index). Compressed size: 96 sub-vectors × 1 byte = 96 bytes. Compression ratio: 6,144 / 96 = 64x. The codebook itself (96 sub-quantizers × 256 centroids × 16 dimensions × 4 bytes ≈ 6.3 MB) is stored once and shared across all vectors, so it is negligible for large collections. This dramatic compression enables billion-scale vector search in memory."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following is NOT one of the three RAG taxonomy categories described by Gao et al. (2024)?",
+      "options": [
+        "Naive RAG — simple retrieve-then-read pipeline",
+        "Advanced RAG — adds pre-retrieval and post-retrieval processing",
+        "Agentic RAG — the LLM autonomously decides retrieval strategy based on real-time user feedback",
+        "Modular RAG — decomposes the pipeline into interchangeable, independently testable modules"
+      ],
+      "correct": 2,
+      "explanation": "Gao et al. (2024) describe three categories: Naive RAG (simple chunk → embed → retrieve → generate), Advanced RAG (adds preprocessing like query rewriting and postprocessing like reranking), and Modular RAG (decomposes the system into swappable modules including routing, iterative retrieval, and tool-augmented retrieval). 'Agentic RAG' is not one of their categories, though the concept of tool-augmented retrieval (where the LLM decides when and what to retrieve, as in Toolformer by Schick et al., 2023) falls under the Modular RAG umbrella. The modular view is the most productive mental model for production systems because each module can be tested, evaluated, and improved independently."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the 'evals-first' philosophy for AI engineering, what should you do BEFORE optimizing your RAG pipeline (e.g., trying a better embedding model or adding a reranker)?",
+      "options": [
+        "Deploy the current system to production to collect real user feedback",
+        "Fine-tune the LLM on your domain-specific data",
+        "Build an evaluation dataset and establish baseline metrics with your simplest possible pipeline",
+        "Implement all known RAG improvements and A/B test them simultaneously"
+      ],
+      "correct": 2,
+      "explanation": "The evals-first workflow requires: (1) define your metrics, (2) build your eval set (50-100+ representative query-answer pairs), (3) baseline with the simplest pipeline, (4) change one thing at a time and measure. Without a baseline and eval set, you cannot know if a change actually improves the system — you are flying blind. This is the AI engineering equivalent of writing tests before code (TDD). Many teams skip straight to implementing the latest architecture from a blog post without measuring their current system. The result is wasted effort on changes that may not matter, inability to detect regressions, and no systematic way to prioritize improvements. Measurement infrastructure is not glamorous, but it is what separates systems that work from systems that 'work on my laptop.'"
+    }
+  ]
+}

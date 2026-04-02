@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 5: Instruction Sets",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "How many base instructions are in the RV32I (base integer) instruction set?",
+      "options": [
+        "16",
+        "40",
+        "128",
+        "Over 1000"
+      ],
+      "correct": 1,
+      "explanation": "The RV32I base integer instruction set contains exactly 40 unique instructions. This minimalism is deliberate — it keeps the hardware simple, reduces verification complexity, and makes the ISA accessible for teaching and research. The full RISC-V ecosystem adds functionality through extensions (M for multiply/divide, A for atomics, F/D for floating point, etc.), but the base ISA is remarkably compact. For comparison, x86-64 has over 1,500 instructions."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In RISC-V, why is the immediate field in a B-type instruction encoded with the bits scrambled (e.g., [12|10:5|4:1|11]) rather than in sequential order?",
+      "options": [
+        "To prevent buffer overflow attacks",
+        "To keep the sign bit at instruction bit 31 and maximize bit position overlap with other formats, reducing multiplexer complexity in the immediate generator",
+        "To encode the immediate as a multiple of 4 rather than 2",
+        "Because sequential encoding would require a wider instruction word"
+      ],
+      "correct": 1,
+      "explanation": "The RISC-V specification places the sign bit at instruction bit 31 in every format (I, S, B, U, J). This means a single wire from bit 31 drives the sign-extension logic across all formats. Additionally, bits [30:25] provide imm[10:5] in I, S, and B formats, reducing the number of multiplexers needed. The immediate range is determined by the number of bits available and the 2-byte alignment, not by the ordering. This is a hardware design optimization — the scrambled encoding costs nothing in the assembler but saves gates in the decoder."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following is NOT a valid RISC-V RV32I instruction?",
+      "options": [
+        "ADDI x1, x2, 100",
+        "SUBI x1, x2, 100",
+        "ADD x1, x2, x3",
+        "LUI x1, 0x12345"
+      ],
+      "correct": 1,
+      "explanation": "RISC-V does not have a SUBI instruction. Subtraction of an immediate is accomplished using ADDI with a negative immediate: ADDI x1, x2, -100. This is possible because ADDI sign-extends its 12-bit immediate, supporting values from -2048 to +2047. Including a separate SUBI would add a redundant instruction, increasing decode complexity for zero benefit. This is an example of RISC-V's orthogonal design philosophy."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A RISC-V function uses registers s0, s1, a0, and t0, and calls another function. Which registers must it save in its prologue?",
+      "options": [
+        "All four: s0, s1, a0, t0",
+        "s0, s1, and ra only",
+        "a0 and t0 only",
+        "Only ra"
+      ],
+      "correct": 1,
+      "explanation": "The function must save: (1) ra, because it makes a function call (JAL overwrites ra); (2) s0 and s1, because they are callee-saved registers that the function uses — if the function modifies them, it must restore the old values before returning. Registers a0 and t0 are caller-saved, meaning the callee is free to overwrite them without saving. If the function's caller needs a0 or t0 preserved, the CALLER is responsible for saving them before the call."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the maximum range of a B-type (branch) instruction's target address relative to the current PC?",
+      "options": [
+        "+/- 256 bytes",
+        "+/- 4 KiB",
+        "+/- 1 MiB",
+        "+/- 2 GiB"
+      ],
+      "correct": 1,
+      "explanation": "B-type encodes a 13-bit signed immediate (12 bits stored + implicit bit 0 = 0, since the target must be 2-byte aligned). A 13-bit signed value ranges from -4096 to +4094, giving a range of approximately +/- 4 KiB from the current PC. This is sufficient for most intra-function branches. For longer jumps, JAL provides +/- 1 MiB (21-bit immediate), and AUIPC + JALR provides the full 32-bit address space."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the RISC-V calling convention, what happens to the stack pointer (sp) when it is not 16-byte aligned?",
+      "options": [
+        "Nothing — alignment is optional",
+        "The hardware automatically aligns it",
+        "It violates the ABI specification and may cause undefined behavior, particularly with extensions requiring aligned data",
+        "The program receives a SIGBUS signal"
+      ],
+      "correct": 2,
+      "explanation": "The RISC-V psABI (processor-specific Application Binary Interface) requires the stack pointer to be 16-byte aligned at all times. Violating this is undefined behavior at the ABI level. While the base RV32I hardware may not enforce alignment for word loads/stores (depending on implementation), extensions like the D (double-precision float) extension require 8-byte aligned data, and SIMD extensions require even larger alignment. Maintaining 16-byte alignment ensures compatibility with all extensions. The 16-byte alignment also matches common cache line sub-divisions."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Consider the Iron Law: T = N_inst x CPI x T_clk. If you replace a CISC-style MUL instruction (1 instruction, 10 cycles) with a RISC-style shift-and-add loop (12 instructions, 1 cycle each), and the RISC clock is 25% faster, what is the speedup?",
+      "options": [
+        "CISC is 20% faster (10T vs 12 x 0.75T = 9T)",
+        "RISC is 10% faster (9T vs 10T)",
+        "They are exactly equal",
+        "CISC is faster because fewer instructions always wins"
+      ],
+      "correct": 1,
+      "explanation": "CISC: T = 1 x 10 x T = 10T. RISC: T = 12 x 1 x 0.75T = 9T. The RISC approach is 10% faster (9T vs 10T). Even though the RISC machine executes 12 times as many instructions, each completes in 1 cycle with a faster clock. The Iron Law shows that instruction count alone is misleading — what matters is the product of all three terms. This is why the RISC philosophy works: simpler instructions enable lower CPI and faster clocks, often compensating for higher instruction counts."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What does the pseudo-instruction 'RET' expand to in RISC-V?",
+      "options": [
+        "JAL x0, ra",
+        "JALR x0, ra, 0",
+        "BEQ x0, x0, ra",
+        "AUIPC ra, 0"
+      ],
+      "correct": 1,
+      "explanation": "RET expands to JALR x0, ra, 0, which means: jump to the address in register ra (the return address), adding offset 0, and write PC+4 into x0 (which is discarded since x0 is hardwired to zero). This is how RISC-V implements function returns without a dedicated return instruction. The ra register was set by the calling function's JAL or JALR instruction. Using x0 as the link register means we do not save a new return address — we are returning, not calling."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "During which stage of the compilation pipeline are external function references (like printf) resolved to concrete memory addresses?",
+      "options": [
+        "Preprocessing",
+        "Compilation",
+        "Assembly",
+        "Linking"
+      ],
+      "correct": 3,
+      "explanation": "The linker resolves external references. During assembly, the assembler creates a symbol table with unresolved references (relocation entries) for functions like printf that are defined in other object files or libraries. The linker then matches each reference to its definition, determines the final memory address of every function and global variable, and patches the call instructions with the correct addresses. Preprocessing handles #include and #define, compilation translates C to assembly, and assembly translates assembly to object code — but none of them resolve cross-file references."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You want to load the 32-bit constant 0xDEADBEEF into register x1 using RV32I instructions. What is the minimum number of instructions required?",
+      "options": [
+        "1 (a single LUI instruction)",
+        "2 (LUI + ADDI)",
+        "4 (four ADDI instructions with shifts)",
+        "8 (one instruction per nibble)"
+      ],
+      "correct": 1,
+      "explanation": "Two instructions: LUI loads the upper 20 bits, and ADDI adds the lower 12 bits. For 0xDEADBEEF: the lower 12 bits are 0xEEF. Since bit 11 (0x800) is set in 0xEEF, sign extension will subtract 0x1000 from the intended value. The assembler compensates by using LUI x1, 0xDEADC (incrementing the upper immediate by 1) followed by ADDI x1, x1, -273 (which is 0xFFFFFEEF in 12-bit two's complement). This two-instruction pattern is sufficient to construct any 32-bit value, which is why the LI pseudo-instruction always expands to at most 2 real instructions."
+    }
+  ]
+}

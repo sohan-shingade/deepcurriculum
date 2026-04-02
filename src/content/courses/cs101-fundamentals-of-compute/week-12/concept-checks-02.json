@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "What is the arithmetic intensity of naive matrix multiplication of two $n \\times n$ matrices (32-bit floats), and why does it matter?",
+      "options": [
+        "$n/6$ FLOP/byte; high intensity means the computation can be compute-bound for large $n$",
+        "$1/n$ FLOP/byte; low intensity means it is always memory-bound",
+        "$n^2$ FLOP/byte; extremely high intensity makes memory irrelevant",
+        "$2$ FLOP/byte; constant intensity regardless of matrix size"
+      ],
+      "correct": 0,
+      "explanation": "Naive matrix multiplication performs $2n^3$ FLOPs on $3n^2$ elements of 4 bytes each, giving arithmetic intensity $I = 2n^3 / (3n^2 \\times 4) = n/6$ FLOP/byte. For $n = 1000$, this is ~167 FLOP/byte --- far above the ridge point of any current processor. This means matrix multiplication has the *potential* to be compute-bound. However, the naive implementation fails to realize this potential because poor cache behavior causes many more memory accesses than the minimum $3n^2$. Tiling converts this potential into realized intensity by ensuring cached data is reused before eviction."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In tiled matrix multiplication with tile size $b$, how does data reuse for matrix $B$ improve compared to the naive algorithm?",
+      "options": [
+        "No improvement; tiling only helps matrix $A$",
+        "Each element of $B$ is loaded $m/b$ times instead of $m$ times, a factor-of-$b$ improvement",
+        "Each element of $B$ is loaded once instead of $m$ times, a factor-of-$m$ improvement",
+        "Data reuse for $B$ gets worse because tiling adds overhead"
+      ],
+      "correct": 1,
+      "explanation": "In the naive algorithm, the inner loop computes $C_{ij} += A_{ip} \\cdot B_{pj}$ for all $i$, meaning each element $B_{pj}$ is accessed $m$ times (once per row of $A$). In the tiled algorithm, a $b \\times b$ tile of $B$ is loaded into cache and reused across $b$ rows of the current $A$ tile. Each element of $B$ is loaded $m/b$ times from DRAM instead of $m$ times, a factor-of-$b$ reduction in memory traffic. With $b = 64$, this is a 64x improvement in data reuse, which is the primary reason tiled GEMM achieves near-peak performance."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Strassen's algorithm multiplies two $n \\times n$ matrices in $O(n^{2.807})$ instead of $O(n^3)$. Why is it rarely used in practice?",
+      "options": [
+        "It produces incorrect results for floating-point matrices",
+        "It requires specialized hardware not found in modern CPUs",
+        "Numerical instability, higher constant factors, poor cache behavior, and difficult SIMD vectorization make it slower than optimized conventional GEMM for practical matrix sizes",
+        "It only works for power-of-2 matrix dimensions"
+      ],
+      "correct": 2,
+      "explanation": "Despite better asymptotic complexity, Strassen's algorithm has several practical disadvantages: (1) The additions and subtractions of sub-matrices introduce cancellation errors, reducing numerical accuracy for ill-conditioned matrices. (2) The constant factors are large (18 additions/subtractions plus temporary storage for 7 sub-results at each recursive level), so it only beats optimized naive for $n > 1000$--4000 depending on hardware. (3) The recursive decomposition creates many temporary matrices, hurting cache behavior compared to the carefully tiled conventional algorithm. (4) The irregular access patterns in the additions are hard to vectorize with SIMD. In practice, cuBLAS and MKL use conventional tiled GEMM with register-level optimization and achieve 80--88% of peak throughput."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In a systolic array for matrix multiplication, what does each Processing Element (PE) compute, and how does data flow?",
+      "options": [
+        "Each PE computes a complete row of the output matrix; data is broadcast to all PEs simultaneously",
+        "Each PE performs multiply-accumulate ($acc += a \\times b$); elements of $A$ flow left-to-right and elements of $B$ flow top-to-bottom",
+        "Each PE performs division; data flows in a circular pattern",
+        "Each PE stores one element of the input matrix; data does not flow between PEs"
+      ],
+      "correct": 1,
+      "explanation": "In a systolic array, each PE has a local accumulator and performs a single MAC (multiply-accumulate) operation per cycle: $acc \\leftarrow acc + a \\times b$. Elements of matrix $A$ flow horizontally (left to right) along rows, and elements of matrix $B$ flow vertically (top to bottom) along columns. Each PE multiplies the $A$ element passing through it with the $B$ element passing through it, adding the product to its running accumulator. After $k$ cycles (where $k$ is the shared dimension), each PE's accumulator contains one element of the result matrix $C$. Google's TPU v1 uses a $256 \\times 256$ systolic array with 65,536 MAC units."
+    }
+  ]
+}

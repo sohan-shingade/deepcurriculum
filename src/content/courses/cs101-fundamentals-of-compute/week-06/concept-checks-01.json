@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "The register file has two read ports and one write port. Why does it need two read ports rather than just one?",
+      "options": [
+        "Because RISC-V has 32 registers, which requires two address decoders",
+        "Because instructions like ADD rd, rs1, rs2 need to read both source operands simultaneously in the same clock cycle for a single-cycle design",
+        "Because one port is for data and the other is for instructions",
+        "Because two ports provide redundancy in case one fails"
+      ],
+      "correct": 1,
+      "explanation": "In a single-cycle design, everything must happen within one clock cycle. An R-type instruction like ADD needs the values of both rs1 and rs2 as inputs to the ALU simultaneously. If the register file had only one read port, we would need two clock cycles to read both operands — violating the single-cycle constraint. The two read ports are combinational (no clock needed), so both values are available immediately after the register addresses are applied. The write port is clocked — the write occurs at the rising edge of the clock at the end of the cycle."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "For a Load Word (LW) instruction, the ALUOp control signal is set to 00, which causes the ALU to perform addition regardless of funct3/funct7. Why does the ALU always add for loads?",
+      "options": [
+        "Because LW computes the loaded value by adding the base and offset",
+        "Because the ALU computes the effective memory address: base register (rs1) + sign-extended offset (immediate), which is always an addition",
+        "Because loads do not use the ALU at all — the 00 code means bypass",
+        "Because the funct3 field of LW happens to encode addition"
+      ],
+      "correct": 1,
+      "explanation": "For LW x1, offset(x2), the ALU's job is to compute the memory address: Register[rs1] + sign_extended(immediate). This is always an addition — we are adding a base address and a displacement to find where in memory to read. The ALU is not performing any data computation on the loaded value itself; it is serving as an address generation unit. By setting ALUOp=00, the control unit tells the ALU control to output ADD regardless of what funct3 contains, because the funct3 field in load instructions encodes the data size (byte, halfword, word), not the ALU operation."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the single-cycle datapath, the BEQ instruction uses the ALU to subtract rs1 - rs2 and checks the Zero flag. If we also need to support BLT (branch if less than, signed comparison), what additional output do we need from the ALU?",
+      "options": [
+        "A carry flag from the most significant bit",
+        "The sign bit (bit 31) of the result, combined with overflow detection, to determine if rs1 - rs2 < 0 in signed arithmetic",
+        "A parity flag indicating whether the result has an even number of 1-bits",
+        "No additional output — BLT can be determined from the Zero flag alone"
+      ],
+      "correct": 1,
+      "explanation": "For signed comparison (BLT), we need to determine if rs1 < rs2 in two's complement. We compute rs1 - rs2 and check if the result is negative. In two's complement, the result is negative when the sign bit (bit 31) is 1 — BUT only if there was no overflow. If overflow occurred, the sign bit gives the wrong answer. The correct condition is: branch if (sign XOR overflow) = 1. This requires the ALU to output both the sign bit and an overflow flag. Modern processor datapaths often replace the simple Zero flag with a dedicated branch comparator that handles all six branch conditions (BEQ, BNE, BLT, BGE, BLTU, BGEU) directly."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "The critical path for a Load Word instruction is 850 ps. If we could somehow make the Data Memory access instant (0 ps), what would the new clock period be?",
+      "options": [
+        "650 ps, because R-type instructions become the new bottleneck",
+        "650 ps, but only if we also remove the MemToReg mux delay for load instructions since they now match R-type timing",
+        "0 ps, because memory was the only bottleneck",
+        "850 ps, because the clock period cannot change"
+      ],
+      "correct": 0,
+      "explanation": "If DMEM delay = 0 ps, the LW path becomes: IMEM(200) + RegRead(100) + MUX(25) + ALU(200) + DMEM(0) + MUX(25) + RegWrite(100) = 650 ps. This matches the R-type path, which is now the bottleneck. The clock period would be 650 ps, giving f = 1/650ps = 1.54 GHz. Even though we eliminated the memory delay, the ALU and instruction memory still dominate. This illustrates an important principle: optimizing one component just shifts the bottleneck. The new critical path is through the ALU, and further improvement would require a faster ALU or pipelining."
+    }
+  ]
+}

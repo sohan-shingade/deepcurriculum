@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A 1-bit branch predictor mispredicts twice per loop invocation (on entry and exit). The 2-bit saturating counter reduces this to one misprediction per invocation. Why?",
+      "options": [
+        "The 2-bit counter uses two separate predictors and picks the better one",
+        "The 2-bit counter requires two consecutive contrary outcomes to change its prediction, so a single loop exit (not-taken) only moves it from 'strongly taken' to 'weakly taken' -- it still predicts taken on the next loop entry",
+        "The 2-bit counter always predicts taken for backward branches",
+        "The 2-bit counter runs the branch twice speculatively"
+      ],
+      "correct": 1,
+      "explanation": "The saturation behavior is the key. After many taken iterations of a loop, the counter is in state 11 (strongly taken). The loop exit (not-taken) decrements it to 10 (weakly taken), but the MSB is still 1 so the prediction remains 'taken.' On the next loop invocation, the first iteration is correctly predicted as taken. Only the loop exit itself is mispredicted. A 1-bit predictor, by contrast, flips immediately on the exit, then mispredicts the re-entry."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A gshare predictor XORs the global history register (GHR) with the PC to index its prediction table. What advantage does this have over simply concatenating the GHR and PC bits?",
+      "options": [
+        "XOR is faster to compute than concatenation in hardware",
+        "XOR distributes entries more uniformly across the table without increasing its size, reducing destructive aliasing between different branch+history combinations",
+        "XOR eliminates the need for a global history register entirely",
+        "Concatenation would produce the same index for every branch"
+      ],
+      "correct": 1,
+      "explanation": "Concatenating m bits of GHR with k bits of PC would require a table with 2^(m+k) entries to fully utilize all combinations -- exponentially larger. XORing produces a k-bit index that interleaves the information from both sources into a table of 2^k entries. While this introduces aliasing (different GHR+PC pairs can map to the same index), the XOR hash distributes entries more uniformly than simple indexing, and the table size remains practical. McFarling's 1993 paper showed this achieves better accuracy per storage bit than concatenation-based schemes."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "TAGE uses tagged predictor tables with geometrically increasing history lengths (e.g., 5, 10, 20, 40, 80, 160, 320, 640 branches). Why is the geometric progression important?",
+      "options": [
+        "It allows the predictor to use power-of-two table sizes for efficient hardware implementation",
+        "It ensures efficient coverage of correlations at multiple time scales -- short loops, function-level patterns, and long-range phase behavior -- without wasting storage on redundant history lengths",
+        "Geometric progressions are easier to compute in hardware than arithmetic progressions",
+        "It reduces the number of comparators needed for tag matching"
+      ],
+      "correct": 1,
+      "explanation": "Branches exhibit correlations at wildly different time scales. A loop body might have a period of 5 branches. A function's branching pattern might repeat every 50-100 branches. Program phase transitions might create patterns spanning hundreds of branches. A geometric series (5, 10, 20, 40, ...) covers all these scales with just a few tables, using roughly the same storage at each scale. An arithmetic series (5, 10, 15, 20, ...) would waste many tables on short-range correlations while failing to reach long-range ones. This insight from Seznec is a key reason TAGE outperforms all prior designs."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "The perceptron predictor uses a linear sum y = w_0 + sum(w_i * x_i) to predict branches. What is its fundamental scaling advantage over table-based predictors like gshare?",
+      "options": [
+        "Perceptrons can predict branches without looking at history",
+        "Perceptrons require only O(n) weights per entry to use n bits of history, versus O(2^n) entries for table-based predictors that fully exploit n-bit history",
+        "Perceptrons are always more accurate than table-based predictors",
+        "Perceptrons do not need to be trained on runtime branch outcomes"
+      ],
+      "correct": 1,
+      "explanation": "A table-based predictor like gshare with n bits of history needs 2^n table entries -- exponential in history length. The perceptron needs only n+1 weights per branch entry -- linear in history length. This means a perceptron can practically use 32-62 bits of history within a few kilobytes of storage, while gshare would need 2^32 to 2^62 entries (impossible). Jimenez and Lin showed that this linear scaling allows the perceptron to exploit much longer-range correlations, achieving 4.6% misprediction rate versus gshare's 6.2% at the same 4 KB storage budget on SPEC 2000."
+    }
+  ]
+}

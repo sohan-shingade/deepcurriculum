@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In the multi-cycle design, the branch target address (PC + immediate) is computed during Step 1 (Decode), before we even know if the branch will be taken. Why?",
+      "options": [
+        "Because the branch condition must be checked before computing the target",
+        "Because the ALU would otherwise be idle during Decode, so we use it to speculatively compute the target — if the branch is taken in Step 2, the result is already available in ALUOut",
+        "Because branch targets must be stored in a separate buffer for pipeline use",
+        "Because the immediate field is only accessible during the Decode step"
+      ],
+      "correct": 1,
+      "explanation": "In Step 1 (Decode), the ALU has nothing else to do — register reads are happening, but they are independent of the ALU. Rather than wasting this cycle, the control unit directs the ALU to compute PC + sign_extended(immediate), storing the result in ALUOut. If the instruction turns out to be a branch and the condition is met (checked in Step 2), the pre-computed target in ALUOut is immediately used to update the PC, saving a cycle. If the instruction is not a branch, the result in ALUOut is simply overwritten in a later step. This speculative computation costs nothing — the ALU was idle anyway."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In a multi-cycle processor with memory delay = 200 ps and ALU delay = 200 ps, how is the clock period determined?",
+      "options": [
+        "Clock period = sum of all component delays = 800+ ps",
+        "Clock period = the longest instruction's total delay divided by its cycle count",
+        "Clock period = max(single step delay) = max(200, 200) = 200 ps, because each cycle executes only one step",
+        "Clock period = the average of all component delays"
+      ],
+      "correct": 2,
+      "explanation": "In the multi-cycle design, each clock cycle performs exactly one step, and each step uses at most one major component (memory OR ALU, not both). The clock period must be long enough for the slowest single step, which is the maximum of any individual component's delay. If memory takes 200 ps and the ALU takes 200 ps, the clock period is 200 ps. This is much shorter than the single-cycle clock period, which must accommodate the entire LW path (memory + ALU + register file + more). The trade-off is that instructions now take multiple cycles, but each cycle is fast."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "What is the key advantage of microprogrammed control over hardwired control for a complex ISA like x86?",
+      "options": [
+        "Microprogrammed control is always faster because ROM lookups are faster than combinational logic",
+        "Microprogrammed control uses less silicon area",
+        "Microprogrammed control stores control sequences in a ROM that can be modified (even post-fabrication via microcode updates), making it feasible to support 1500+ instructions without enormous combinational logic",
+        "Microprogrammed control eliminates the need for a clock signal"
+      ],
+      "correct": 2,
+      "explanation": "For x86 with 1500+ instructions, hardwired control would require an enormous, complex, and error-prone logic network. Microprogrammed control instead stores each instruction's control sequence as a series of microinstructions in a ROM. Adding or modifying an instruction is just changing the ROM contents, not redesigning logic gates. Critically, microcode can be updated after fabrication — Intel regularly ships microcode patches through OS updates to fix bugs and security vulnerabilities (as done for Spectre/Meltdown in 2018). Microprogrammed control is actually SLOWER than hardwired (ROM lookup adds latency), which is why RISC-V and ARM use hardwired control for their simpler ISAs."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A RISC-V function saves ra, s0, s1, and s2 in its prologue (4 store instructions) and restores them in its epilogue (4 load instructions). In a multi-cycle processor, how many clock cycles does this prologue + epilogue overhead consume?",
+      "options": [
+        "8 cycles (1 per instruction)",
+        "32 cycles (4 cycles per store x 4 stores + 5 cycles per load x 4 loads = 16 + 20 = 36 — wait, let me recalculate)",
+        "36 cycles (4 stores x 4 cycles + 4 loads x 5 cycles = 16 + 20 = 36, plus 2 ADDIs for sp adjustment = 8 more = 44 total)",
+        "36 cycles (prologue: ADDI sp 4 cycles + 4 SW x 4 cycles = 20 cycles; epilogue: 4 LW x 5 cycles + ADDI sp 4 cycles = 24 cycles; total = 44)"
+      ],
+      "correct": 3,
+      "explanation": "Let us count carefully. Prologue: (1) ADDI sp, sp, -32: 4 cycles (I-type arithmetic). (2-5) Four SW instructions: 4 x 4 = 16 cycles. Prologue total: 20 cycles. Epilogue: (1-4) Four LW instructions: 4 x 5 = 20 cycles. (5) ADDI sp, sp, 32: 4 cycles. Epilogue total: 24 cycles. Grand total: 20 + 24 = 44 cycles spent purely on function call overhead. This is why inlining functions (eliminating the call entirely) can provide significant speedups, and why leaf functions (which need no prologue/epilogue) are so efficient. A pipelined processor reduces this overhead significantly."
+    }
+  ]
+}

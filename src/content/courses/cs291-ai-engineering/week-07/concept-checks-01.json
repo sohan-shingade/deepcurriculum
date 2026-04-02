@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "You are building an AI application that uses RAG with a vector database and an LLM API. Your team of 4 engineers ships weekly. Traffic is 500 requests/day. Which architecture should you start with?",
+      "options": [
+        "Microservices: separate services for embedding, retrieval, generation, and the API gateway",
+        "A modular monolith with clean internal boundaries between retrieval, generation, and API modules",
+        "Serverless functions: one Lambda for embedding, one for retrieval, one for generation",
+        "A Kubernetes cluster with separate deployments per component from day one"
+      ],
+      "correct": 1,
+      "explanation": "At 500 requests/day with a small team, a modular monolith is the right choice. It eliminates network hops between components (embedding → retrieval → generation are function calls, not HTTP calls), enables deploying changes to the prompt and parser atomically in one PR, and avoids the operational overhead of managing multiple services. The clean internal boundaries mean you CAN split into microservices later if scaling demands it. Microservices and Kubernetes add operational complexity that is not justified at this scale. Serverless has cold start problems for AI workloads."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Your Docker build takes 8 minutes, and 6 of those minutes are spent on `pip install`. Your developers rebuild 30 times/day, but only change `requirements.txt` once a week. What is the highest-impact optimization?",
+      "options": [
+        "Switch from pip to poetry for faster dependency resolution",
+        "Use a smaller base image like python:3.11-alpine",
+        "Order the Dockerfile to COPY requirements.txt and RUN pip install BEFORE copying application code",
+        "Use docker-compose instead of plain Docker"
+      ],
+      "correct": 2,
+      "explanation": "Docker layer caching is the key. When you COPY requirements.txt and RUN pip install BEFORE copying application code, Docker caches the pip install layer. Since requirements.txt only changes once a week, 29 out of 30 daily builds skip the 6-minute pip install entirely. The build drops from 8 minutes to ~2 minutes for code-only changes. Alpine can cause issues with Python packages that need glibc. Poetry doesn't change the fundamental caching problem. docker-compose is an orchestration tool, not a build optimization."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Your AI chatbot is deployed on AWS Lambda. Users report 8-12 second response times on the first message of a conversation, but subsequent messages respond in 2-3 seconds. What is the most likely cause?",
+      "options": [
+        "The LLM API has a cold start that resolves after the first call",
+        "The Lambda function cold start is loading Python dependencies and initializing the LLM client",
+        "The vector database connection pool needs time to warm up",
+        "The user's browser is slow to render the first response"
+      ],
+      "correct": 1,
+      "explanation": "This is the classic Lambda cold start pattern: the first invocation after idle time must download the deployment package, start the Python runtime, import all dependencies (numpy, LLM client libraries, etc.), and initialize connections. This can take 5-10 seconds for an AI application. Subsequent requests reuse the warm container, so they only take 2-3 seconds (the actual LLM API call time). Mitigations include provisioned concurrency (keeps instances warm) or moving to a container-based deployment for high-traffic applications."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "You are deploying a new version of your AI assistant that uses a different system prompt. Your eval suite shows a 2% improvement on quality benchmarks. What deployment strategy should you use?",
+      "options": [
+        "Direct replacement: swap the old version for the new one immediately since evals improved",
+        "Blue-green deployment: switch all traffic at once with instant rollback capability",
+        "Canary deployment: route 5% of traffic to the new version and monitor quality metrics on real user traffic",
+        "Shadow deployment: run both versions, serve the old one, but the eval improvement makes this unnecessary"
+      ],
+      "correct": 2,
+      "explanation": "Canary deployment is the correct choice for AI prompt changes. A 2% improvement on evals is encouraging but does not guarantee improvement on real user traffic — eval sets are small samples and may not cover all query types. By routing 5% of traffic to the new version, you get real-world quality data (user ratings, follow-up rates, error rates) before committing to a full rollout. If the canary shows regression on real traffic despite good evals, you can roll back with minimal user impact. Shadow deployment would also be reasonable but involves more infrastructure; the canary approach is the practical standard."
+    }
+  ]
+}

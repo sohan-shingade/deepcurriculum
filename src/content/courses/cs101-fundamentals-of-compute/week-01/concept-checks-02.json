@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In a 2-input CMOS NAND gate, the pull-down network consists of two NMOS transistors in series and the pull-up network consists of two PMOS transistors in parallel. Why is PMOS used in parallel for the pull-up?",
+      "options": [
+        "PMOS transistors are faster than NMOS, so parallel arrangement increases speed",
+        "The complementary CMOS principle requires that if PDN uses series (AND), PUN must use parallel (OR) to ensure exactly one network conducts per input combination",
+        "Parallel PMOS reduces the total gate oxide capacitance",
+        "PMOS in parallel reduces power consumption compared to PMOS in series"
+      ],
+      "correct": 1,
+      "explanation": "CMOS gates require complementary pull-up and pull-down networks: when the PDN conducts (output = 0), the PUN must not conduct, and vice versa. If the PDN implements the AND function (NMOS in series: both must be ON), the PUN must implement the complementary function — which is OR (PMOS in parallel: either one ON is sufficient). This ensures there is never a direct path from VDD to ground and never a floating output. The NAND function Y = NOT(A AND B) emerges naturally: PDN pulls low only when A AND B, PUN pulls high otherwise. PMOS transistors are actually slower than NMOS (lower hole mobility), not faster."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Simplify the Boolean expression $F = A\\overline{B}C + A\\overline{B}\\overline{C} + AB\\overline{C}$ using Boolean algebra.",
+      "options": [
+        "$F = A\\overline{B} + A\\overline{C}$",
+        "$F = A(\\overline{B} + \\overline{C})$",
+        "$F = A\\overline{B} + \\overline{C}$",
+        "Both A and B are correct and equivalent"
+      ],
+      "correct": 3,
+      "explanation": "Start by factoring: $F = A\\overline{B}(C + \\overline{C}) + AB\\overline{C} = A\\overline{B} \\cdot 1 + AB\\overline{C} = A\\overline{B} + AB\\overline{C}$. Now factor out $A$: $F = A(\\overline{B} + B\\overline{C})$. Apply the absorption-like identity: $\\overline{B} + B\\overline{C} = \\overline{B} + \\overline{C}$ (this can be verified: $\\overline{B} + B\\overline{C} = (\\overline{B} + B)(\\overline{B} + \\overline{C}) = 1 \\cdot (\\overline{B} + \\overline{C}) = \\overline{B} + \\overline{C}$). So $F = A(\\overline{B} + \\overline{C}) = A\\overline{B} + A\\overline{C}$. Answers A and B are the factored and distributed forms of the same expression."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "How many 2-input NAND gates are needed to implement the XOR function $Y = A \\oplus B = A\\overline{B} + \\overline{A}B$?",
+      "options": [
+        "3 NAND gates",
+        "4 NAND gates",
+        "5 NAND gates",
+        "6 NAND gates"
+      ],
+      "correct": 1,
+      "explanation": "The XOR function can be built from 4 NAND gates. Let $N_1 = \\text{NAND}(A, B) = \\overline{AB}$. Then $N_2 = \\text{NAND}(A, N_1) = \\overline{A \\cdot \\overline{AB}} = \\overline{A} + AB = \\overline{A} + B$ (by De Morgan's and absorption). Similarly $N_3 = \\text{NAND}(N_1, B) = A + \\overline{B}$. Finally $N_4 = \\text{NAND}(N_2, N_3) = \\overline{(\\overline{A} + B)(A + \\overline{B})}$. Expanding: $(\\overline{A} + B)(A + \\overline{B}) = \\overline{A}\\overline{B} + AB$. So $N_4 = \\overline{\\overline{A}\\overline{B} + AB} = A\\overline{B} + \\overline{A}B = A \\oplus B$. Wait — that gives XNOR. The correct 4-NAND XOR circuit: $N_1 = \\text{NAND}(A,B)$, $N_2 = \\text{NAND}(A, N_1)$, $N_3 = \\text{NAND}(B, N_1)$, $Y = \\text{NAND}(N_2, N_3)$. Verify: when $A=1, B=0$: $N_1=1, N_2=\\overline{1}=0$... Actually, let us trace carefully. $N_1 = \\overline{AB}$. $N_2 = \\overline{A \\cdot \\overline{AB}}$. $N_3 = \\overline{B \\cdot \\overline{AB}}$. $Y = \\overline{N_2 \\cdot N_3}$. For A=1,B=0: N1=1, N2=NAND(1,1)=0, N3=NAND(0,1)=1, Y=NAND(0,1)=1. For A=0,B=0: N1=1, N2=NAND(0,1)=1, N3=NAND(0,1)=1, Y=NAND(1,1)=0. For A=1,B=1: N1=0, N2=NAND(1,0)=1, N3=NAND(1,0)=1, Y=NAND(1,1)=0. For A=0,B=1: N1=1, N2=NAND(0,1)=1, N3=NAND(1,1)=0, Y=NAND(1,0)=1. This matches XOR. So 4 NAND gates suffice."
+    }
+  ]
+}

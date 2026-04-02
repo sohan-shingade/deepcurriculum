@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 6: Multi-Agent Systems",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following is the BEST reason to use a multi-agent architecture instead of a single agent?",
+      "options": [
+        "Multi-agent systems always produce higher quality output than single agents",
+        "The task requires fundamentally different expertise that benefits from specialized system prompts, tools, and context for each role",
+        "Multi-agent systems are cheaper to run because each agent uses fewer tokens",
+        "Using multiple agents eliminates the need for error handling"
+      ],
+      "correct": 1,
+      "explanation": "The primary justification for multi-agent systems is role specialization — when a task requires fundamentally different expertise that cannot be effectively crammed into a single system prompt. Each agent gets a focused prompt, relevant tools, and minimal context for its specific role. Multi-agent systems are NOT always better (they add coordination overhead), NOT cheaper (they typically cost 2-5x more in tokens), and they definitely don't eliminate error handling — they make it more complex."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a hierarchical (manager-worker) architecture, what is the biggest risk?",
+      "options": [
+        "Workers may refuse to execute tasks assigned by the coordinator",
+        "The coordinator is a single point of failure — a bad task decomposition wastes all downstream work",
+        "Workers cannot communicate with each other, limiting collaboration",
+        "The architecture cannot support more than 3 worker agents"
+      ],
+      "correct": 1,
+      "explanation": "The coordinator in a hierarchical architecture is a single point of failure. If it produces a poor task decomposition — for example, missing a critical subtask or assigning work to the wrong specialist — all worker output is wasted or incorrect. This is why production systems validate decompositions (having the coordinator check its plan against the original task) and sometimes use two-phase commit patterns. The other options are incorrect: workers don't 'refuse' tasks, workers CAN communicate via shared state if needed, and there's no inherent limit on worker count."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A pipeline architecture has 4 stages with latencies of 3s, 7s, 2s, and 4s. What is the throughput bottleneck?",
+      "options": [
+        "Stage 1 (3s) — the first stage limits how fast tasks enter the pipeline",
+        "Stage 2 (7s) — the slowest stage limits throughput to approximately 1 task every 7 seconds",
+        "The total pipeline latency (16s) — throughput is 1/16 tasks per second",
+        "Stage 4 (4s) — the last stage limits how fast tasks exit the pipeline"
+      ],
+      "correct": 1,
+      "explanation": "In a pipeline architecture, throughput is limited by the slowest stage (the bottleneck). Once the pipeline is full, a new task can complete only as fast as the bottleneck stage processes one — which is every 7 seconds for Stage 2. The total latency (16s) affects how long a single task takes end-to-end, not the throughput. This is the same principle as assembly line manufacturing: the line moves at the speed of its slowest station. To improve throughput, you would either optimize Stage 2 or run multiple instances of it in parallel."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Two agents write to the same blackboard key concurrently. Agent A writes a risk score of 6.5 and Agent B writes 8.0. The key uses an 'average' merge strategy. What is the final value?",
+      "options": [
+        "8.0 — last-writer-wins is always the default",
+        "6.5 — first-writer-wins to prevent overwriting",
+        "7.25 — the average of both values",
+        "An error — concurrent writes are not permitted"
+      ],
+      "correct": 2,
+      "explanation": "With an 'average' merge strategy, concurrent writes to the same key are resolved by averaging the values: (6.5 + 8.0) / 2 = 7.25. This is appropriate for subjective scores where both agents' assessments are valid and a middle ground is desired. Different merge strategies serve different use cases: last-writer-wins for independent updates, union for additive lists (like vulnerability findings), max for conservative estimates, and average for aggregating subjective scores."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the fundamental difference between MCP (Model Context Protocol) and A2A (Agent-to-Agent protocol)?",
+      "options": [
+        "MCP is for Python agents and A2A is for JavaScript agents",
+        "MCP handles synchronous calls and A2A handles asynchronous calls",
+        "MCP standardizes agent-to-tool communication (passive resources); A2A standardizes agent-to-agent communication (autonomous actors that reason and plan)",
+        "MCP is an open standard and A2A is proprietary to Google"
+      ],
+      "correct": 2,
+      "explanation": "MCP and A2A address fundamentally different communication patterns. MCP (Model Context Protocol) standardizes how an agent accesses tools and passive resources — file systems, databases, APIs. The tool server doesn't reason or plan; it simply executes requested operations. A2A standardizes how agents communicate with other autonomous agents that have their own reasoning capabilities, tools, and decision-making. An agent might receive a task via A2A and then use MCP to access the tools it needs to complete that task. Both protocols are open standards and both support sync/async patterns."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An A2A task is in the 'working' state. Which of the following is NOT a valid next state?",
+      "options": [
+        "completed",
+        "failed",
+        "input-needed",
+        "submitted"
+      ],
+      "correct": 3,
+      "explanation": "The A2A task lifecycle defines valid state transitions. From 'working', a task can transition to 'completed' (success), 'failed' (error), or 'input-needed' (the agent needs more information from the client). It CANNOT go back to 'submitted' — that is the initial state when a task is first created. The state machine is: submitted -> working -> {completed, failed, input-needed}. From 'input-needed', it can go back to 'working' (after receiving the needed input) or to 'failed'. 'completed' and 'failed' are terminal states."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A multi-agent system has 5 independent agents, each with 94% reliability. If task success requires ALL agents to succeed, what is the approximate system reliability?",
+      "options": [
+        "94% — same as each individual agent",
+        "73% — reliability multiplies: 0.94^5 ≈ 0.734",
+        "88% — average reliability minus a small overhead penalty",
+        "97% — redundancy improves reliability"
+      ],
+      "correct": 1,
+      "explanation": "When success requires all agents to succeed independently, system reliability is the product of individual reliabilities: 0.94^5 = 0.7339, or approximately 73%. This dramatic drop from 94% to 73% is the multiplicative reliability problem of multi-agent systems. Each additional required agent reduces system reliability. This is why retry logic is essential: with one retry per agent (bringing effective per-agent reliability to ~99.6%), system reliability improves to 0.996^5 ≈ 0.98. The formula P_system = product(p_i) is the independence assumption — if agents share failure modes (e.g., same API going down), reliability can be even worse."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which debugging technique is MOST essential for multi-agent systems?",
+      "options": [
+        "Adding print statements to each agent's code",
+        "Distributed tracing with trace IDs that link all operations back to the original request",
+        "Running all agents sequentially instead of in parallel during debugging",
+        "Using a single agent to simulate the entire multi-agent system"
+      ],
+      "correct": 1,
+      "explanation": "Distributed tracing is the single most important debugging tool for multi-agent systems. Every operation — every LLM call, tool use, and inter-agent message — gets a trace ID linking it to the original request. This creates a hierarchical trace tree showing exactly what happened, in what order, and how long each step took. Print statements (A) don't provide structured, queryable data. Sequential execution (C) may mask concurrency bugs. Single-agent simulation (D) can't reproduce inter-agent interaction issues. Distributed tracing is borrowed from microservices engineering (OpenTelemetry) and is equally critical for multi-agent systems."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The coordination overhead ratio of a multi-agent system is 0.55. What does this indicate?",
+      "options": [
+        "The system is highly efficient — 55% of work is productive",
+        "The system is spending 55% of its total cost on coordination and communication rather than productive work, suggesting the task may not benefit from multi-agent decomposition",
+        "55% of tasks are completing successfully",
+        "The system uses 55% of its available parallelism"
+      ],
+      "correct": 1,
+      "explanation": "The coordination overhead ratio η_coord = (C_coord + C_comm) / C_total measures what fraction of total cost goes to coordination vs. productive work. A ratio of 0.55 means 55% of the total token budget is spent on the coordinator's decomposition, synthesis, and inter-agent message passing — leaving only 45% for actual task execution by workers. The lecture suggests that if η_coord > 0.4, the task likely doesn't benefit from multi-agent decomposition. At 0.55, you should consider whether a single well-prompted agent could handle the task more efficiently."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following is an anti-pattern in multi-agent system design?",
+      "options": [
+        "Using a coordinator agent to validate its task decomposition before delegating to workers",
+        "Giving each worker agent a focused system prompt with only the tools relevant to its role",
+        "Creating 5 'specialized' agents that all use the same model, same tools, and system prompts that differ by only a few words",
+        "Implementing retry logic with exponential backoff for failed worker tasks"
+      ],
+      "correct": 2,
+      "explanation": "Having 5 'specialized' agents with nearly identical configurations is the 'homogeneous agents pretending to be specialized' anti-pattern. If agents share the same model, the same tools, and system prompts that differ by only a few words, you don't have meaningful specialization — you have a single agent called multiple times with added coordination overhead and no quality benefit. Real specialization requires meaningfully different system prompts, different tool sets, and different context scopes. Options A, B, and D are all best practices: decomposition validation, focused agent configuration, and retry logic."
+    }
+  ]
+}

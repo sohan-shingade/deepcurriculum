@@ -1,0 +1,422 @@
+{
+  "id": "project-6",
+  "title": "Capstone Project",
+  "description": "Choose one of four tracks to demonstrate mastery. Extend a prior project or build something new. Includes implementation, analysis report, and presentation. This is the culmination of your work in CS 101: you will spend three weeks on a substantial engineering effort that pushes one domain from the course to its limits. The result should be a system you are proud to present to a faculty committee and defend under questioning.",
+  "weeks": "18-20",
+  "totalPoints": 200,
+  "submissionRequirements": {
+    "codeRepository": "Complete Python codebase with clean structure, docstrings, and a README explaining how to run all components",
+    "analysisReport": "4-6 page technical report (PDF or Markdown) with architecture description, quantitative results, performance analysis with graphs, and discussion of tradeoffs and limitations",
+    "presentation": "12-15 minute presentation with live demo, covering motivation, architecture, key results, and lessons learned. Be prepared for 5 minutes of Q&A from the evaluation committee",
+    "weeklyCheckpoints": "Submit milestone deliverables at the end of Weeks 18 and 19. These are graded pass/fail and serve as progress gates"
+  },
+  "tracks": [
+    {
+      "id": "track-a",
+      "title": "Advanced RISC-V Processor",
+      "subtitle": "Out-of-Order Superscalar Execution Engine",
+      "extends": "Project 2 (Pipelined RISC-V Processor Simulator)",
+      "description": "Transform your in-order pipelined RISC-V processor into a modern out-of-order superscalar machine. You will implement Tomasulo's algorithm with reservation stations, add a reorder buffer for speculative execution with precise exceptions, and extend to 2-wide superscalar issue. The final deliverable is a cycle-accurate simulator that demonstrates measurable IPC improvement over baseline in-order execution on benchmark programs.",
+      "requirements": {
+        "required": [
+          "Implement Tomasulo's algorithm with at least 6 reservation stations (2 for integer ALU, 2 for memory, 1 for multiply/divide, 1 for branch)",
+          "Implement a Common Data Bus (CDB) that broadcasts results to all waiting reservation stations and the ROB simultaneously",
+          "Implement register renaming via tags: the register alias table (RAT) maps architectural registers to reservation station or ROB entries, eliminating WAR and WAW hazards",
+          "Implement a Reorder Buffer (ROB) with at least 16 entries supporting in-order commit of out-of-order completions",
+          "Implement speculative execution: instructions after a branch are issued speculatively, and mispredictions trigger ROB rollback that restores the RAT and flushes speculative entries",
+          "Integrate your branch predictor from Project 2 (or implement a 2-bit saturating counter predictor at minimum) to drive speculative issue",
+          "Implement 2-wide superscalar issue: the processor fetches and issues up to 2 instructions per cycle, with dependency checking and resource arbitration to prevent structural hazards",
+          "Implement a comprehensive instruction trace log that shows cycle-by-cycle state of all reservation stations, the ROB, and the RAT",
+          "Run at least 3 benchmark programs (sorting, matrix multiply, recursive fibonacci or similar) and measure IPC for in-order, OoO, and OoO+superscalar configurations",
+          "Produce a performance analysis comparing the three configurations with IPC, total cycles, and CPI breakdown (data stalls, control stalls, structural stalls)"
+        ],
+        "optional": [
+          "Implement a load/store queue with memory disambiguation for out-of-order memory operations",
+          "Add a 3-wide or 4-wide issue mode and analyze diminishing returns",
+          "Implement a tournament branch predictor combining local and global history",
+          "Add performance counters: branch misprediction rate, reservation station utilization, ROB occupancy histogram"
+        ]
+      },
+      "milestones": [
+        {
+          "week": 18,
+          "title": "Tomasulo's Algorithm with Reservation Stations",
+          "deliverables": [
+            "Working reservation station data structures with issue, execute, and write-back stages",
+            "Common Data Bus broadcasting to all waiting stations",
+            "Register Alias Table (RAT) correctly mapping architectural to physical tags",
+            "Cycle-by-cycle trace showing correct execution of a 10+ instruction sequence with RAW dependencies resolved via forwarding through the CDB",
+            "Demonstration that WAR and WAW hazards are eliminated by renaming"
+          ],
+          "passFailCriteria": "A test program with at least 3 RAW, 1 WAR, and 1 WAW hazard executes correctly with verifiable CDB broadcasts"
+        },
+        {
+          "week": 19,
+          "title": "Reorder Buffer and Speculative Execution",
+          "deliverables": [
+            "ROB with in-order commit, supporting precise exceptions",
+            "Speculative issue of instructions past unresolved branches",
+            "Correct rollback on branch misprediction: ROB flush, RAT restoration, reservation station cleanup",
+            "Branch predictor integration with misprediction recovery",
+            "Test case demonstrating correct speculative execution followed by misprediction and clean recovery"
+          ],
+          "passFailCriteria": "A program with a branch misprediction correctly rolls back speculative state and resumes execution from the correct path with no corruption"
+        },
+        {
+          "week": 20,
+          "title": "Superscalar Issue and Performance Analysis",
+          "deliverables": [
+            "2-wide issue logic with dependency checking across the issue pair",
+            "Resource arbitration when both instructions target the same functional unit",
+            "Benchmark suite (3+ programs) with IPC measurements",
+            "Performance comparison report: in-order vs OoO vs OoO+superscalar",
+            "Analysis of bottlenecks and diminishing returns",
+            "Final presentation with live demo of cycle-by-cycle trace"
+          ],
+          "passFailCriteria": "Superscalar mode demonstrates measurable IPC > 1.0 on at least one benchmark"
+        }
+      ],
+      "evaluationCriteria": {
+        "design": "Correct decomposition of Tomasulo's algorithm into clean data structures (reservation stations, ROB, RAT, CDB). Clear separation between issue, execute, write-back, and commit stages. Extensibility of the design to wider issue or more functional units.",
+        "implementation": "Cycle-accurate simulation with no state corruption. Correct CDB broadcast semantics. Proper speculative state management and rollback. No silent data corruption on misprediction recovery.",
+        "analysis": "Rigorous IPC comparison with explanation of observed speedups. Breakdown of stall causes. Discussion of what limits further IPC improvement (branch mispredictions, memory latency, limited functional units). Roofline-style analysis of achievable IPC vs. theoretical maximum.",
+        "presentation": "Live demonstration of cycle-by-cycle trace showing Tomasulo's in action. Clear explanation of the RAT, CDB, and ROB interaction. Ability to answer questions about edge cases (e.g., what happens when the ROB is full, when two CDB broadcasts collide)."
+      },
+      "starterCode": "from dataclasses import dataclass, field\nfrom enum import Enum, auto\nfrom typing import Optional\nimport json\n\n\nclass FunctionalUnit(Enum):\n    INT_ALU = auto()\n    INT_ALU_2 = auto()\n    MEM_LOAD = auto()\n    MEM_STORE = auto()\n    MUL_DIV = auto()\n    BRANCH = auto()\n\n\nclass RSStatus(Enum):\n    EMPTY = auto()\n    WAITING = auto()   # Waiting for operand(s) via CDB\n    READY = auto()     # All operands available, waiting for FU\n    EXECUTING = auto() # Currently in functional unit\n\n\n@dataclass\nclass ReservationStation:\n    \"\"\"A single reservation station entry.\"\"\"\n    name: str                              # e.g., 'ALU1', 'MEM2'\n    fu_type: FunctionalUnit\n    status: RSStatus = RSStatus.EMPTY\n    op: Optional[str] = None               # Instruction opcode\n    vj: Optional[int] = None               # Value of source operand 1\n    vk: Optional[int] = None               # Value of source operand 2\n    qj: Optional[str] = None               # Tag of RS producing Vj (None if Vj ready)\n    qk: Optional[str] = None               # Tag of RS producing Vk (None if Vk ready)\n    dest: Optional[int] = None             # ROB entry index for destination\n    address: Optional[int] = None          # Computed address for loads/stores\n    cycles_remaining: int = 0              # Execution latency countdown\n\n    def is_ready(self) -> bool:\n        return self.qj is None and self.qk is None and self.status == RSStatus.WAITING\n\n    def capture_cdb(self, tag: str, value: int):\n        \"\"\"Snoop the CDB: if we are waiting on this tag, capture the value.\"\"\"\n        if self.qj == tag:\n            self.vj = value\n            self.qj = None\n        if self.qk == tag:\n            self.vk = value\n            self.qk = None\n\n\n@dataclass\nclass ROBEntry:\n    \"\"\"A single Reorder Buffer entry.\"\"\"\n    index: int\n    busy: bool = False\n    instruction: Optional[str] = None      # Instruction string for debugging\n    state: str = 'issue'                   # issue -> execute -> write -> commit\n    dest_reg: Optional[int] = None         # Architectural destination register\n    value: Optional[int] = None            # Computed result (filled at write-back)\n    ready: bool = False                    # True when value is available\n    is_branch: bool = False\n    branch_predicted_taken: bool = False\n    branch_actual_taken: Optional[bool] = None\n    speculative: bool = False              # True if issued under speculation\n    pc: int = 0                            # Program counter of this instruction\n\n\n@dataclass\nclass CDBBroadcast:\n    \"\"\"A Common Data Bus broadcast message.\"\"\"\n    tag: str              # Source reservation station or ROB index\n    value: int            # The computed result\n    rob_index: int        # Which ROB entry this completes\n\n\nclass RegisterAliasTable:\n    \"\"\"Maps architectural registers to the ROB entry that will produce their value.\"\"\"\n\n    def __init__(self, num_regs: int = 32):\n        # None means the value is in the register file (not being produced by an in-flight instruction)\n        self.table: list[Optional[int]] = [None] * num_regs\n\n    def set_mapping(self, arch_reg: int, rob_index: int):\n        \"\"\"Record that arch_reg will be produced by rob_index.\"\"\"\n        if arch_reg == 0:  # x0 is always zero in RISC-V\n            return\n        self.table[arch_reg] = rob_index\n\n    def get_mapping(self, arch_reg: int) -> Optional[int]:\n        \"\"\"Return the ROB index producing this register, or None if it's ready in the RF.\"\"\"\n        if arch_reg == 0:\n            return None\n        return self.table[arch_reg]\n\n    def clear_mapping(self, arch_reg: int, rob_index: int):\n        \"\"\"Clear the mapping only if it still points to this ROB entry.\n        (A later instruction may have overwritten it.)\"\"\"\n        if arch_reg != 0 and self.table[arch_reg] == rob_index:\n            self.table[arch_reg] = None\n\n    def snapshot(self) -> list[Optional[int]]:\n        \"\"\"Return a copy for rollback on misprediction.\"\"\"\n        return self.table.copy()\n\n    def restore(self, snapshot: list[Optional[int]]):\n        \"\"\"Restore from a snapshot after branch misprediction.\"\"\"\n        self.table = snapshot\n\n\nclass OoOProcessor:\n    \"\"\"Out-of-order RISC-V processor simulator using Tomasulo's algorithm.\"\"\"\n\n    def __init__(self, program: list[dict], memory_size: int = 4096):\n        self.program = program           # List of decoded instructions\n        self.pc = 0\n        self.cycle = 0\n        self.halted = False\n\n        # Architectural state\n        self.register_file = [0] * 32    # x0-x31\n        self.memory = [0] * memory_size\n\n        # Tomasulo structures\n        self.reservation_stations = self._init_reservation_stations()\n        self.rob = [ROBEntry(index=i) for i in range(16)]\n        self.rob_head = 0                # Oldest instruction (commit pointer)\n        self.rob_tail = 0                # Next free entry (issue pointer)\n        self.rat = RegisterAliasTable()\n        self.rat_snapshots: dict[int, list[Optional[int]]] = {}  # ROB index -> RAT snapshot for branches\n\n        # Superscalar config\n        self.issue_width = 1             # Set to 2 for superscalar\n\n        # Statistics\n        self.instructions_committed = 0\n        self.branch_predictions = 0\n        self.branch_mispredictions = 0\n        self.cycles_stalled_structural = 0\n        self.trace_log: list[dict] = []\n\n    def _init_reservation_stations(self) -> list[ReservationStation]:\n        \"\"\"Create the reservation stations for each functional unit type.\"\"\"\n        stations = [\n            ReservationStation('ALU1', FunctionalUnit.INT_ALU),\n            ReservationStation('ALU2', FunctionalUnit.INT_ALU_2),\n            ReservationStation('MEM1', FunctionalUnit.MEM_LOAD),\n            ReservationStation('MEM2', FunctionalUnit.MEM_STORE),\n            ReservationStation('MUL1', FunctionalUnit.MUL_DIV),\n            ReservationStation('BR1', FunctionalUnit.BRANCH),\n        ]\n        return stations\n\n    def step(self):\n        \"\"\"Execute one clock cycle: commit -> write-back -> execute -> issue (reverse order for correctness).\"\"\"\n        # TODO: Implement the four stages in reverse pipeline order\n        # 1. Commit: retire instructions from ROB head if ready\n        # 2. Write-back: broadcast completed results on CDB\n        # 3. Execute: advance executing instructions, start ready ones\n        # 4. Issue: fetch next instruction(s) and allocate RS + ROB entries\n        self.cycle += 1\n        self._record_trace()\n\n    def _commit(self):\n        \"\"\"Commit the instruction at ROB head if it has completed.\n        For branches, check prediction and trigger rollback if mispredicted.\"\"\"\n        raise NotImplementedError\n\n    def _write_back(self) -> list[CDBBroadcast]:\n        \"\"\"Broadcast completed results on the CDB.\n        Each cycle, at most one broadcast (or two for superscalar with dual CDB).\"\"\"\n        raise NotImplementedError\n\n    def _execute(self):\n        \"\"\"Decrement cycle counters for executing instructions.\n        Start execution for ready reservation stations.\"\"\"\n        raise NotImplementedError\n\n    def _issue(self):\n        \"\"\"Issue up to self.issue_width instructions per cycle.\n        For each: allocate RS, allocate ROB entry, read/rename operands via RAT.\"\"\"\n        raise NotImplementedError\n\n    def _rollback(self, rob_index: int):\n        \"\"\"Handle branch misprediction: flush all ROB entries after rob_index,\n        free their reservation stations, restore RAT snapshot.\"\"\"\n        raise NotImplementedError\n\n    def _record_trace(self):\n        \"\"\"Record current cycle state for debugging and analysis.\"\"\"\n        state = {\n            'cycle': self.cycle,\n            'pc': self.pc,\n            'rob_head': self.rob_head,\n            'rob_tail': self.rob_tail,\n            'rs_status': {rs.name: rs.status.name for rs in self.reservation_stations},\n            'rat': self.rat.table.copy(),\n        }\n        self.trace_log.append(state)\n\n    def get_ipc(self) -> float:\n        \"\"\"Instructions per cycle = committed instructions / total cycles.\"\"\"\n        if self.cycle == 0:\n            return 0.0\n        return self.instructions_committed / self.cycle\n\n    def run(self, max_cycles: int = 10000) -> dict:\n        \"\"\"Run until halt or max_cycles. Return performance statistics.\"\"\"\n        while not self.halted and self.cycle < max_cycles:\n            self.step()\n        return {\n            'cycles': self.cycle,\n            'instructions_committed': self.instructions_committed,\n            'ipc': self.get_ipc(),\n            'branch_misprediction_rate': (\n                self.branch_mispredictions / max(1, self.branch_predictions)\n            ),\n            'cycles_stalled_structural': self.cycles_stalled_structural,\n        }"
+    },
+    {
+      "id": "track-b",
+      "title": "GPU Performance Engineering",
+      "subtitle": "Iterative Optimization of a Compute-Intensive Algorithm",
+      "extends": "Project 4 (GPU Simulator)",
+      "description": "Select a real-world compute-intensive algorithm -- Fast Fourier Transform (FFT), Sparse Matrix-Vector Multiply (SpMV), or N-body gravitational simulation -- and implement it on the GPU simulator from Project 4. Then systematically optimize through at least 5 iterations, measuring and documenting the performance impact of each optimization. The goal is not just a fast implementation, but a rigorous understanding of why each optimization works and when it hits diminishing returns.",
+      "algorithmChoices": [
+        {
+          "name": "FFT (Fast Fourier Transform)",
+          "description": "Implement the Cooley-Tukey radix-2 FFT. Start with a naive per-butterfly kernel, then optimize memory access patterns, exploit shared memory for intra-block stages, and use warp-level shuffles for the final stages.",
+          "complexity": "O(N log N) with N up to 2^20"
+        },
+        {
+          "name": "SpMV (Sparse Matrix-Vector Multiply)",
+          "description": "Implement y = Ax for sparse matrices in CSR format. Start with one-thread-per-row, then optimize for warp-level reduction, handle load imbalance across rows, and implement the SELL-C-sigma format for better coalescing.",
+          "complexity": "O(nnz) with matrices up to 1M rows, 10M nonzeros"
+        },
+        {
+          "name": "N-body Simulation",
+          "description": "Implement gravitational N-body with direct all-pairs force calculation. Start with a naive O(N^2) kernel, optimize with shared memory tiling, software-managed cache of particle positions, and explore the Barnes-Hut tree approximation on GPU.",
+          "complexity": "O(N^2) direct or O(N log N) tree-based, N up to 65536"
+        }
+      ],
+      "requirements": {
+        "required": [
+          "Implement the chosen algorithm correctly on the GPU simulator with verification against a reference CPU implementation",
+          "Implement at least 5 distinct optimization levels, each building on the previous: (1) Naive baseline, (2) Coalesced memory access, (3) Shared memory tiling, (4) Warp-level optimization (warp shuffles, warp-level reduction), (5) Multiple elements per thread (thread coarsening)",
+          "For each optimization, measure and record: execution time (simulated cycles), memory transactions (global loads, shared loads), arithmetic intensity, and occupancy",
+          "Compute the speedup of each optimization relative to the naive baseline AND relative to the previous optimization level",
+          "Verify correctness after each optimization: results must match the naive baseline within floating-point tolerance (1e-6 relative error)",
+          "Construct a roofline model for the GPU simulator's architecture and plot each optimization level's achieved performance against the roofline ceiling",
+          "Identify the bottleneck at each optimization level: is the kernel compute-bound or memory-bound? What resource limits occupancy?",
+          "Write a performance analysis report explaining the optimization journey with quantitative data for every claim",
+          "Produce at least 3 plots: (a) speedup progression across optimizations, (b) roofline plot, (c) one additional plot of your choice (occupancy vs. performance, memory transaction breakdown, etc.)"
+        ],
+        "optional": [
+          "Implement a 6th optimization: mixed precision (FP16 accumulation with FP32 master copy) and analyze accuracy vs. performance tradeoff",
+          "Implement auto-tuning: sweep block sizes and elements-per-thread, find the Pareto frontier of performance vs. register usage",
+          "Compare your GPU implementation against a theoretical CPU implementation and compute the GPU advantage factor",
+          "Implement a second algorithm and compare the optimization profiles (which optimizations matter most for compute-bound vs. memory-bound kernels)"
+        ]
+      },
+      "milestones": [
+        {
+          "week": 18,
+          "title": "Baseline Implementation and Correctness Verification",
+          "deliverables": [
+            "Reference CPU implementation of the chosen algorithm with test cases",
+            "Naive GPU kernel implementation (optimization level 0)",
+            "Correctness verification framework: automated comparison against CPU reference",
+            "Baseline performance measurement: cycles, memory transactions, arithmetic intensity",
+            "Roofline model constructed for the GPU simulator architecture"
+          ],
+          "passFailCriteria": "Naive GPU kernel produces correct results (within 1e-6 relative error of CPU reference) on 3 test inputs of increasing size"
+        },
+        {
+          "week": 19,
+          "title": "Optimizations 1-3 with Measured Impact",
+          "deliverables": [
+            "Optimization 1: Coalesced memory access with measured reduction in global memory transactions",
+            "Optimization 2: Shared memory tiling with tile size analysis",
+            "Optimization 3: Warp-level optimization with measured reduction in synchronization overhead",
+            "Correctness verified for all three optimization levels",
+            "Speedup chart showing cumulative improvement",
+            "Per-optimization bottleneck analysis"
+          ],
+          "passFailCriteria": "All three optimized kernels pass correctness checks, and at least 2 show measurable speedup over baseline"
+        },
+        {
+          "week": 20,
+          "title": "Optimizations 4-5, Roofline Analysis, and Final Report",
+          "deliverables": [
+            "Optimization 4: Multiple elements per thread with thread coarsening analysis",
+            "Optimization 5: Additional optimization specific to chosen algorithm",
+            "Roofline plot with all optimization levels annotated",
+            "Complete performance analysis report with all required plots",
+            "Discussion of diminishing returns and theoretical performance ceiling",
+            "Final presentation with live demo of optimization progression"
+          ],
+          "passFailCriteria": "Final optimized kernel achieves at least 5x speedup over naive baseline on the largest test input"
+        }
+      ],
+      "evaluationCriteria": {
+        "design": "Clean separation between algorithm logic and GPU optimization. Modular kernel implementations that make it easy to compare optimization levels. Well-structured measurement harness that automates correctness checking and performance data collection.",
+        "implementation": "All optimization levels correct and measurably distinct. Proper use of GPU memory hierarchy (global, shared, registers). Correct synchronization. No race conditions or bank conflicts in shared memory implementations.",
+        "analysis": "Quantitative data for every performance claim. Roofline analysis that correctly identifies compute-bound vs. memory-bound regimes. Insightful explanation of why each optimization helps (or doesn't). Discussion of diminishing returns and what would be needed to go further.",
+        "presentation": "Clear progression narrative from naive to optimized. Ability to explain the roofline model and where each kernel sits. Demonstration of the measurement infrastructure. Ability to answer 'what if' questions about alternative optimization strategies."
+      },
+      "starterCode": "from dataclasses import dataclass, field\nfrom typing import Callable\nimport math\nimport json\n\n\n@dataclass\nclass KernelStats:\n    \"\"\"Performance statistics for a single kernel execution.\"\"\"\n    name: str\n    optimization_level: int\n    simulated_cycles: int = 0\n    global_memory_loads: int = 0\n    global_memory_stores: int = 0\n    shared_memory_loads: int = 0\n    shared_memory_stores: int = 0\n    arithmetic_ops: int = 0\n    threads_launched: int = 0\n    blocks_launched: int = 0\n    block_size: int = 0\n    occupancy: float = 0.0\n\n    @property\n    def arithmetic_intensity(self) -> float:\n        \"\"\"FLOPs per byte of global memory traffic.\"\"\"\n        total_bytes = (self.global_memory_loads + self.global_memory_stores) * 4  # 4 bytes per float\n        if total_bytes == 0:\n            return float('inf')\n        return self.arithmetic_ops / total_bytes\n\n    @property\n    def achieved_gflops(self) -> float:\n        \"\"\"Simulated GFLOP/s assuming 1 GHz clock.\"\"\"\n        if self.simulated_cycles == 0:\n            return 0.0\n        return self.arithmetic_ops / self.simulated_cycles  # ops per cycle (at 1 GHz = GFLOP/s)\n\n\n@dataclass\nclass RooflineModel:\n    \"\"\"Roofline model for the GPU simulator.\"\"\"\n    peak_gflops: float          # Peak compute throughput\n    peak_memory_bw_gb_s: float  # Peak memory bandwidth in GB/s\n\n    def theoretical_peak(self, arithmetic_intensity: float) -> float:\n        \"\"\"Return the roofline ceiling for a given arithmetic intensity.\"\"\"\n        return min(self.peak_gflops, arithmetic_intensity * self.peak_memory_bw_gb_s)\n\n    def is_compute_bound(self, arithmetic_intensity: float) -> bool:\n        \"\"\"True if the kernel is compute-bound at this arithmetic intensity.\"\"\"\n        ridge_point = self.peak_gflops / self.peak_memory_bw_gb_s\n        return arithmetic_intensity >= ridge_point\n\n\nclass OptimizationHarness:\n    \"\"\"Manages the progressive optimization of a GPU kernel.\"\"\"\n\n    def __init__(self, algorithm_name: str, reference_fn: Callable, roofline: RooflineModel):\n        self.algorithm_name = algorithm_name\n        self.reference_fn = reference_fn  # CPU reference implementation\n        self.roofline = roofline\n        self.optimization_levels: list[dict] = []\n        self.stats_history: list[KernelStats] = []\n\n    def register_optimization(self, level: int, name: str, description: str,\n                               kernel_fn: Callable, expected_improvement: str):\n        \"\"\"Register a new optimization level.\"\"\"\n        self.optimization_levels.append({\n            'level': level,\n            'name': name,\n            'description': description,\n            'kernel_fn': kernel_fn,\n            'expected_improvement': expected_improvement,\n        })\n\n    def verify_correctness(self, gpu_output: list[float], reference_output: list[float],\n                           tolerance: float = 1e-6) -> bool:\n        \"\"\"Verify GPU output matches CPU reference within relative tolerance.\"\"\"\n        if len(gpu_output) != len(reference_output):\n            return False\n        for gpu_val, ref_val in zip(gpu_output, reference_output):\n            if ref_val == 0:\n                if abs(gpu_val) > tolerance:\n                    return False\n            elif abs(gpu_val - ref_val) / abs(ref_val) > tolerance:\n                return False\n        return True\n\n    def run_all_levels(self, test_input: list[float]) -> list[KernelStats]:\n        \"\"\"Run all optimization levels, verify correctness, collect stats.\"\"\"\n        reference_output = self.reference_fn(test_input)\n        results = []\n        for opt in sorted(self.optimization_levels, key=lambda x: x['level']):\n            # TODO: Run kernel, collect stats, verify correctness\n            # stats = opt['kernel_fn'](test_input)\n            # assert self.verify_correctness(stats.output, reference_output)\n            # results.append(stats)\n            pass\n        self.stats_history = results\n        return results\n\n    def compute_speedups(self) -> list[dict]:\n        \"\"\"Compute speedup of each level relative to baseline and previous level.\"\"\"\n        if not self.stats_history:\n            return []\n        baseline = self.stats_history[0].simulated_cycles\n        speedups = []\n        for i, stats in enumerate(self.stats_history):\n            prev = self.stats_history[i - 1].simulated_cycles if i > 0 else baseline\n            speedups.append({\n                'level': stats.optimization_level,\n                'name': stats.name,\n                'speedup_vs_baseline': baseline / max(1, stats.simulated_cycles),\n                'speedup_vs_previous': prev / max(1, stats.simulated_cycles),\n                'arithmetic_intensity': stats.arithmetic_intensity,\n                'achieved_gflops': stats.achieved_gflops,\n                'roofline_ceiling': self.roofline.theoretical_peak(stats.arithmetic_intensity),\n                'roofline_efficiency': (\n                    stats.achieved_gflops /\n                    max(1e-9, self.roofline.theoretical_peak(stats.arithmetic_intensity))\n                ),\n            })\n        return speedups\n\n    def generate_report_data(self) -> dict:\n        \"\"\"Generate structured data for the analysis report.\"\"\"\n        return {\n            'algorithm': self.algorithm_name,\n            'num_optimizations': len(self.optimization_levels),\n            'speedups': self.compute_speedups(),\n            'roofline': {\n                'peak_gflops': self.roofline.peak_gflops,\n                'peak_bw_gb_s': self.roofline.peak_memory_bw_gb_s,\n                'ridge_point': self.roofline.peak_gflops / self.roofline.peak_memory_bw_gb_s,\n            },\n            'optimization_descriptions': [\n                {'level': o['level'], 'name': o['name'], 'description': o['description']}\n                for o in self.optimization_levels\n            ],\n        }"
+    },
+    {
+      "id": "track-c",
+      "title": "FPGA Trading System",
+      "subtitle": "Multi-Symbol Exchange with Backtesting and Pipeline Optimization",
+      "extends": "Project 5 (FPGA Trading System Simulator)",
+      "description": "Extend your single-symbol FPGA trading system into a multi-symbol exchange simulator capable of trading 5 or more symbols simultaneously. Add a backtesting engine that replays historical market data and computes standard trading performance metrics. Optimize the processing pipeline for throughput and latency, demonstrating the kind of engineering that makes FPGA-based trading competitive in real markets.",
+      "requirements": {
+        "required": [
+          "Implement a multi-symbol order book manager that maintains independent order books for at least 5 symbols, with a feed demultiplexer that routes incoming market data to the correct book",
+          "Implement cross-symbol correlation signals: detect when price movements in one symbol predict movements in another (e.g., simple pairs trading signal based on spread deviation from historical mean)",
+          "Build a backtesting engine that replays a sequence of at least 10,000 historical market events (can be synthetically generated with realistic properties: bid-ask spread, order arrivals following Poisson process, price following geometric Brownian motion)",
+          "Compute and track standard trading metrics: total P&L, Sharpe ratio (annualized), maximum drawdown, win rate, profit factor (gross profit / gross loss), average trade duration",
+          "Implement pipeline stages for parallel symbol processing: the system should process events for different symbols concurrently, modeling the parallelism available in FPGA fabric",
+          "Measure and report throughput (events processed per simulated second) and worst-case latency (maximum time from event arrival to order decision)",
+          "Implement at least 2 trading strategies that can be backtested: (a) a momentum/trend-following strategy, (b) a mean-reversion/statistical arbitrage strategy",
+          "Produce a backtesting report comparing the two strategies across the same historical data, with equity curves, drawdown charts, and risk-adjusted metrics",
+          "Implement risk management: per-symbol position limits, portfolio-level exposure limits, and maximum loss circuit breakers"
+        ],
+        "optional": [
+          "Implement order book imbalance signals (bid/ask volume ratio) as a short-term predictor",
+          "Add latency modeling: different pipeline stages have different latencies, and the system must handle events arriving during processing",
+          "Implement a market-making strategy that quotes both sides and manages inventory risk",
+          "Add configurable FPGA resource constraints (number of pipeline stages, BRAM budget) and show how performance degrades as resources are reduced"
+        ]
+      },
+      "milestones": [
+        {
+          "week": 18,
+          "title": "Multi-Symbol Order Book and Feed Demultiplexer",
+          "deliverables": [
+            "Multi-symbol order book data structure with independent books per symbol",
+            "Feed demultiplexer that routes market data events to the correct order book by symbol ID",
+            "Cross-symbol correlation tracker that maintains rolling statistics",
+            "Test suite verifying correct order book maintenance for 5 symbols under concurrent event streams",
+            "Event generator producing realistic synthetic market data for multiple symbols"
+          ],
+          "passFailCriteria": "5-symbol order book correctly processes 1000 events with no cross-contamination between symbols, verified by post-hoc order book state audit"
+        },
+        {
+          "week": 19,
+          "title": "Backtesting Framework with Performance Metrics",
+          "deliverables": [
+            "Backtesting engine that replays historical events and executes trading strategies",
+            "At least 2 trading strategies implemented and testable",
+            "Performance metrics computation: Sharpe ratio, max drawdown, P&L, win rate, profit factor",
+            "Equity curve and drawdown tracking over the full backtest period",
+            "Risk management enforcement: position limits, exposure limits, circuit breakers"
+          ],
+          "passFailCriteria": "Backtest of 10,000+ events completes for both strategies with all metrics computed correctly (verified against hand-calculated values for a small subsample)"
+        },
+        {
+          "week": 20,
+          "title": "Pipeline Optimization and Analysis Report",
+          "deliverables": [
+            "Pipeline architecture for parallel multi-symbol processing",
+            "Throughput and latency measurements with and without pipelining",
+            "Strategy comparison report with equity curves and risk-adjusted metrics",
+            "Analysis of pipeline bottlenecks and resource utilization",
+            "Final presentation with live backtesting demo"
+          ],
+          "passFailCriteria": "Pipelined architecture demonstrates at least 3x throughput improvement over serial processing on 5-symbol workload"
+        }
+      ],
+      "evaluationCriteria": {
+        "design": "Clean abstraction between market data handling, strategy logic, order management, and risk controls. Modular strategy interface that makes it easy to add new strategies. Pipeline architecture that reflects real FPGA design patterns (registered stages, data-flow style).",
+        "implementation": "Correct order book semantics (price-time priority, proper matching). Accurate backtest replay with no look-ahead bias. Correct metric calculations (especially Sharpe ratio annualization and drawdown tracking). Proper risk management enforcement.",
+        "analysis": "Meaningful strategy comparison with statistical discussion (is the Sharpe ratio significantly different? What is the confidence interval?). Throughput/latency analysis that identifies the bottleneck pipeline stage. Discussion of how the system would scale to 50 or 500 symbols.",
+        "presentation": "Live demo of backtesting with real-time equity curve. Clear explanation of the pipeline architecture. Ability to discuss strategy design choices and their market microstructure rationale."
+      },
+      "starterCode": "from dataclasses import dataclass, field\nfrom enum import Enum, auto\nfrom typing import Optional\nfrom collections import deque\nimport math\nimport json\nimport random\n\n\nclass Side(Enum):\n    BID = auto()\n    ASK = auto()\n\n\n@dataclass\nclass Order:\n    symbol: str\n    side: Side\n    price: int           # Fixed-point price (e.g., cents)\n    quantity: int\n    timestamp: int       # Nanosecond timestamp\n    order_id: int = 0\n\n\n@dataclass\nclass Trade:\n    symbol: str\n    price: int\n    quantity: int\n    aggressor_side: Side\n    timestamp: int\n    buyer_order_id: int\n    seller_order_id: int\n\n\n@dataclass\nclass MarketEvent:\n    \"\"\"A single market data event from the feed.\"\"\"\n    event_type: str      # 'new_order', 'cancel', 'trade', 'quote_update'\n    symbol: str\n    timestamp: int\n    data: dict\n\n\n@dataclass\nclass PerformanceMetrics:\n    \"\"\"Trading performance metrics computed over a backtest.\"\"\"\n    total_pnl: float = 0.0\n    num_trades: int = 0\n    num_winning_trades: int = 0\n    num_losing_trades: int = 0\n    gross_profit: float = 0.0\n    gross_loss: float = 0.0\n    max_drawdown: float = 0.0\n    peak_equity: float = 0.0\n    current_equity: float = 0.0\n    equity_curve: list = field(default_factory=list)\n    daily_returns: list = field(default_factory=list)\n\n    @property\n    def win_rate(self) -> float:\n        if self.num_trades == 0:\n            return 0.0\n        return self.num_winning_trades / self.num_trades\n\n    @property\n    def profit_factor(self) -> float:\n        if self.gross_loss == 0:\n            return float('inf') if self.gross_profit > 0 else 0.0\n        return self.gross_profit / abs(self.gross_loss)\n\n    @property\n    def sharpe_ratio(self) -> float:\n        \"\"\"Annualized Sharpe ratio assuming 252 trading days.\"\"\"\n        if len(self.daily_returns) < 2:\n            return 0.0\n        mean_return = sum(self.daily_returns) / len(self.daily_returns)\n        variance = sum((r - mean_return) ** 2 for r in self.daily_returns) / (len(self.daily_returns) - 1)\n        std_return = math.sqrt(variance)\n        if std_return == 0:\n            return 0.0\n        return (mean_return / std_return) * math.sqrt(252)\n\n    def update_drawdown(self, equity: float):\n        \"\"\"Track peak equity and maximum drawdown.\"\"\"\n        self.current_equity = equity\n        self.equity_curve.append(equity)\n        if equity > self.peak_equity:\n            self.peak_equity = equity\n        drawdown = (self.peak_equity - equity) / self.peak_equity if self.peak_equity > 0 else 0.0\n        if drawdown > self.max_drawdown:\n            self.max_drawdown = drawdown\n\n\nclass OrderBook:\n    \"\"\"A limit order book for a single symbol.\"\"\"\n\n    def __init__(self, symbol: str):\n        self.symbol = symbol\n        self.bids: list[Order] = []   # Sorted by price desc, then time asc\n        self.asks: list[Order] = []   # Sorted by price asc, then time asc\n        self.trade_log: list[Trade] = []\n\n    def add_order(self, order: Order) -> list[Trade]:\n        \"\"\"Add an order, matching against resting orders. Return any resulting trades.\"\"\"\n        # TODO: Implement price-time priority matching\n        raise NotImplementedError\n\n    def cancel_order(self, order_id: int) -> bool:\n        \"\"\"Cancel a resting order by ID. Return True if found and cancelled.\"\"\"\n        raise NotImplementedError\n\n    @property\n    def best_bid(self) -> Optional[int]:\n        return self.bids[0].price if self.bids else None\n\n    @property\n    def best_ask(self) -> Optional[int]:\n        return self.asks[0].price if self.asks else None\n\n    @property\n    def spread(self) -> Optional[int]:\n        if self.best_bid is not None and self.best_ask is not None:\n            return self.best_ask - self.best_bid\n        return None\n\n\nclass MultiSymbolBook:\n    \"\"\"Manages order books for multiple symbols with feed demultiplexing.\"\"\"\n\n    def __init__(self, symbols: list[str]):\n        self.books = {symbol: OrderBook(symbol) for symbol in symbols}\n        self.event_count = 0\n\n    def route_event(self, event: MarketEvent) -> Optional[list[Trade]]:\n        \"\"\"Route a market event to the appropriate order book.\"\"\"\n        if event.symbol not in self.books:\n            return None\n        self.event_count += 1\n        # TODO: Dispatch to correct book based on event type\n        raise NotImplementedError\n\n\nclass TradingStrategy:\n    \"\"\"Base class for trading strategies.\"\"\"\n\n    def __init__(self, name: str):\n        self.name = name\n\n    def on_market_event(self, event: MarketEvent, books: MultiSymbolBook) -> list[Order]:\n        \"\"\"Process a market event and return any orders to place.\"\"\"\n        raise NotImplementedError\n\n\nclass BacktestEngine:\n    \"\"\"Replay historical events through a strategy and compute metrics.\"\"\"\n\n    def __init__(self, symbols: list[str], strategy: TradingStrategy,\n                 initial_capital: float = 1_000_000.0):\n        self.books = MultiSymbolBook(symbols)\n        self.strategy = strategy\n        self.capital = initial_capital\n        self.positions: dict[str, int] = {s: 0 for s in symbols}  # shares held\n        self.metrics = PerformanceMetrics()\n        self.metrics.peak_equity = initial_capital\n        self.metrics.current_equity = initial_capital\n\n    def replay(self, events: list[MarketEvent]) -> PerformanceMetrics:\n        \"\"\"Replay all events, executing the strategy for each.\"\"\"\n        for event in events:\n            # 1. Update order book\n            trades = self.books.route_event(event)\n            # 2. Let strategy react\n            orders = self.strategy.on_market_event(event, self.books)\n            # 3. Execute strategy orders against the book\n            for order in orders:\n                strategy_trades = self.books.books[order.symbol].add_order(order)\n                self._process_strategy_trades(strategy_trades)\n            # 4. Update equity and metrics\n            self._update_equity()\n        return self.metrics\n\n    def _process_strategy_trades(self, trades: list[Trade]):\n        \"\"\"Update positions and P&L from strategy trades.\"\"\"\n        # TODO: Update self.positions, self.capital, self.metrics\n        raise NotImplementedError\n\n    def _update_equity(self):\n        \"\"\"Compute total equity = capital + mark-to-market positions.\"\"\"\n        # TODO: Mark positions to current mid price\n        raise NotImplementedError\n\n\ndef generate_synthetic_events(symbols: list[str], num_events: int,\n                               seed: int = 42) -> list[MarketEvent]:\n    \"\"\"Generate synthetic market events with realistic properties.\n    Prices follow geometric Brownian motion, arrivals are Poisson-distributed.\"\"\"\n    random.seed(seed)\n    events = []\n    prices = {s: 10000 for s in symbols}  # Start at $100.00 (fixed-point cents)\n    timestamp = 0\n    for _ in range(num_events):\n        symbol = random.choice(symbols)\n        # Price update: geometric Brownian motion step\n        drift = 0.0001\n        volatility = 0.002\n        prices[symbol] = int(prices[symbol] * (1 + drift + volatility * random.gauss(0, 1)))\n        # Inter-arrival time: exponential (Poisson process)\n        timestamp += int(random.expovariate(1.0 / 1000))  # avg 1000 ns between events\n        event = MarketEvent(\n            event_type='quote_update',\n            symbol=symbol,\n            timestamp=timestamp,\n            data={\n                'bid_price': prices[symbol] - random.randint(1, 5),\n                'ask_price': prices[symbol] + random.randint(1, 5),\n                'bid_size': random.randint(100, 1000),\n                'ask_size': random.randint(100, 1000),\n            }\n        )\n        events.append(event)\n    return events"
+    },
+    {
+      "id": "track-d",
+      "title": "Supercomputer Interconnect Simulator",
+      "subtitle": "Topology Design, MPI Collectives, and Congestion Analysis",
+      "extends": null,
+      "description": "Build a simulator for a 1024-node supercomputer interconnect that models multiple network topologies, implements MPI collective communication algorithms, and analyzes bandwidth utilization and congestion patterns. This is an original project (not extending a prior one) that synthesizes concepts from weeks 11, 12, and 17. You will discover why topology choice is one of the most consequential decisions in supercomputer design, and why collective communication algorithms must be co-designed with the network.",
+      "requirements": {
+        "required": [
+          "Implement a configurable 1024-node system with 3 topology generators: (a) k-ary fat tree (at least 2-level with configurable radix), (b) dragonfly (groups of switches with local and global links), (c) 3D torus (with configurable dimensions, e.g., 8x8x16)",
+          "Each topology must correctly compute: number of switches, number of links, total bisection bandwidth, network diameter, and average path length",
+          "Implement routing algorithms: (a) shortest-path deterministic routing (Dijkstra or BFS), (b) adaptive routing that can route around congestion by choosing among multiple shortest paths or near-shortest paths",
+          "Implement a latency model: message_latency = alpha + beta * message_size + gamma * hops, where alpha (startup latency), beta (per-byte transfer time), and gamma (per-hop latency) are configurable parameters",
+          "Simulate 3 MPI collective operations: (a) Broadcast using a binomial tree algorithm, (b) Allreduce using the ring algorithm (Rabenseifner), (c) Alltoall using Bruck's algorithm or a simple direct-exchange",
+          "For each collective on each topology, measure: total completion time, per-link bandwidth utilization, maximum link utilization (bottleneck link), and message volume (total bytes transferred across all links)",
+          "Implement a congestion tracker that records per-link utilization over time and identifies bottleneck links where utilization exceeds a configurable threshold",
+          "Produce a topology comparison report: for each collective, compare completion time, bisection bandwidth utilization, and congestion across all 3 topologies",
+          "Analyze how performance scales with message size: sweep message sizes from 1 KB to 1 GB and plot completion time vs. message size for each topology-collective pair"
+        ],
+        "optional": [
+          "Implement a 4th topology: slim fly (based on graph theory for near-optimal diameter) and compare against the other three",
+          "Implement non-blocking Alltoall with overlapped computation and communication phases",
+          "Model link failures: randomly disable links and measure the impact on collective completion time with adaptive vs. deterministic routing",
+          "Implement hierarchical collectives that exploit topology structure (e.g., intra-group reduce followed by inter-group reduce for dragonfly)"
+        ]
+      },
+      "milestones": [
+        {
+          "week": 18,
+          "title": "Topology Generators and Routing Algorithms",
+          "deliverables": [
+            "Fat tree, dragonfly, and 3D torus topology generators producing correct node/switch/link graphs",
+            "Topology metadata computation: diameter, bisection bandwidth, average path length, total links",
+            "Shortest-path deterministic routing with verified correctness (all nodes reachable, paths are shortest)",
+            "Adaptive routing with at least 2 alternative paths between any pair",
+            "Visualization or structured dump of topology graphs for verification"
+          ],
+          "passFailCriteria": "All 3 topologies correctly connect 1024 nodes, shortest-path routing reaches all node pairs, and computed diameter matches expected values for each topology"
+        },
+        {
+          "week": 19,
+          "title": "MPI Collective Simulators",
+          "deliverables": [
+            "Broadcast (binomial tree) working on all 3 topologies with correct message delivery to all nodes",
+            "Allreduce (ring algorithm) producing correct reduced values at all nodes",
+            "Alltoall (Bruck's algorithm) delivering all point-to-point messages correctly",
+            "Latency model applied to all collectives with configurable alpha/beta/gamma",
+            "Per-link utilization tracking during collective execution"
+          ],
+          "passFailCriteria": "All 3 collectives produce correct results on all 3 topologies, verified by comparing against a reference serial implementation"
+        },
+        {
+          "week": 20,
+          "title": "Congestion Analysis and Topology Comparison Report",
+          "deliverables": [
+            "Congestion tracker identifying bottleneck links per topology-collective pair",
+            "Message size sweep (1 KB to 1 GB) with completion time plots",
+            "Topology comparison matrix: 3 topologies x 3 collectives x multiple message sizes",
+            "Analysis of which topology is best for which collective pattern and why",
+            "Discussion of cost-performance tradeoffs (total links/switches vs. performance)",
+            "Final presentation with topology visualizations and performance comparison"
+          ],
+          "passFailCriteria": "Complete comparison matrix with at least 5 message sizes, identifying the best topology for each collective and explaining the result"
+        }
+      ],
+      "evaluationCriteria": {
+        "design": "Clean topology abstraction (common interface for all topologies with topology-specific generators). Separation between topology, routing, collective algorithm, and measurement. Extensible design that would allow adding new topologies or collectives without modifying existing code.",
+        "implementation": "Correct topology construction (right number of nodes, switches, links, correct connectivity). Correct routing (all paths valid, shortest paths are actually shortest). Correct collective semantics (broadcast delivers to all, allreduce produces correct sums, alltoall completes all exchanges).",
+        "analysis": "Insightful comparison that goes beyond raw numbers. Explanation of why fat tree excels for all-to-all but dragonfly is more cost-effective for nearest-neighbor. Analysis of how congestion patterns differ across topologies. Discussion of real-world implications (cost per switch, cabling complexity, fault tolerance).",
+        "presentation": "Clear topology diagrams (even ASCII art). Compelling performance comparison with well-labeled charts. Ability to explain routing decisions and collective algorithms at the whiteboard level. Readiness to discuss how results would change with different node counts or radix choices."
+      },
+      "starterCode": "from dataclasses import dataclass, field\nfrom typing import Optional\nfrom abc import ABC, abstractmethod\nfrom collections import defaultdict, deque\nimport math\nimport json\n\n\n@dataclass\nclass Node:\n    \"\"\"A compute node or switch in the network.\"\"\"\n    node_id: int\n    is_switch: bool = False\n    group_id: int = 0       # For dragonfly: which group this node belongs to\n    coordinates: tuple = ()  # For torus: (x, y, z) position\n    neighbors: list = field(default_factory=list)  # List of (neighbor_id, link_id)\n\n\n@dataclass\nclass Link:\n    \"\"\"A bidirectional link between two nodes.\"\"\"\n    link_id: int\n    node_a: int\n    node_b: int\n    bandwidth: float = 25.0   # GB/s per direction (e.g., Slingshot-11)\n    latency_ns: float = 100.0 # Per-hop latency in nanoseconds\n\n\n@dataclass\nclass LatencyModel:\n    \"\"\"Network latency model: total = alpha + beta * msg_size + gamma * hops.\"\"\"\n    alpha: float = 1000.0    # Startup latency (nanoseconds)\n    beta: float = 0.004      # Per-byte transfer time (ns/byte) -> ~250 GB/s effective\n    gamma: float = 100.0     # Per-hop latency (nanoseconds)\n\n    def compute_latency(self, message_size_bytes: int, num_hops: int) -> float:\n        \"\"\"Compute total message latency in nanoseconds.\"\"\"\n        return self.alpha + self.beta * message_size_bytes + self.gamma * num_hops\n\n\n@dataclass\nclass CongestionRecord:\n    \"\"\"Per-link congestion tracking.\"\"\"\n    link_id: int\n    total_bytes_transferred: int = 0\n    num_messages: int = 0\n    peak_utilization: float = 0.0  # Fraction of bandwidth used at peak\n    time_congested_ns: float = 0.0 # Total time utilization > threshold\n\n\nclass Topology(ABC):\n    \"\"\"Abstract base class for network topologies.\"\"\"\n\n    def __init__(self, num_compute_nodes: int = 1024):\n        self.num_compute_nodes = num_compute_nodes\n        self.nodes: dict[int, Node] = {}\n        self.links: dict[int, Link] = {}\n        self._next_node_id = 0\n        self._next_link_id = 0\n\n    @abstractmethod\n    def build(self):\n        \"\"\"Construct the topology: create all nodes, switches, and links.\"\"\"\n        pass\n\n    @abstractmethod\n    def get_route(self, src: int, dst: int, adaptive: bool = False) -> list[int]:\n        \"\"\"Return a list of link IDs forming a path from src to dst.\n        If adaptive=True, may choose among multiple paths to avoid congestion.\"\"\"\n        pass\n\n    def _add_node(self, is_switch: bool = False, group_id: int = 0,\n                  coordinates: tuple = ()) -> int:\n        node_id = self._next_node_id\n        self._next_node_id += 1\n        self.nodes[node_id] = Node(\n            node_id=node_id, is_switch=is_switch,\n            group_id=group_id, coordinates=coordinates\n        )\n        return node_id\n\n    def _add_link(self, node_a: int, node_b: int,\n                  bandwidth: float = 25.0, latency_ns: float = 100.0) -> int:\n        link_id = self._next_link_id\n        self._next_link_id += 1\n        self.links[link_id] = Link(\n            link_id=link_id, node_a=node_a, node_b=node_b,\n            bandwidth=bandwidth, latency_ns=latency_ns\n        )\n        self.nodes[node_a].neighbors.append((node_b, link_id))\n        self.nodes[node_b].neighbors.append((node_a, link_id))\n        return link_id\n\n    @property\n    def compute_nodes(self) -> list[int]:\n        return [nid for nid, n in self.nodes.items() if not n.is_switch]\n\n    @property\n    def num_switches(self) -> int:\n        return sum(1 for n in self.nodes.values() if n.is_switch)\n\n    @property\n    def num_links(self) -> int:\n        return len(self.links)\n\n    def diameter(self) -> int:\n        \"\"\"Compute network diameter (max shortest path between any two compute nodes).\"\"\"\n        max_hops = 0\n        for src in self.compute_nodes:\n            distances = self._bfs_distances(src)\n            for dst in self.compute_nodes:\n                if dst != src and dst in distances:\n                    max_hops = max(max_hops, distances[dst])\n        return max_hops\n\n    def average_path_length(self) -> float:\n        \"\"\"Compute average shortest path length between all compute node pairs.\"\"\"\n        total_hops = 0\n        count = 0\n        for src in self.compute_nodes:\n            distances = self._bfs_distances(src)\n            for dst in self.compute_nodes:\n                if dst != src and dst in distances:\n                    total_hops += distances[dst]\n                    count += 1\n        return total_hops / max(1, count)\n\n    def _bfs_distances(self, src: int) -> dict[int, int]:\n        \"\"\"BFS from src, returning {node_id: distance} for all reachable nodes.\"\"\"\n        distances = {src: 0}\n        queue = deque([src])\n        while queue:\n            current = queue.popleft()\n            for neighbor_id, _ in self.nodes[current].neighbors:\n                if neighbor_id not in distances:\n                    distances[neighbor_id] = distances[current] + 1\n                    queue.append(neighbor_id)\n        return distances\n\n\nclass FatTree(Topology):\n    \"\"\"K-ary fat tree topology.\"\"\"\n\n    def __init__(self, num_compute_nodes: int = 1024, radix: int = 16):\n        super().__init__(num_compute_nodes)\n        self.radix = radix  # Switch radix (ports per switch)\n\n    def build(self):\n        # TODO: Build 2-level (or 3-level) fat tree\n        # Level 0: leaf switches, each connecting radix/2 compute nodes\n        # Level 1: spine switches, fully connecting to leaf switches\n        # For k=16: 128 leaf switches (8 nodes each), 64 spine switches\n        raise NotImplementedError\n\n    def get_route(self, src: int, dst: int, adaptive: bool = False) -> list[int]:\n        raise NotImplementedError\n\n\nclass Dragonfly(Topology):\n    \"\"\"Dragonfly topology with groups and global links.\"\"\"\n\n    def __init__(self, num_compute_nodes: int = 1024,\n                 nodes_per_router: int = 4, routers_per_group: int = 16):\n        super().__init__(num_compute_nodes)\n        self.nodes_per_router = nodes_per_router\n        self.routers_per_group = routers_per_group\n\n    def build(self):\n        # TODO: Build dragonfly topology\n        # Each group: routers_per_group routers, fully connected within group (local links)\n        # Global links: each router has at least one global link to a router in another group\n        # All-to-all between groups (one global link per group pair)\n        raise NotImplementedError\n\n    def get_route(self, src: int, dst: int, adaptive: bool = False) -> list[int]:\n        raise NotImplementedError\n\n\nclass Torus3D(Topology):\n    \"\"\"3D torus topology.\"\"\"\n\n    def __init__(self, num_compute_nodes: int = 1024,\n                 dim_x: int = 8, dim_y: int = 8, dim_z: int = 16):\n        super().__init__(num_compute_nodes)\n        self.dim_x = dim_x\n        self.dim_y = dim_y\n        self.dim_z = dim_z\n        assert dim_x * dim_y * dim_z == num_compute_nodes\n\n    def build(self):\n        # TODO: Build 3D torus\n        # Each node connects to 6 neighbors (+-x, +-y, +-z) with wraparound\n        raise NotImplementedError\n\n    def get_route(self, src: int, dst: int, adaptive: bool = False) -> list[int]:\n        raise NotImplementedError\n\n\nclass MPICollective(ABC):\n    \"\"\"Base class for MPI collective operations.\"\"\"\n\n    def __init__(self, topology: Topology, latency_model: LatencyModel):\n        self.topology = topology\n        self.latency_model = latency_model\n        self.messages_sent: list[dict] = []  # Log of all messages\n\n    @abstractmethod\n    def execute(self, message_size_bytes: int) -> dict:\n        \"\"\"Execute the collective and return performance metrics.\"\"\"\n        pass\n\n    def _send_message(self, src: int, dst: int, size_bytes: int) -> float:\n        \"\"\"Send a message from src to dst. Return latency in nanoseconds.\"\"\"\n        route = self.topology.get_route(src, dst)\n        num_hops = len(route)\n        latency = self.latency_model.compute_latency(size_bytes, num_hops)\n        self.messages_sent.append({\n            'src': src, 'dst': dst, 'size_bytes': size_bytes,\n            'num_hops': num_hops, 'latency_ns': latency,\n            'links_used': route,\n        })\n        return latency\n\n\nclass Broadcast(MPICollective):\n    \"\"\"Binomial tree broadcast from a root node to all other nodes.\"\"\"\n\n    def execute(self, message_size_bytes: int, root: int = 0) -> dict:\n        # TODO: Implement binomial tree broadcast\n        # At step k, nodes that have the data send to node + 2^k\n        raise NotImplementedError\n\n\nclass Allreduce(MPICollective):\n    \"\"\"Ring allreduce (reduce-scatter + allgather).\"\"\"\n\n    def execute(self, message_size_bytes: int) -> dict:\n        # TODO: Implement ring allreduce\n        # Phase 1: reduce-scatter (N-1 steps, each node sends chunk_size = msg_size / N)\n        # Phase 2: allgather (N-1 steps, each node sends chunk_size)\n        raise NotImplementedError\n\n\nclass Alltoall(MPICollective):\n    \"\"\"Bruck's algorithm for alltoall.\"\"\"\n\n    def execute(self, message_size_bytes: int) -> dict:\n        # TODO: Implement Bruck's alltoall\n        # log2(N) communication rounds, each with a rotation and local data rearrangement\n        raise NotImplementedError\n\n\nclass CongestionTracker:\n    \"\"\"Track per-link utilization and identify bottlenecks.\"\"\"\n\n    def __init__(self, topology: Topology, congestion_threshold: float = 0.8):\n        self.topology = topology\n        self.threshold = congestion_threshold\n        self.records: dict[int, CongestionRecord] = {\n            lid: CongestionRecord(link_id=lid) for lid in topology.links\n        }\n\n    def record_message(self, link_ids: list[int], message_size_bytes: int):\n        \"\"\"Record a message traversing a set of links.\"\"\"\n        for lid in link_ids:\n            self.records[lid].total_bytes_transferred += message_size_bytes\n            self.records[lid].num_messages += 1\n\n    def get_bottleneck_links(self, top_n: int = 10) -> list[CongestionRecord]:\n        \"\"\"Return the top_n most utilized links.\"\"\"\n        return sorted(\n            self.records.values(),\n            key=lambda r: r.total_bytes_transferred,\n            reverse=True\n        )[:top_n]\n\n    def utilization_summary(self) -> dict:\n        \"\"\"Summary statistics of link utilization.\"\"\"\n        if not self.records:\n            return {}\n        bytes_list = [r.total_bytes_transferred for r in self.records.values()]\n        return {\n            'max_bytes': max(bytes_list),\n            'min_bytes': min(bytes_list),\n            'mean_bytes': sum(bytes_list) / len(bytes_list),\n            'std_bytes': (\n                sum((b - sum(bytes_list) / len(bytes_list)) ** 2 for b in bytes_list)\n                / len(bytes_list)\n            ) ** 0.5,\n            'num_congested_links': sum(\n                1 for b in bytes_list if b > self.threshold * max(bytes_list)\n            ),\n            'total_links': len(bytes_list),\n        }"
+    }
+  ],
+  "rubric": {
+    "totalPoints": 200,
+    "categories": {
+      "design": {
+        "weight": 0.25,
+        "points": 50,
+        "description": "Architecture decisions, abstractions, and extensibility",
+        "criteria": [
+          "Clean decomposition into well-defined classes with single responsibilities",
+          "Appropriate use of abstraction (base classes, interfaces) that enables extension without modification",
+          "Data structure choices that match the problem domain and support efficient operations",
+          "Separation of concerns between simulation logic, measurement, and reporting",
+          "Design decisions are documented and justified in the report"
+        ],
+        "gradingScale": {
+          "excellent": "45-50 points. Elegant architecture that a new team member could understand in 30 minutes. Abstractions are well-chosen and non-leaky. Extensibility is demonstrated, not just claimed.",
+          "good": "35-44 points. Sound architecture with minor issues. Most abstractions are appropriate. Some coupling between components that could be improved.",
+          "adequate": "25-34 points. Working architecture but with significant coupling or unclear abstractions. Design choices are not well justified.",
+          "poor": "0-24 points. Monolithic code, god classes, or inappropriate abstractions. No clear separation of concerns."
+        }
+      },
+      "implementation": {
+        "weight": 0.30,
+        "points": 60,
+        "description": "Correctness, completeness, and code quality",
+        "criteria": [
+          "All required features are implemented and functional",
+          "Correctness is verified through tests or comparison against reference implementations",
+          "Edge cases are handled (empty inputs, boundary conditions, error states)",
+          "Code is readable: meaningful names, docstrings, type hints, consistent style",
+          "No silent failures or data corruption under valid inputs"
+        ],
+        "gradingScale": {
+          "excellent": "52-60 points. All required features work correctly. Edge cases handled. Clean, well-documented code. Tests cover critical paths.",
+          "good": "40-51 points. Most features work. Minor edge cases missed. Code is readable but could use more documentation.",
+          "adequate": "28-39 points. Core features work but some required features are incomplete. Some edge cases cause incorrect results.",
+          "poor": "0-27 points. Multiple features broken or missing. Frequent incorrect results. Code is difficult to follow."
+        }
+      },
+      "analysis": {
+        "weight": 0.25,
+        "points": 50,
+        "description": "Depth of analysis, data presentation, and insights",
+        "criteria": [
+          "Every performance claim is backed by quantitative data",
+          "Appropriate metrics are chosen and correctly computed",
+          "Results are presented in well-labeled charts and tables",
+          "Analysis goes beyond stating numbers to explaining why results occur",
+          "Limitations and threats to validity are discussed honestly",
+          "Comparison against baselines or theoretical bounds where applicable"
+        ],
+        "gradingScale": {
+          "excellent": "45-50 points. Rigorous quantitative analysis with insightful explanations. Professional-quality charts. Honest discussion of limitations. Results are reproducible.",
+          "good": "35-44 points. Solid analysis with quantitative backing. Charts are clear. Some insights could be deeper.",
+          "adequate": "25-34 points. Analysis is present but shallow. Some claims lack data. Charts are hard to read or mislabeled.",
+          "poor": "0-24 points. Little or no quantitative analysis. Claims are unsupported. No charts or only trivial ones."
+        }
+      },
+      "presentation": {
+        "weight": 0.20,
+        "points": 40,
+        "description": "Clarity, demonstration, and Q&A readiness",
+        "criteria": [
+          "Presentation is well-structured with clear narrative arc (motivation -> approach -> results -> conclusions)",
+          "Live demo works reliably and showcases the system's capabilities",
+          "Slides/visuals are clear, uncluttered, and support the narrative",
+          "Speaker demonstrates deep understanding of the system, not just surface-level familiarity",
+          "Q&A responses are thoughtful, technically accurate, and acknowledge limitations when appropriate"
+        ],
+        "gradingScale": {
+          "excellent": "36-40 points. Compelling presentation with flawless demo. Speaker clearly understands every component. Q&A responses are precise and insightful.",
+          "good": "28-35 points. Clear presentation with working demo. Speaker handles most questions well.",
+          "adequate": "20-27 points. Presentation is understandable but unfocused. Demo has minor issues. Q&A responses are vague.",
+          "poor": "0-19 points. Presentation is disorganized or confusing. Demo fails. Speaker cannot answer basic questions about their own system."
+        }
+      }
+    }
+  },
+  "academicIntegrityPolicy": "This is an individual project. You may consult textbooks, papers, and online references, but all code must be your own. You must cite any external resources that influenced your design. Using AI code generators (Copilot, ChatGPT, etc.) for boilerplate is permitted, but you must understand and be able to explain every line of code you submit. During the Q&A portion of your presentation, the evaluators will probe your understanding -- inability to explain your own code will be treated as an academic integrity violation.",
+  "recommendedReferences": {
+    "trackA": [
+      "Hennessy & Patterson, 'Computer Architecture: A Quantitative Approach', Chapter 3 (ILP and Tomasulo's)",
+      "Tomasulo, R.M. 'An Efficient Algorithm for Exploiting Multiple Arithmetic Units' (IBM Journal, 1967)",
+      "Smith & Sohi, 'The Microarchitecture of Superscalar Processors' (Proceedings of the IEEE, 1995)"
+    ],
+    "trackB": [
+      "NVIDIA CUDA C++ Programming Guide, Chapter 5 (Performance Guidelines)",
+      "Volkov, V. 'Better Performance at Lower Occupancy' (GTC 2010)",
+      "Williams, Waterman, Patterson, 'Roofline: An Insightful Visual Performance Model' (CACM, 2009)"
+    ],
+    "trackC": [
+      "Aldridge, I. 'High-Frequency Trading: A Practical Guide to Algorithmic Strategies'",
+      "Harris, L. 'Trading and Exchanges: Market Microstructure for Practitioners'",
+      "Morris, G. 'FPGA-Based Implementation of Signal Processing Systems', Chapter 12 (Financial Applications)"
+    ],
+    "trackD": [
+      "Dally & Towles, 'Principles and Practices of Interconnection Networks'",
+      "Kim, Dally, Abts, 'Flattened Butterfly: A Cost-Efficient Topology for High-Radix Networks' (ISCA, 2007)",
+      "Thakur, Rabenseifner, Gropp, 'Optimization of Collective Communication Operations in MPICH' (IJHPCA, 2005)"
+    ]
+  }
+}

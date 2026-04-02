@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In digital circuit simulation, an event-driven simulator only evaluates gates whose inputs have changed. This is analogous to which processor mechanism?",
+      "options": [
+        "Pipelining — instructions flow through stages in order, like events propagating through gates",
+        "Reservation stations and CDB snooping — instructions execute only when their operands arrive (demand-driven), rather than on every cycle",
+        "Branch prediction — the simulator predicts which gates will change next",
+        "VLIW scheduling — the simulator evaluates multiple gates in parallel"
+      ],
+      "correct": 1,
+      "explanation": "Event-driven simulation and Tomasulo's reservation station mechanism share the same principle: demand-driven computation. In event-driven simulation, a gate is evaluated only when one of its input signals changes — an 'event' triggers the computation. In Tomasulo's algorithm, a reservation station begins execution only when all its operands arrive (Qj and Qk are both cleared by CDB broadcasts). Both avoid unnecessary work: the simulator skips unchanged gates, and the processor avoids polling for operand availability. An oblivious simulator (evaluate everything every cycle) is analogous to an in-order processor (process every instruction in sequence regardless of readiness)."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "When analyzing processor performance, why is CPI breakdown more useful than a single CPI number?",
+      "options": [
+        "CPI breakdown is simpler to compute than total CPI",
+        "CPI breakdown identifies which bottleneck (data stalls, control stalls, structural stalls) dominates, guiding which optimization will yield the largest improvement",
+        "CPI breakdown is required by the RISC-V specification",
+        "Total CPI varies with input data but CPI breakdown does not"
+      ],
+      "correct": 1,
+      "explanation": "A CPI breakdown ($\\text{CPI} = 1 + \\text{CPI}_{data} + \\text{CPI}_{control} + \\text{CPI}_{structural}$) reveals which source of stalls dominates. If data stalls contribute 0.40 and control stalls contribute 0.05, then adding forwarding (which reduces data stalls) will have far more impact than improving branch prediction. Without the breakdown, you might waste effort optimizing a component that contributes little to total CPI. This is the hardware equivalent of software profiling: measure where the time is spent before optimizing."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In real-world processor design, verification (testing the design for correctness) consumes 60-70% of total engineering effort. Why is verification so difficult for out-of-order processors?",
+      "options": [
+        "The Verilog/SystemVerilog language is harder to write tests in than C/C++",
+        "Out-of-order processors have an exponentially large state space — the combination of ROB states, reservation station occupancy, cache states, predictor states, and speculative execution paths creates billions of distinct states that cannot be exhaustively tested",
+        "Verification is difficult because processors run too fast to observe individual instructions",
+        "The main challenge is simulating analog electrical effects, not digital logic correctness"
+      ],
+      "correct": 1,
+      "explanation": "A modern out-of-order processor with a 512-entry ROB, hundreds of reservation stations, multi-level caches with coherence protocols, and speculative execution across multiple branch predictions has an astronomically large state space. Consider just the ROB: each of 512 entries can be empty, issued, executing, or ready-to-commit, with different instruction types and register mappings — that alone is far more states than atoms in the universe. Exhaustive testing is impossible. Engineers use constrained-random testing (generate millions of random instruction sequences), formal verification (mathematically prove properties for subsets of the design), and coverage metrics (measure what fraction of state transitions have been exercised). Despite these techniques, bugs occasionally ship in production silicon — Intel's FDIV bug (1994) and various errata in every modern processor demonstrate this."
+    }
+  ]
+}

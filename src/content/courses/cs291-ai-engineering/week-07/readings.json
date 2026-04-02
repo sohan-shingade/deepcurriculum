@@ -1,0 +1,44 @@
+{
+  "readings": [
+    {
+      "id": "r1",
+      "title": "OWASP Top 10 for LLM Applications",
+      "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+      "type": "reference",
+      "description": "The definitive security reference for LLM applications. Covers prompt injection, insecure output handling, training data poisoning, model denial of service, supply chain vulnerabilities, sensitive information disclosure, insecure plugin design, excessive agency, overreliance, and model theft. Essential reading for anyone deploying AI applications to production. Version 1.1 (2024) includes updated mitigations and real-world case studies.",
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "r2",
+      "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+      "url": "https://arxiv.org/abs/2302.12173",
+      "type": "paper",
+      "description": "Greshake et al. (2023) provide the seminal research on indirect prompt injection attacks, where malicious instructions are embedded in data that LLM-integrated applications process (web pages, emails, documents). The paper demonstrates practical attacks against real systems and proposes a taxonomy of injection vectors. Required reading for understanding why the 'data vs instructions' distinction is the fundamental security challenge of AI applications.",
+      "estimatedMinutes": 40
+    },
+    {
+      "id": "r3",
+      "title": "Scaling Machine Learning at Uber with Michelangelo",
+      "url": "https://www.uber.com/blog/michelangelo-machine-learning-platform/",
+      "type": "blog",
+      "description": "Uber's engineering blog post on Michelangelo, their ML platform, covers the full deployment lifecycle: feature engineering, training, evaluation, deployment, monitoring, and iteration. While pre-LLM, the platform engineering principles translate directly to AI application deployment: model versioning, A/B testing, canary deployments, feature stores, and automated retraining pipelines. Shows what production ML infrastructure looks like at scale.",
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "r4",
+      "title": "GPTCache: An Open-Source Semantic Cache for LLM Applications",
+      "url": "https://github.com/zilliztech/GPTCache",
+      "type": "tool",
+      "description": "An open-source library that implements semantic caching for LLM applications. Supports multiple embedding backends, similarity search engines, and cache eviction policies. Worth reading the README, architecture docs, and source code to understand how production semantic caches work: embedding generation, similarity thresholds, cache storage backends (in-memory, SQLite, Redis), and the tradeoffs between hit rate and correctness.",
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "r5",
+      "title": "Prompt Injection: A Critical Vulnerability in LLM-Integrated Applications",
+      "url": "https://simonwillison.net/2023/Apr/14/worst-that-can-happen/",
+      "type": "blog",
+      "description": "Simon Willison's comprehensive overview of prompt injection as a security vulnerability class. Willison has been one of the most thoughtful voices on LLM security, and this post (along with his extensive follow-up writing) covers the fundamental challenge: LLMs cannot reliably distinguish between instructions and data in their context. Includes practical examples, mitigation strategies, and an honest assessment of what remains unsolved.",
+      "estimatedMinutes": 20
+    }
+  ]
+}

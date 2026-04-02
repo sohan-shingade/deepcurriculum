@@ -1,0 +1,46 @@
+{
+  "readings": [
+    {
+      "title": "Measuring the Gap Between FPGAs and ASICs",
+      "authors": "Ian Kuon and Jonathan Rose",
+      "url": "https://www.eecg.toronto.edu/~jayar/pubs/kuon/kuonfpga06.pdf",
+      "note": "The foundational study from the University of Toronto quantifying the area, speed, and power gap between FPGAs and ASICs. Measures the 20-35x area overhead of programmability and analyzes where the overhead comes from (routing dominates). Essential reading for understanding why FPGAs trade area for flexibility."
+    },
+    {
+      "title": "AMD Versal Architecture and Product Data Sheet (DS950)",
+      "authors": "AMD/Xilinx",
+      "url": "https://www.mouser.com/datasheet/2/903/ds950_versal_overview-2634331.pdf",
+      "note": "Complete specifications for the Versal Adaptive SoC family, including the VC1902 (899,840 LUTs, 400 AI Engine tiles) and VP1902 (8.46M LUTs, 6,864 DSPs). Covers the heterogeneous architecture: programmable logic, AI Engines, DSP engines, hard processors, and Network-on-Chip."
+    },
+    {
+      "title": "Intel Agilex 7 FPGA F-Series Device Data Sheet",
+      "authors": "Intel/Altera",
+      "url": "https://www.intel.com/content/www/us/en/docs/programmable/683301/current/intel-agilex-7-fpgas-and-socs-device.html",
+      "note": "Specifications for the Agilex 7 family including the AGF027 (2.69M logic elements, 8,528 DSPs, 287 Mb embedded memory). Covers HyperFlex architecture, hardened floating-point support, and high-speed transceivers."
+    },
+    {
+      "title": "Vitis High-Level Synthesis User Guide (UG1399)",
+      "authors": "AMD/Xilinx",
+      "url": "https://www.xilinx.com/support/documents/sw_manuals/xilinx2022_2/ug1399-vitis-hls.pdf",
+      "note": "The definitive reference for HLS pragmas and design methodology. Covers pipeline, unroll, array_partition, dataflow, and interface directives with detailed examples. Essential for understanding how C++ maps to hardware."
+    },
+    {
+      "title": "Build Fast, Trade Fast: FPGA-Based High-Frequency Trading Using High-Level Synthesis",
+      "authors": "Andrew Boutros, Abdelrahman Eldamaty, Muhsen Owaida, et al.",
+      "url": "https://ieeexplore.ieee.org/document/8279781/",
+      "note": "Demonstrates a complete HFT system (network stack, FAST parser, order book, strategy, order gateway) implemented entirely in HLS achieving 270ns average tick-to-trade latency. Proves HLS viability for latency-critical trading with <8% logic utilization on Kintex UltraScale."
+    },
+    {
+      "title": "ChipVerify -- Verilog Synthesis Patterns",
+      "authors": "ChipVerify",
+      "url": "https://www.chipverify.com/verilog/verilog-synthesis",
+      "note": "Practical reference for which Verilog constructs synthesize to which hardware. Covers the distinction between synthesizable (always blocks, assign, case) and simulation-only (initial, delays, system tasks) constructs."
+    },
+    {
+      "title": "How Are FPGAs Used in Trading?",
+      "authors": "IMC Trading",
+      "url": "https://www.imc.com/us/articles/how-are-fpgas-used-in-trading",
+      "note": "First-person account from one of the world's largest market-making firms on why they build FPGA trading infrastructure in-house. Discusses the CPU vs FPGA vs ASIC trade-off from a practitioner's perspective and the importance of hardware-software co-design."
+    }
+  ]
+}

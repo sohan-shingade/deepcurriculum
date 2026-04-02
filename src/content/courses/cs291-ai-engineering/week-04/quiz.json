@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 4: Agents & Tool Use",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the formal definition of an LLM agent, the policy function pi(h_t) maps the agent's internal state to an action. In a standard LLM-based agent, what concretely implements this policy function?",
+      "options": [
+        "A reinforcement learning policy network trained on agent trajectories",
+        "A call to the LLM with the accumulated context (system prompt + conversation history) whose output is parsed into an action",
+        "A rule-based decision tree that selects tools based on keyword matching",
+        "A retrieval system that finds the most similar past action from a database"
+      ],
+      "correct": 1,
+      "explanation": "In an LLM-based agent, the policy pi is implemented by calling the foundation model with the full context window (system prompt, conversation history, tool descriptions, and accumulated observations). The model's output is then parsed to extract a tool call or response. This is what makes LLM agents both powerful (the policy is a general-purpose reasoner) and unreliable (the policy can hallucinate actions). Unlike RL policies, there is no task-specific training — the model's pretraining and instruction tuning serve as the policy."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "According to Yao et al. (2022), what is the primary advantage of the ReAct paradigm over pure chain-of-thought reasoning?",
+      "options": [
+        "ReAct uses fewer tokens per interaction",
+        "ReAct eliminates hallucination by grounding every step in tool output",
+        "ReAct allows the model to access external information through tool calls, reducing reliance on potentially incorrect parametric knowledge",
+        "ReAct always produces the correct answer on the first attempt"
+      ],
+      "correct": 2,
+      "explanation": "Pure chain-of-thought reasoning relies entirely on the model's parametric knowledge — facts stored in its weights during training. When those facts are wrong or missing, CoT hallucinates. ReAct interleaves reasoning with actions (tool calls), allowing the model to retrieve real information from external sources. This does NOT eliminate hallucination (the model can still misinterpret tool outputs or choose wrong tools), but it significantly reduces knowledge-dependent errors. Yao et al. demonstrated this on HotpotQA, where ReAct's ability to look up facts improved exact match from 29% (CoT) to 35%."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An agent system has a task that decomposes into 4 subtasks: A, B, C, D. A and B are independent. C depends on A. D depends on both B and C. What is the minimum number of sequential execution levels needed?",
+      "options": [
+        "1 (all can run in parallel)",
+        "2 (level 1: A,B; level 2: C,D)",
+        "3 (level 1: A,B; level 2: C; level 3: D)",
+        "4 (each task in its own level)"
+      ],
+      "correct": 2,
+      "explanation": "This is a DAG scheduling problem. Level 1: A and B run in parallel (no dependencies). Level 2: C runs (depends on A, which completed in level 1). D cannot run yet because it depends on C. Level 3: D runs (both B and C have completed). The critical path is A -> C -> D, which requires 3 levels. B completes in level 1 and its result waits. This is the LLM Compiler pattern — by analyzing dependencies, we can schedule independent operations in parallel while respecting the constraint order."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following is the BEST tool name for an LLM agent's tool that queries a PostgreSQL database?",
+      "options": [
+        "fn_db",
+        "query_database",
+        "run",
+        "pg_exec_sql_query_v2_production"
+      ],
+      "correct": 1,
+      "explanation": "Tool naming follows the verb-noun convention and should be descriptive yet concise. 'query_database' clearly communicates what the tool does. 'fn_db' is cryptic — the model may not associate it with database queries. 'run' is completely ambiguous. 'pg_exec_sql_query_v2_production' is overly specific and includes implementation details (PostgreSQL, version, environment) that the LLM does not need. Research by Patil et al. (2023) in the Gorilla paper showed that descriptive, natural language tool names significantly improve tool selection accuracy."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An agent has been running for 20 steps. The total input tokens consumed is much higher than 20 times the average per-step input tokens. Why?",
+      "options": [
+        "The model has a bug that sends duplicate tokens",
+        "Each step includes the full conversation history in its context, so input tokens grow quadratically with steps",
+        "The tools are returning increasingly large outputs",
+        "The model is using a larger vocabulary at later steps"
+      ],
+      "correct": 1,
+      "explanation": "In a standard agent loop, each LLM call includes the full conversation history: system prompt + all previous thoughts, actions, and observations. Step 1 sees ~N tokens. Step 2 sees ~N + output_1 tokens. Step k sees ~N + sum of all previous outputs. The total input tokens across all steps is proportional to k^2 (quadratic). This is why agent cost grows quadratically with the number of steps, not linearly. A 20-step agent costs roughly 10x more than a 10-step agent in total input tokens, not 2x. This is a critical consideration when deciding agent step limits."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the memory taxonomy from Sumers et al. (2023), what type of memory is an agent's scratchpad where it stores intermediate calculations and plans?",
+      "options": [
+        "Sensory memory",
+        "Working memory",
+        "Episodic memory",
+        "Semantic memory"
+      ],
+      "correct": 1,
+      "explanation": "Working memory is the agent's scratchpad — a structured space where it stores intermediate results, plans, and notes that it explicitly manages. Sensory memory is the raw context window (the immediate input). Episodic memory stores records of past interactions ('last time I did X, Y happened'). Semantic memory is long-term factual knowledge (like a vector database of documents). The key distinction: sensory memory is implicit (it is just the context), while working memory is explicit (the agent chooses what to write to and read from the scratchpad)."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are evaluating two agents on the same task. Agent A gets the correct answer in 3 steps. Agent B gets the correct answer in 12 steps. Using the evaluation framework from the lecture (outcome 40%, efficiency 30%, accuracy 30%), and assuming both have perfect tool accuracy, what can you conclude?",
+      "options": [
+        "Both agents score identically because they both got the correct answer",
+        "Agent A scores higher because it is more efficient, even though both are correct",
+        "Agent B scores higher because it used more tools and explored more thoroughly",
+        "You cannot compare them without knowing the redundancy rate"
+      ],
+      "correct": 1,
+      "explanation": "Both agents get full marks for outcome (0.4 each) and tool accuracy (0.3 each). The difference is efficiency. If optimal is 3 steps: Agent A efficiency = 3/3 = 1.0, so efficiency score = 0.3. Agent B efficiency = 3/12 = 0.25, so efficiency score = 0.075. Agent A total = 0.4 + 0.3 + 0.3 = 1.0. Agent B total = 0.4 + 0.075 + 0.3 = 0.775. Agent A is superior. Correctness alone is insufficient for agent evaluation — cost and efficiency matter in production. An agent that wastes 4x the tokens to reach the same answer is a worse agent."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Reflexion pattern (Shinn et al. 2023) stores self-reflections after task attempts. Which of the following is a valid reflection that would improve future performance?",
+      "options": [
+        "\"The task was hard.\"",
+        "\"I should try harder next time.\"",
+        "\"My search query 'GDP data' was too broad and returned irrelevant results. I should include the country name and year in future search queries.\"",
+        "\"Error code 404 was returned.\""
+      ],
+      "correct": 2,
+      "explanation": "An effective Reflexion must identify (1) what went wrong specifically, (2) why it went wrong, and (3) a concrete strategy for improvement. Option C does all three: the search query was too broad (what), it returned irrelevant results (why it was a problem), and include country name and year (concrete strategy). 'The task was hard' and 'try harder' are not actionable. 'Error code 404' is an observation, not a reflection. The power of Reflexion is that natural language strategies can be retrieved and applied to future similar tasks without any gradient updates."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An agent system uses the scoring formula score(m) = 0.2 * recency(m) + 0.3 * importance(m) + 0.5 * relevance(m, q) for memory retrieval. A critical safety warning was stored 100 steps ago (low recency), marked as high importance (0.95), and is highly relevant to the current query (0.9). A trivial observation was stored 2 steps ago (high recency, 0.95), has low importance (0.1), and low relevance (0.1). Which memory gets retrieved?",
+      "options": [
+        "The trivial recent observation, because recency dominates",
+        "The safety warning, because importance and relevance outweigh recency",
+        "They score equally and both are retrieved",
+        "Neither is retrieved because both have at least one low score"
+      ],
+      "correct": 1,
+      "explanation": "Let us compute. Safety warning: recency is low, say 0.05. Score = 0.2(0.05) + 0.3(0.95) + 0.5(0.9) = 0.01 + 0.285 + 0.45 = 0.745. Trivial observation: Score = 0.2(0.95) + 0.3(0.1) + 0.5(0.1) = 0.19 + 0.03 + 0.05 = 0.27. The safety warning scores 0.745 vs 0.27 for the trivial observation. The heavy weight on relevance (0.5) ensures that memories pertinent to the current task are prioritized, even if they are old. This is why the weight distribution matters: if recency had weight 0.8, the trivial observation would win, potentially missing critical safety information."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You need to build a system that answers customer billing questions. 85% of questions are about invoice amounts, payment status, or refund policies. The other 15% are complex edge cases. What is the most cost-effective and reliable architecture?",
+      "options": [
+        "A full ReAct agent with database tools for every question",
+        "A router that classifies the question type, uses deterministic handlers for the 85%, and falls back to a ReAct agent for the 15%",
+        "A Plan-then-Execute agent that creates a multi-step plan for every question",
+        "An LLM Compiler that parallelizes all possible database lookups upfront"
+      ],
+      "correct": 1,
+      "explanation": "This is the hybrid architecture pattern: use deterministic code for predictable cases, agents for unpredictable ones. An LLM classifier routes each question. For the 85% known types, a deterministic handler (SQL query, template response) runs in milliseconds with near-perfect reliability. For the 15% edge cases, a ReAct agent with database tools handles the complexity. This gives you: (1) low cost — 85% of requests avoid agent token costs, (2) high reliability — deterministic handlers do not hallucinate, (3) flexibility — the agent handles the long tail. Using a full agent for every question wastes 10-100x the cost on the 85% that do not need one."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "An FPGA-based trading system achieves 270 ns tick-to-trade latency at 156.2 MHz (6.4 ns clock period). An optimized software system using kernel bypass achieves ~2 $\\mu$s. If both systems receive the same market data update simultaneously, how many clock cycles of advantage does the FPGA have over the software?",
+      "options": [
+        "~27 FPGA clock cycles",
+        "~270 FPGA clock cycles (one per nanosecond)",
+        "~270 FPGA clock cycles of processing, but the software responds ~1,730 ns / 6.4 ns $\\approx$ 270 additional clock cycles later -- total advantage of ~270 clock cycles at the FPGA's clock rate",
+        "The FPGA has approximately $(2000 - 270) / 6.4 \\approx 270$ clock cycles of head start before the software system's order arrives"
+      ],
+      "correct": 3,
+      "explanation": "The software takes ~2,000 ns. The FPGA takes ~270 ns. The FPGA's order arrives $2000 - 270 = 1{,}730$ ns before the software's order. In FPGA clock cycles at 156.2 MHz (6.4 ns/cycle): $1730 / 6.4 \\approx 270$ cycles of advantage. In trading terms, 1,730 ns is an eternity -- plenty of time to reach the exchange's matching engine and capture queue priority. Note the irony: the FPGA's clock is 32x slower than the CPU's (156 MHz vs 5 GHz), yet it finishes 7.4x sooner because the FPGA eliminates all overhead (instruction fetch, cache, OS)."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "The FAST protocol uses stop-bit encoding where each byte has 7 data bits and 1 stop bit. Why does this make parallel FPGA decoding difficult, and what is the research solution?",
+      "options": [
+        "Stop-bit encoding requires floating-point division, which FPGAs cannot do",
+        "Each field's length is variable (determined by the stop bit), so the next field's start offset depends on the current field's byte count -- creating a serial dependency. The solution is speculative parallel decoding: start decoding at ALL possible byte offsets simultaneously and select the correct result post-hoc.",
+        "FAST messages are encrypted with AES, requiring sequential decryption",
+        "FAST uses XML encoding which requires a full parser state machine"
+      ],
+      "correct": 1,
+      "explanation": "In FAST, a value like 942 encodes as 2 bytes, while a value like 5 encodes as 1 byte. You cannot know where field $N+1$ starts until you finish decoding field $N$ (by finding its stop bit). This creates a serial chain that prevents naive parallelization. The research solution (ACM 2021, achieving <200 ns/message) uses speculative parallel decoding: start N decoders at byte offsets 0, 1, 2, ..., N-1 simultaneously. Each decoder assumes its offset is the correct field start. After decoding completes, the correct decoder is identified based on which stream produced valid results matching the template. This trades area (N parallel decoders) for latency, analogous to speculative execution in CPUs."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An FPGA order book uses a price-indexed array with base price $150.00 and tick size $0.01 (integer: base = 1,500,000, tick = 100, using 4 decimal places). What is the array index for a bid at $150.47?",
+      "options": [
+        "Index 47 (cents above base)",
+        "Index 4700 ($150.47 \\times 10000 - 1{,}500{,}000 = 4{,}700$)",
+        "Index 15047 ($150.47 \\times 100$)",
+        "Index 150.47 (direct floating-point index)"
+      ],
+      "correct": 1,
+      "explanation": "Price in integer representation: $150.47 \\times 10{,}000 = 1{,}504{,}700$. Index: $1{,}504{,}700 - 1{,}500{,}000 = 4{,}700$. This is a single integer subtraction -- one clock cycle in hardware. The array entry at index 4,700 stores the aggregate quantity and order count at $150.47. The index is NOT 47 (that would only work with 2 decimal places). Using 4 decimal places provides sub-cent resolution, which is needed for instruments with smaller ticks. The entire computation uses no division and no floating point."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Microwave links between Chicago (CME Aurora) and New Jersey (Mahwah/Carteret) achieve ~7.82 ms round-trip, while fiber achieves ~13.0 ms. What fundamental physics principle explains the difference?",
+      "options": [
+        "Microwave signals travel faster than light",
+        "Fiber has higher electrical resistance than air",
+        "Light travels at $c$ in vacuum/air but only at $c/n$ in glass (where $n \\approx 1.47$ is the refractive index of fiber), so microwave through air is ~47% faster than light through fiber. Additionally, fiber routes are not straight-line, adding geographic distance.",
+        "Microwave uses higher-frequency electromagnetic waves which carry more energy and therefore travel faster"
+      ],
+      "correct": 2,
+      "explanation": "All electromagnetic radiation (light, microwave, radio) travels at $c \\approx 3 \\times 10^8$ m/s in vacuum. In glass fiber, the refractive index $n \\approx 1.47$ slows light to $c/n \\approx 204{,}000$ km/s. Microwave through air travels at essentially $c \\approx 299{,}000$ km/s. The ratio: $299/204 \\approx 1.47$, so microwave is ~47% faster. Additionally, fiber routes follow roads and rights-of-way (longer path), while microwave towers can be placed in a more direct line-of-sight. McKay Brothers achieves 7.82 ms round trip vs fiber's ~13.0 ms -- the remaining gap beyond the refractive index is geographic routing overhead. At $\\sim$5.4 $\\mu$s per mile (microwave) vs $\\sim$8.01 $\\mu$s per mile (fiber), the difference is roughly 2.6 $\\mu$s per mile."
+    }
+  ]
+}

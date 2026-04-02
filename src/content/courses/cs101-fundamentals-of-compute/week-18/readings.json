@@ -1,0 +1,58 @@
+{
+  "readings": [
+    {
+      "title": "What Every Programmer Should Know About Memory",
+      "url": "https://people.freebsd.org/~lstewart/articles/cpumemory.pdf",
+      "type": "paper",
+      "description": "The definitive reference on memory system performance (Ulrich Drepper, Red Hat, 2007). Covers DRAM internals, cache architecture, TLB behavior, NUMA effects, and practical optimization techniques. Section 3 on CPU caches and Section 6 on NUMA are directly relevant to this week's material on cache-line optimization and NUMA-aware allocation."
+    },
+    {
+      "title": "Systems Performance: Enterprise and the Cloud (2nd Edition)",
+      "url": "https://www.brendangregg.com/systems-performance-2nd-edition-book.html",
+      "type": "reference",
+      "description": "Comprehensive systems performance methodology by Brendan Gregg (Addison-Wesley, 2020). Covers CPU scheduling, memory architecture, profiling tools (perf, flamegraphs), and the USE (Utilization, Saturation, Errors) methodology. The industry standard for performance engineering."
+    },
+    {
+      "title": "Erik Rigtorp: Low Latency Guide",
+      "url": "https://rigtorp.se/low-latency-guide/",
+      "type": "reference",
+      "description": "Comprehensive guide to low-latency programming on Linux. Covers CPU isolation (isolcpus, nohz_full, rcu_nocbs), NUMA-aware allocation, huge pages, interrupt management, and kernel bypass. Essential for trading systems and real-time applications."
+    },
+    {
+      "title": "Kernel Bypass in HFT",
+      "url": "https://www.quantvps.com/blog/kernel-bypass-in-hft",
+      "type": "reference",
+      "description": "Practical overview of kernel bypass technologies for low-latency trading: DPDK poll-mode drivers, Solarflare OpenOnload, and RDMA. Covers measured latency improvements from 10-50 microseconds (kernel stack) to 1-5 microseconds (kernel bypass)."
+    },
+    {
+      "title": "SUSE: CPU Isolation with nohz_full (Part 3)",
+      "url": "https://www.suse.com/c/cpu-isolation-nohz_full-part-3/",
+      "type": "reference",
+      "description": "Deep dive into the nohz_full kernel parameter. Explains timer tick mechanics, RCU callback offloading, and measured latency improvements from tickless operation on isolated cores."
+    },
+    {
+      "title": "Linux Kernel Parameters Documentation",
+      "url": "https://www.kernel.org/doc/html/latest/admin-guide/kernel-parameters.html",
+      "type": "reference",
+      "description": "Official Linux kernel documentation on boot parameters including isolcpus, nohz_full, rcu_nocbs, processor.max_cstate, and other tuning options for CPU isolation and low-latency operation."
+    },
+    {
+      "title": "Performance Analysis and Tuning on Modern CPUs",
+      "url": "https://book.easyperf.net/perf_book",
+      "type": "reference",
+      "description": "Open-access book by Denis Bakhvalov (2020) covering CPU microarchitecture from a performance perspective: branch prediction, cache behavior, SIMD vectorization, and profiling with hardware performance counters. The chapters on branchless programming and voltage-frequency scaling are directly relevant to this week's exercises."
+    },
+    {
+      "title": "Dennard Scaling (Wikipedia)",
+      "url": "https://en.wikipedia.org/wiki/Dennard_scaling",
+      "type": "reference",
+      "description": "History and physics of Dennard scaling (1974) and its breakdown around 2006. Explains why frequency scaling stopped at approximately 4-5 GHz and the industry shifted to multi-core architectures."
+    },
+    {
+      "title": "Brendan Gregg: Linux perf Examples",
+      "url": "https://www.brendangregg.com/perf.html",
+      "type": "reference",
+      "description": "Authoritative guide to Linux perf tool usage. Covers perf stat (hardware counters), perf record/report (sampling profiler), and flamegraph generation from perf data."
+    }
+  ]
+}

@@ -1,0 +1,149 @@
+{
+  "title": "Capstone Project: Production AI System",
+  "description": "Design and implement a production-ready AI system that demonstrates mastery of the concepts covered in CS 291. Choose one of the four project options below. Each project requires you to build a complete system with retrieval, generation, evaluation, and production infrastructure. You will be graded on architecture design, implementation quality, evaluation rigor, and documentation. This is not a demo — it is a system you could deploy to real users.",
+  "submissionRequirements": {
+    "codeRepository": "Public GitHub repository with clean commit history",
+    "documentation": "README with architecture diagram, design decisions, eval results, and setup instructions",
+    "evaluationReport": "Quantitative evaluation against at least 3 metrics with methodology described",
+    "architectureDiagram": "System architecture diagram showing all components and data flow",
+    "demoVideo": "2-3 minute recorded demo showing happy path and one edge case"
+  },
+  "options": [
+    {
+      "id": "capstone-1",
+      "title": "Document Analyst",
+      "description": "Build a RAG-powered document analysis system that can ingest a corpus of technical documents (e.g., research papers, legal contracts, or medical records), answer questions about them with cited sources, and generate structured summaries. The system must handle multi-document reasoning — questions that require synthesizing information across multiple documents — and provide verifiable citations for every claim.",
+      "requirements": [
+        "Implement a document ingestion pipeline supporting PDF and Markdown with configurable chunking strategies (at minimum: fixed-size, semantic, and recursive)",
+        "Build a hybrid retrieval system combining dense embeddings and sparse keyword search (BM25) with a fusion strategy",
+        "Implement a re-ranking stage using a cross-encoder or LLM-based re-ranker to improve precision in the top-k results",
+        "Generate answers with inline citations that reference specific document sections, and implement a citation verification step that checks each citation against the source material",
+        "Build an evaluation pipeline that measures retrieval quality (precision@k, recall@k, MRR), generation quality (faithfulness, relevance), and citation accuracy on a test dataset of at least 50 question-answer pairs",
+        "Implement a caching layer for repeated or similar queries with cache invalidation when documents are updated",
+        "Create a simple API (FastAPI or similar) with proper error handling, input validation, and structured output schemas",
+        "Implement basic observability: request logging with trace IDs, latency tracking per pipeline stage, and error rate monitoring"
+      ],
+      "suggestedArchitecture": "Document Ingestion (PDF parser -> Chunker -> Embedder -> Vector DB) -> Query Pipeline (Query -> Hybrid Retriever [Dense + BM25] -> Re-ranker -> Context Assembly -> LLM Generation with Citations -> Citation Verifier -> Response). Use a vector database (Chroma, Qdrant, or Pinecone) for dense retrieval. Store raw chunks in SQLite or Postgres for BM25 and citation verification. Use an embedding model (e.g., text-embedding-3-small or an open-source alternative like BGE) for dense embeddings. Structure the LLM output with a JSON schema that separates the answer text from citation objects. The citation verifier cross-references each citation against the chunk database using a combination of semantic similarity and exact string matching.",
+      "gradingRubric": {
+        "architecture": 25,
+        "implementation": 30,
+        "evaluation": 25,
+        "documentation": 20
+      },
+      "rubricDetails": {
+        "architecture": "Clean separation of concerns, appropriate technology choices with justified tradeoffs, scalable design. Deductions for monolithic code, unjustified technology choices, or missing components.",
+        "implementation": "Working end-to-end system, proper error handling, clean code, type hints, tests for deterministic components. Deductions for broken features, missing error handling, or code that only works on the happy path.",
+        "evaluation": "Rigorous eval methodology with at least 3 metrics, test dataset of 50+ examples, baseline comparison, and analysis of failure cases. Deductions for missing metrics, small test sets, or no failure analysis.",
+        "documentation": "Architecture diagram, ADRs for key decisions, clear README with setup instructions, eval results with methodology. Deductions for missing diagrams, unexplained decisions, or no eval results."
+      },
+      "stretchGoals": [
+        "Implement agentic RAG with self-reflection: the system detects when retrieval quality is low and automatically reformulates the query or retrieves additional context",
+        "Add multi-document comparison: given two or more documents, generate a structured comparison highlighting agreements, contradictions, and unique points",
+        "Implement incremental indexing: when a document is updated, only re-index the changed sections rather than the entire document",
+        "Build a feedback loop: collect user ratings on answers and use them to fine-tune retrieval parameters and prompt templates over time"
+      ]
+    },
+    {
+      "id": "capstone-2",
+      "title": "Code Review Agent",
+      "description": "Build a multi-agent code review system that analyzes pull requests for bugs, security vulnerabilities, performance issues, and style violations. The system should use specialized agents for different review concerns and synthesize their findings into a unified, prioritized review. It must go beyond simple linting — it should understand code semantics, identify logical errors, and suggest improvements with explanations.",
+      "requirements": [
+        "Implement at least 3 specialized review agents: a Bug Detector (finds logical errors and potential runtime failures), a Security Auditor (identifies vulnerabilities like SQL injection, XSS, hardcoded secrets), and a Performance Analyzer (spots inefficiencies, unnecessary allocations, O(n^2) patterns)",
+        "Build an orchestrator agent that coordinates the specialized agents, deduplicates findings, resolves conflicts between agents, and produces a unified review",
+        "Implement context-aware review: the agents should consider not just the changed code but also the surrounding codebase context (related files, imports, function signatures)",
+        "Generate actionable review comments with severity levels (critical, warning, suggestion), specific line references, and concrete fix suggestions with example code",
+        "Build an evaluation pipeline that measures precision (what fraction of flagged issues are real) and recall (what fraction of real issues are caught) on a benchmark dataset of at least 30 code samples with known issues",
+        "Implement a feedback mechanism where users can mark review comments as helpful or unhelpful, and track acceptance rates per agent and per issue type",
+        "Handle at least two programming languages (Python and JavaScript/TypeScript recommended)",
+        "Implement rate limiting and cost tracking per review, with a budget cap that prevents runaway LLM costs"
+      ],
+      "suggestedArchitecture": "PR Input (diff parser -> file context loader -> AST analyzer) -> Orchestrator Agent (task decomposition -> parallel dispatch) -> Specialized Agents [Bug Detector, Security Auditor, Performance Analyzer, Style Reviewer] -> Result Aggregator (deduplication -> conflict resolution -> severity ranking) -> Output Formatter (unified review with line-level comments). Use AST parsing (Python ast module, TypeScript compiler API) for structural code understanding. Each specialized agent should have its own system prompt, tool set, and evaluation criteria. The orchestrator manages the fan-out/fan-in pattern and applies deduplication using semantic similarity to avoid redundant comments. Cost tracking should be per-agent with configurable budgets.",
+      "gradingRubric": {
+        "architecture": 25,
+        "implementation": 30,
+        "evaluation": 25,
+        "documentation": 20
+      },
+      "rubricDetails": {
+        "architecture": "Clean multi-agent architecture with clear agent boundaries, proper orchestration pattern, and justified agent specialization. Deductions for agents that overlap excessively or an orchestrator that does the agents' work.",
+        "implementation": "All agents functional, orchestrator correctly coordinates them, output is well-formatted with line references. Deductions for agents that do not produce useful output, broken orchestration, or missing error handling.",
+        "evaluation": "Precision and recall measured on benchmark dataset, per-agent performance breakdown, analysis of false positives and missed issues. Deductions for no benchmark, aggregate-only metrics, or no false positive analysis.",
+        "documentation": "Agent architecture diagram, description of each agent's prompt and tools, orchestration flow, eval results. Deductions for missing agent descriptions, no architecture diagram, or no eval methodology."
+      },
+      "stretchGoals": [
+        "Implement learning from feedback: adjust agent prompts or re-ranking based on historical acceptance rates of review comments",
+        "Add a Test Coverage Agent that analyzes whether the PR includes appropriate tests for the changed code",
+        "Implement cross-PR context: the system remembers past reviews and flags recurring issues or patterns for the same author",
+        "Build a natural language interface where developers can ask follow-up questions about specific review comments"
+      ]
+    },
+    {
+      "id": "capstone-3",
+      "title": "Research Assistant",
+      "description": "Build a deep research agent that, given a research question, systematically searches for relevant information, synthesizes findings across multiple sources, identifies contradictions and knowledge gaps, and produces a structured research report with citations. This is a agentic RAG system that goes beyond single-query retrieval to perform multi-step, iterative research.",
+      "requirements": [
+        "Implement a research planning agent that decomposes a high-level research question into sub-questions and creates a research plan with priorities",
+        "Build an iterative search system that executes sub-queries, evaluates result quality, and dynamically generates follow-up queries based on what it has learned so far",
+        "Implement source quality assessment: the agent should evaluate the reliability and relevance of each source and weight them accordingly in the synthesis",
+        "Generate a structured research report with sections (executive summary, key findings, evidence analysis, contradictions and gaps, methodology, references) and inline citations",
+        "Build a contradiction detection system that identifies when different sources make conflicting claims and presents both sides with evidence",
+        "Implement an evaluation pipeline that measures report quality on dimensions including comprehensiveness (were all aspects of the question addressed), accuracy (are claims supported by cited sources), and coherence (does the report flow logically)",
+        "Support configurable research depth: users can specify 'quick summary' (3-5 sources, 1 iteration) vs. 'deep dive' (15-20 sources, multiple iterations) vs. 'exhaustive' (all available sources, iterative until convergence)",
+        "Implement cost and token budget management: track tokens consumed per research task and stop gracefully when approaching the budget limit"
+      ],
+      "suggestedArchitecture": "Research Planner (question decomposition -> sub-question generation -> priority ranking) -> Search Executor (sub-query -> retrieval from multiple sources -> result quality scoring) -> Knowledge Accumulator (entity extraction -> claim tracking -> contradiction detection -> gap identification) -> Synthesis Engine (outline generation -> section writing with citations -> coherence checking) -> Report Formatter (structured output with TOC, inline citations, and bibliography). The Knowledge Accumulator maintains a growing knowledge graph of claims, sources, and relationships. The Search Executor should support multiple retrieval backends (simulated web search, local document corpus, structured databases). The research loop continues until the Planner determines sufficient coverage or the token budget is exhausted.",
+      "gradingRubric": {
+        "architecture": 25,
+        "implementation": 30,
+        "evaluation": 25,
+        "documentation": 20
+      },
+      "rubricDetails": {
+        "architecture": "Clear separation between planning, searching, accumulation, and synthesis. Iterative architecture with explicit convergence criteria. Deductions for linear pipelines without iteration, missing knowledge accumulation, or no budget management.",
+        "implementation": "End-to-end working system that produces research reports with citations. Multiple depth levels functional. Contradiction detection working. Deductions for reports without citations, single-depth-only, or no contradiction handling.",
+        "evaluation": "Report quality measured on comprehensiveness, accuracy, and coherence. Test set of at least 20 research questions with human-annotated quality scores. Comparison between depth levels. Deductions for subjective-only evaluation, small test sets, or no cross-depth comparison.",
+        "documentation": "Research loop architecture diagram, knowledge accumulation strategy description, example reports at each depth level, eval methodology. Deductions for missing loop diagram, no example outputs, or no eval results."
+      },
+      "stretchGoals": [
+        "Implement source diversity tracking: ensure the research draws from multiple perspectives and flag when all sources come from a single viewpoint",
+        "Add temporal awareness: weight recent sources higher for fast-moving topics and flag when key sources are outdated",
+        "Build an interactive mode where the user can guide the research in real-time by approving/rejecting sub-questions and prioritizing areas of interest",
+        "Implement claim verification: for factual claims in the report, attempt to verify them against a separate trusted source"
+      ]
+    },
+    {
+      "id": "capstone-4",
+      "title": "Customer Support Bot",
+      "description": "Build an enterprise customer support system that handles user queries by searching a knowledge base, following escalation procedures, and maintaining conversation context across multi-turn interactions. The system must handle the messy reality of customer support: ambiguous queries, frustrated users, questions outside the knowledge base scope, and the need to escalate to human agents when appropriate.",
+      "requirements": [
+        "Build a RAG-powered knowledge base system that ingests FAQ documents, product documentation, and policy documents, and retrieves relevant information for user queries",
+        "Implement intent classification that routes queries to appropriate handling paths: FAQ lookup, account-specific queries, complaints, feature requests, and out-of-scope detection",
+        "Build a multi-turn conversation manager that maintains context across messages, tracks the current issue state, and detects when the topic changes",
+        "Implement an escalation system with configurable rules: escalate to human agent when confidence is low, when the user expresses frustration (sentiment detection), when the query involves account modifications, or after N failed resolution attempts",
+        "Generate responses that cite specific knowledge base articles and provide links to relevant documentation, never fabricating information",
+        "Build an evaluation pipeline that measures resolution rate (what fraction of conversations reach a satisfactory conclusion without escalation), response accuracy (faithfulness to the knowledge base), and user satisfaction (simulated via LLM judge)",
+        "Implement conversation analytics: track common query topics, escalation rates by topic, average conversation length, and knowledge base coverage gaps",
+        "Handle edge cases gracefully: off-topic queries, abusive language, requests in unsupported languages, and simultaneous contradictory information in the knowledge base"
+      ],
+      "suggestedArchitecture": "Conversation Manager (message history -> context window management -> topic tracking) -> Intent Classifier (query -> intent label + confidence score) -> Route Handler [FAQ Path (RAG retrieval -> answer generation -> citation attachment), Account Path (user verification -> account lookup -> action execution), Escalation Path (handoff preparation -> human agent notification)] -> Response Generator (context + retrieved info + conversation history -> response with citations) -> Quality Gate (confidence check -> escalation trigger -> response delivery). The Conversation Manager should maintain a sliding window of conversation history with summarization for long conversations. The Intent Classifier can be a prompted LLM with structured output or a fine-tuned classifier. The Quality Gate checks response confidence and triggers escalation if thresholds are not met. Analytics should be computed from conversation logs stored in a structured format.",
+      "gradingRubric": {
+        "architecture": 25,
+        "implementation": 30,
+        "evaluation": 25,
+        "documentation": 20
+      },
+      "rubricDetails": {
+        "architecture": "Clean conversation management, proper intent routing, well-defined escalation rules, knowledge base integration. Deductions for missing conversation context, no escalation logic, or monolithic response generation.",
+        "implementation": "Multi-turn conversations work correctly, intent routing is accurate, escalation triggers appropriately, knowledge base retrieval returns relevant results. Deductions for broken conversation context, incorrect routing, missing escalation, or fabricated answers.",
+        "evaluation": "Resolution rate, accuracy, and satisfaction measured on at least 40 simulated conversations covering diverse intents. Per-intent breakdown of performance. Analysis of escalation patterns. Deductions for aggregate-only metrics, small test sets, or no per-intent analysis.",
+        "documentation": "Conversation flow diagram, intent taxonomy, escalation rules documentation, knowledge base ingestion process, eval results with per-intent breakdown. Deductions for missing flow diagrams, undocumented escalation rules, or no eval results."
+      },
+      "stretchGoals": [
+        "Implement proactive support: detect when a user might need help based on their behavior patterns and offer assistance before they ask",
+        "Build a knowledge base gap detector: analyze queries that lead to low-confidence responses or escalations and automatically suggest new FAQ entries",
+        "Implement multi-language support with language detection and response generation in the user's language",
+        "Add a supervisor agent that monitors ongoing conversations in real-time and can intervene or suggest responses to human agents during escalated conversations"
+      ]
+    }
+  ]
+}

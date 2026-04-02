@@ -1,0 +1,338 @@
+{
+  "title": "Final Exam",
+  "timeLimit": 60,
+  "passingScore": 60,
+  "description": "Comprehensive final exam covering all 10 weeks of CS 291: Production AI Engineering. This exam emphasizes system design, integration, and multi-step reasoning over isolated fact recall. You have 60 minutes.",
+  "questions": [
+    {
+      "id": "final-q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [1],
+      "question": "A transformer model with a context window of 128K tokens is processing a prompt with 120K input tokens. The KV cache for each attention head stores key and value vectors for every input token. With 32 layers, 32 heads per layer, and a head dimension of 128 in FP16, what is the approximate KV cache memory for this single request?",
+      "options": [
+        "About 500 MB — each layer stores 120K tokens x 128 dim x 2 bytes per KV pair",
+        "About 1.9 GB — 120K tokens x 32 layers x 32 heads x 128 dim x 2 (K+V) x 2 bytes",
+        "About 120 MB — only the most recent tokens need to be cached",
+        "About 8 GB — the full model weights must be duplicated per request"
+      ],
+      "correct": 1,
+      "explanation": "The KV cache stores both key and value vectors for every token at every layer and head. The calculation is: 120,000 tokens x 32 layers x 32 heads x 128 dimensions x 2 (key + value) x 2 bytes (FP16) = 120,000 x 32 x 32 x 128 x 2 x 2 = approximately 1.97 GB. This is why long-context requests are expensive — the KV cache grows linearly with sequence length and consumes significant GPU memory. Option A forgets the multi-layer and multi-head dimensions. Option C is incorrect because attention requires access to all previous tokens' keys and values. Option D confuses model weights with activation memory."
+    },
+    {
+      "id": "final-q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [1],
+      "question": "You are designing a system that makes 10,000 LLM API calls per hour. Each call uses an average of 2,000 input tokens and 500 output tokens. To reduce costs by 40% without changing the model, which combination of techniques would be most effective?",
+      "options": [
+        "Increase the temperature parameter and reduce max_tokens",
+        "Implement semantic caching for similar queries combined with prompt compression to reduce input token count",
+        "Switch to synchronous batch processing and increase timeout values",
+        "Add retry logic with exponential backoff and circuit breakers"
+      ],
+      "correct": 1,
+      "explanation": "At 10K calls/hour, the dominant cost driver is token consumption (2,000 input + 500 output per call). Semantic caching eliminates redundant calls entirely — if 30% of queries are semantically similar to previous queries, you eliminate 30% of API costs. Prompt compression (removing redundant context, shortening system prompts, using reference IDs instead of full documents) directly reduces input token count. Together, these target the actual cost drivers. Option A reduces output length but temperature changes do not reduce cost. Option C changes processing pattern but not token consumption. Option D improves reliability but increases costs due to retries."
+    },
+    {
+      "id": "final-q3",
+      "type": "code_output",
+      "points": 10,
+      "week_coverage": [2],
+      "question": "What is the output of this code that computes cosine similarity for RAG retrieval?\n\n```python\nimport math\n\ndef cosine_similarity(a, b):\n    dot = sum(x * y for x, y in zip(a, b))\n    norm_a = math.sqrt(sum(x**2 for x in a))\n    norm_b = math.sqrt(sum(x**2 for x in b))\n    return dot / (norm_a * norm_b)\n\nquery = [1.0, 0.0, 1.0, 0.0]\ndoc_a = [1.0, 0.0, 1.0, 0.0]  # Exact match\ndoc_b = [0.0, 1.0, 0.0, 1.0]  # Orthogonal\ndoc_c = [0.5, 0.5, 0.5, 0.5]  # Partial overlap\n\nresults = [\n    (\"doc_a\", cosine_similarity(query, doc_a)),\n    (\"doc_b\", cosine_similarity(query, doc_b)),\n    (\"doc_c\", cosine_similarity(query, doc_c)),\n]\nresults.sort(key=lambda x: x[1], reverse=True)\nprint([name for name, _ in results])\nprint(round(results[0][1], 2), round(results[-1][1], 2))\n```",
+      "options": [
+        "['doc_a', 'doc_c', 'doc_b'] then 1.0 0.0",
+        "['doc_a', 'doc_b', 'doc_c'] then 1.0 0.5",
+        "['doc_c', 'doc_a', 'doc_b'] then 0.71 0.0",
+        "['doc_a', 'doc_c', 'doc_b'] then 1.0 0.5"
+      ],
+      "correct": 0,
+      "explanation": "doc_a is identical to the query, so cosine_similarity = 1.0. doc_b is orthogonal (dot product = 0), so cosine_similarity = 0.0. For doc_c: dot product = 1*0.5 + 0*0.5 + 1*0.5 + 0*0.5 = 1.0. norm_query = sqrt(2) ~ 1.414. norm_doc_c = sqrt(1) = 1.0. Similarity = 1.0 / 1.414 ~ 0.707. Sorted descending: doc_a (1.0), doc_c (0.707), doc_b (0.0). The first print gives ['doc_a', 'doc_c', 'doc_b']. The second print gives 1.0 (results[0]) and 0.0 (results[-1], which is doc_b). Option A is correct."
+    },
+    {
+      "id": "final-q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [2, 3],
+      "question": "You are building a RAG system for a legal firm. The corpus contains 50,000 contracts averaging 30 pages each. Lawyers need precise answers citing specific clauses. Your retrieval pipeline returns chunks, but lawyers complain that answers sometimes cite the wrong clause from the right document. What is the most targeted fix?",
+      "options": [
+        "Increase the chunk size to capture more context per chunk",
+        "Switch from fixed-size chunking to structure-aware chunking that respects clause boundaries, and add a cross-encoder re-ranker to improve precision in the top results",
+        "Use a larger embedding model with more dimensions",
+        "Increase the number of retrieved chunks from 5 to 20"
+      ],
+      "correct": 1,
+      "explanation": "The symptom — right document, wrong clause — points to a chunking problem: fixed-size chunking splits text at arbitrary boundaries, breaking clauses across chunks. When the retriever finds a chunk from the correct document, the chunk boundary may not align with the clause boundary, causing the wrong clause to be cited. Structure-aware chunking (splitting at clause/section boundaries instead of token counts) preserves the semantic unit that lawyers care about. Adding a cross-encoder re-ranker improves precision among the top results by performing pairwise relevance scoring, ensuring the most relevant clause is ranked first. Option A might help but risks exceeding context limits and does not solve the boundary problem. Option C adds model capacity but does not fix the structural issue. Option D returns more noise alongside the signal."
+    },
+    {
+      "id": "final-q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [2],
+      "question": "In a RAG system, a user asks: 'What was the company revenue in Q3 2025?' The vector search returns these chunks ranked by cosine similarity:\n1. (0.92) 'The company reported strong financial results in Q3 2025, with revenue growing 15% year-over-year.'\n2. (0.89) 'Q3 2025 revenue was $4.2 billion, exceeding analyst expectations of $3.9 billion.'\n3. (0.85) 'Revenue growth in 2025 has been driven by the cloud computing division.'\n\nThe system uses chunk #1 (highest similarity) to generate its answer. What is the problem?",
+      "options": [
+        "The embedding model is too small and needs more dimensions",
+        "Cosine similarity ranks semantic relevance, not information density. Chunk #1 is semantically similar but lacks the specific number. A re-ranker or answer-aware retrieval would promote chunk #2 which contains the actual revenue figure.",
+        "The system should use all three chunks in the context window",
+        "The vector database needs more training data"
+      ],
+      "correct": 1,
+      "explanation": "This illustrates a fundamental limitation of bi-encoder retrieval: cosine similarity between query and chunk embeddings measures topical relevance, not whether the chunk actually answers the question. Chunk #1 is about Q3 2025 revenue (topically relevant) but only mentions percentage growth, not the dollar figure. Chunk #2 contains the exact answer ($4.2B) but scores slightly lower because its embedding is marginally less similar to the query embedding. A cross-encoder re-ranker would jointly encode the query and each chunk, enabling it to recognize that chunk #2 directly answers the question. Answer-aware retrieval (where the retriever is trained to find passages that contain answers, not just related passages) is another solution. Option C (using all chunks) would work in this case but does not scale and does not solve the ranking problem for other queries."
+    },
+    {
+      "id": "final-q6",
+      "type": "code_output",
+      "points": 10,
+      "week_coverage": [3],
+      "question": "What does this hybrid retrieval fusion function output?\n\n```python\ndef reciprocal_rank_fusion(rankings: list[list[str]], k: int = 60) -> list[tuple[str, float]]:\n    scores = {}\n    for ranking in rankings:\n        for rank, doc_id in enumerate(ranking):\n            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)\n    sorted_results = sorted(scores.items(), key=lambda x: x[1], reverse=True)\n    return sorted_results\n\ndense_results = [\"doc_A\", \"doc_B\", \"doc_C\", \"doc_D\"]\nbm25_results = [\"doc_C\", \"doc_A\", \"doc_E\", \"doc_B\"]\n\nfused = reciprocal_rank_fusion([dense_results, bm25_results])\ntop_3 = [doc_id for doc_id, _ in fused[:3]]\nprint(top_3)\n\n# Which doc has the highest RRF score?\nprint(fused[0][0], round(fused[0][1], 6))\n```",
+      "options": [
+        "['doc_A', 'doc_C', 'doc_B'] then doc_A 0.032520",
+        "['doc_C', 'doc_A', 'doc_B'] then doc_C 0.032787",
+        "['doc_A', 'doc_C', 'doc_B'] then doc_A 0.032787",
+        "['doc_A', 'doc_B', 'doc_C'] then doc_A 0.032520"
+      ],
+      "correct": 0,
+      "explanation": "Let's compute RRF scores with k=60. doc_A: rank 0 in dense (1/61) + rank 1 in BM25 (1/62) = 0.016393 + 0.016129 = 0.032522. doc_C: rank 2 in dense (1/63) + rank 0 in BM25 (1/61) = 0.015873 + 0.016393 = 0.032266. doc_B: rank 1 in dense (1/62) + rank 3 in BM25 (1/64) = 0.016129 + 0.015625 = 0.031754. doc_A has the highest score because it ranks well in both lists (positions 0 and 1). doc_C ranks first in BM25 but third in dense. The top 3 order is doc_A, doc_C, doc_B. The printed score rounds to 0.032520 (slight rounding in the option). Option A is correct."
+    },
+    {
+      "id": "final-q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [4],
+      "question": "You are building a ReAct agent with access to a calculator tool, a web search tool, and a database query tool. The user asks: 'What is the average salary of software engineers in the top 5 companies by market cap?' The agent's first action is to call the calculator tool with 'average salary of software engineers'. What went wrong?",
+      "options": [
+        "The agent should have used the web search tool first since it needs current data",
+        "The agent chose the wrong tool — a calculator cannot answer factual questions. This is a tool selection error caused by the agent failing to reason about which tool matches the information need. The correct first step is web search or database query to retrieve salary data, then calculator for the average.",
+        "The agent should have asked the user for clarification first",
+        "The calculator tool should be removed from the agent's tool set"
+      ],
+      "correct": 1,
+      "explanation": "This is a classic tool selection error in ReAct agents. The agent needs to decompose the task: (1) identify the top 5 companies by market cap (web search or DB query), (2) find salary data for each (web search or DB query), (3) compute the average (calculator). The agent skipped directly to step 3 without having any data, passing a natural language string to a calculator that expects numerical input. This happens when the agent's reasoning step fails to analyze what information it currently has versus what it needs. The fix is better system prompting that instructs the agent to explicitly plan before acting, or a planning step that decomposes the task before tool selection. Option D is wrong because the calculator is needed for step 3. Option C is unnecessary — the question is clear enough."
+    },
+    {
+      "id": "final-q8",
+      "type": "fill_code",
+      "points": 10,
+      "week_coverage": [4],
+      "question": "Complete the missing line in this agent tool execution function that implements retry logic with error handling:\n\n```python\ndef execute_tool_with_retry(tool_fn, args, max_retries=3):\n    last_error = None\n    for attempt in range(max_retries):\n        try:\n            result = tool_fn(**args)\n            return {\"success\": True, \"result\": result, \"attempts\": attempt + 1}\n        except Exception as e:\n            last_error = str(e)\n            if attempt < max_retries - 1:\n                wait_time = 2 ** attempt  # exponential backoff\n                import time; time.sleep(wait_time)\n    # All retries exhausted\n    return ___MISSING___\n```\n\nWhat should replace `___MISSING___` to properly return a failure result?",
+      "options": [
+        "{\"success\": False, \"error\": last_error, \"attempts\": max_retries}",
+        "raise Exception(last_error)",
+        "None",
+        "{\"success\": True, \"result\": None, \"attempts\": max_retries}"
+      ],
+      "correct": 0,
+      "explanation": "The function should return a structured failure result that matches the success return format: a dictionary with 'success' as False, the last error message, and the number of attempts. This allows the calling agent to handle the failure gracefully — it can decide to try a different tool, reformulate the query, or report the error to the user. Option B (raising an exception) breaks the agent loop and does not give the agent a chance to recover. Option C (returning None) loses the error information. Option D (returning success: True with None result) lies about the outcome. Consistent return types — success or failure, always a dict — is a production engineering best practice for agent tool interfaces."
+    },
+    {
+      "id": "final-q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [5],
+      "question": "An agentic RAG system implements the Corrective RAG (CRAG) pattern. After retrieving 5 chunks for a user query, the system evaluates their relevance and finds that all 5 chunks have low relevance scores (below 0.5). According to the CRAG pattern, what should the system do next?",
+      "options": [
+        "Return an answer using the low-relevance chunks anyway, since they are the best available",
+        "Tell the user that no relevant information was found",
+        "Reformulate the query and perform a new retrieval attempt, potentially using web search as a fallback knowledge source if the local corpus lacks relevant information",
+        "Increase the number of retrieved chunks from 5 to 50"
+      ],
+      "correct": 2,
+      "explanation": "Corrective RAG (CRAG), introduced by Yan et al. (2024), adds a retrieval evaluator that scores chunk relevance and takes corrective action when retrieval quality is low. When all chunks are irrelevant (the 'incorrect' case in CRAG's taxonomy), the system should: (1) reformulate the query to try different search terms, and (2) fall back to external knowledge sources like web search if the local corpus does not contain the answer. This is what makes CRAG 'agentic' — it can recognize its own retrieval failures and take corrective action rather than blindly generating from poor context. Option A produces low-quality answers. Option B gives up too easily. Option D retrieves more noise from the same failing retrieval strategy."
+    },
+    {
+      "id": "final-q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [5],
+      "question": "In the Model Context Protocol (MCP), a client application connects to an MCP server that exposes tools. Which of the following correctly describes the security boundary?",
+      "options": [
+        "The MCP server validates all tool inputs and the client trusts the server's output completely",
+        "The client must validate tool inputs before sending them to the server, and the server must validate them again before execution — defense in depth, because the LLM generating tool calls may produce malicious inputs via prompt injection",
+        "Security is handled at the LLM level through system prompts and no additional validation is needed",
+        "MCP servers run in a sandbox that prevents any external network access or file system writes"
+      ],
+      "correct": 1,
+      "explanation": "MCP's security model requires defense in depth because the LLM generating tool calls is susceptible to prompt injection. A malicious document in the context could cause the LLM to generate a tool call like 'delete_file(path=\"/important/data\")'. The client must validate that tool calls conform to expected patterns before sending them. The server must validate inputs again before execution because it cannot trust the client (which is driven by an LLM). This double validation is necessary because the LLM is an untrusted component in the security chain. Option A has single-point-of-failure trust. Option C is dangerously naive. Option D describes an ideal but not the actual protocol specification."
+    },
+    {
+      "id": "final-q11",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [6],
+      "question": "You are designing a multi-agent system for processing insurance claims. Agent A extracts information from claim forms. Agent B checks policy coverage. Agent C calculates payout amounts. Agent D generates the final decision letter. What is the optimal coordination pattern, and why?",
+      "options": [
+        "All agents run in parallel to minimize latency, then results are merged",
+        "A sequential pipeline (A -> B -> C -> D) because each agent depends on the previous agent's output — information extraction must happen before coverage checking, coverage must be confirmed before payout calculation, and all must complete before the decision letter",
+        "A central orchestrator that dynamically decides which agent to call next based on the current state",
+        "A peer-to-peer mesh where agents communicate directly with each other"
+      ],
+      "correct": 1,
+      "explanation": "This is a strict data dependency chain: B needs A's extracted information to check coverage, C needs B's coverage determination to calculate payouts, and D needs all previous results to write the decision letter. The sequential pipeline is the correct pattern because there are no opportunities for parallelism — each step requires the previous step's output. An orchestrator (option C) adds unnecessary complexity for a linear workflow. Parallel execution (option A) is impossible because of the data dependencies. A peer-to-peer mesh (option D) is overengineered for four agents with a clear sequence. However, if there were multiple claims to process, you would parallelize across claims (each claim gets its own sequential pipeline)."
+    },
+    {
+      "id": "final-q12",
+      "type": "code_output",
+      "points": 10,
+      "week_coverage": [6],
+      "question": "What does this multi-agent message routing function output?\n\n```python\nfrom collections import defaultdict\n\nclass MessageBus:\n    def __init__(self):\n        self.subscribers = defaultdict(list)\n        self.message_log = []\n\n    def subscribe(self, topic: str, agent_name: str):\n        self.subscribers[topic].append(agent_name)\n\n    def publish(self, topic: str, sender: str, content: str):\n        recipients = self.subscribers.get(topic, [])\n        for r in recipients:\n            if r != sender:  # Don't send to self\n                self.message_log.append(f\"{sender}->{r}: {content}\")\n        return len([r for r in recipients if r != sender])\n\nbus = MessageBus()\nbus.subscribe(\"analysis\", \"agent_A\")\nbus.subscribe(\"analysis\", \"agent_B\")\nbus.subscribe(\"analysis\", \"agent_C\")\nbus.subscribe(\"results\", \"agent_A\")\nbus.subscribe(\"results\", \"agent_D\")\n\nn1 = bus.publish(\"analysis\", \"agent_A\", \"start\")\nn2 = bus.publish(\"results\", \"agent_C\", \"done\")\nprint(n1, n2)\nprint(len(bus.message_log))\n```",
+      "options": [
+        "3 2 then 5",
+        "2 2 then 4",
+        "2 1 then 3",
+        "3 2 then 3"
+      ],
+      "correct": 1,
+      "explanation": "For the first publish: topic 'analysis' has subscribers [agent_A, agent_B, agent_C]. Sender is agent_A, so it is excluded. Recipients are agent_B and agent_C. n1 = 2, and 2 messages are logged. For the second publish: topic 'results' has subscribers [agent_A, agent_D]. Sender is agent_C, which is not in the subscriber list, so both agent_A and agent_D receive the message. n2 = 2, and 2 more messages are logged. Total messages in log: 2 + 2 = 4. Output: '2 2' then '4'. The key insight is that the self-exclusion filter only removes the sender if it appears in the subscriber list — agent_C is not subscribed to 'results', so the filter does not affect the count."
+    },
+    {
+      "id": "final-q13",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [7],
+      "question": "You are deploying a RAG application using Docker and FastAPI behind an Nginx reverse proxy. During load testing, you observe that response times increase linearly with concurrent users, even though CPU utilization stays below 30%. What is the most likely bottleneck?",
+      "options": [
+        "The Docker container needs more CPU cores allocated",
+        "FastAPI's async event loop is being blocked by synchronous LLM API calls, causing request queuing. The fix is to use async HTTP clients (httpx or aiohttp) for LLM API calls so the event loop can handle concurrent requests while waiting for API responses.",
+        "Nginx is rate limiting the requests",
+        "The embedding model is too slow"
+      ],
+      "correct": 1,
+      "explanation": "The signature pattern — latency increases linearly with concurrency while CPU stays low — indicates I/O blocking, not compute bottleneck. FastAPI uses a single-threaded async event loop by default. If LLM API calls are made with synchronous HTTP clients (like requests.post()), each call blocks the event loop for 1-10 seconds, preventing other requests from being processed. With N concurrent users, the Nth user waits for all N-1 previous requests to complete. The fix is using async HTTP clients (httpx.AsyncClient or aiohttp) so the event loop can multiplex I/O. CPU being low (option A) means compute is not the issue. Nginx rate limiting (option C) would cause 429 errors, not slow responses. Embedding is fast compared to LLM generation (option D)."
+    },
+    {
+      "id": "final-q14",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [7],
+      "question": "Your production AI system uses an API key for the LLM provider stored as an environment variable. A developer accidentally commits a .env file containing the API key to a public GitHub repository. They immediately delete the file and force-push. Is the key safe?",
+      "options": [
+        "Yes, the force-push removed the commit from history",
+        "No — the key was exposed the moment it was pushed. Git history is not truly deleted by force-push (the commit remains in reflog and may have been cached/scraped). The key must be rotated immediately, and a secrets scanning tool must be added to the CI pipeline to prevent future incidents.",
+        "Yes, if they deleted it within 5 minutes, no one could have seen it",
+        "It depends on whether the repository has any forks"
+      ],
+      "correct": 1,
+      "explanation": "Once a secret is pushed to a public repository, it must be considered compromised — period. Bots continuously scrape GitHub for exposed credentials and can capture them within seconds of the push. Force-pushing does not delete the original commit; it remains in Git's reflog and may persist on GitHub's servers. The correct response is: (1) immediately rotate the API key, (2) audit usage logs for unauthorized access, (3) add a pre-commit hook with a secrets scanner (like gitleaks or truffleHog), and (4) add secrets scanning to CI. Option D is partially relevant (forks retain the original commit), but the key is compromised regardless of forks because of automated scraping."
+    },
+    {
+      "id": "final-q15",
+      "type": "code_output",
+      "points": 10,
+      "week_coverage": [8],
+      "question": "What does this evaluation metrics computation output?\n\n```python\ndef compute_eval_metrics(predictions, references):\n    \"\"\"Compute precision, recall, F1 for a set of predictions.\"\"\"\n    tp = sum(1 for p, r in zip(predictions, references) if p == 1 and r == 1)\n    fp = sum(1 for p, r in zip(predictions, references) if p == 1 and r == 0)\n    fn = sum(1 for p, r in zip(predictions, references) if p == 0 and r == 1)\n\n    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0\n    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0\n    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0\n    return {\"precision\": round(precision, 2), \"recall\": round(recall, 2), \"f1\": round(f1, 2)}\n\n# Hallucination detector eval: 1 = hallucination detected, 0 = no hallucination\npredictions = [1, 1, 0, 1, 0, 0, 1, 0, 1, 0]  # Model predictions\nreferences  = [1, 0, 0, 1, 1, 0, 1, 0, 0, 0]  # Ground truth\n\nresult = compute_eval_metrics(predictions, references)\nprint(result[\"precision\"], result[\"recall\"], result[\"f1\"])\n```",
+      "options": [
+        "0.6 0.75 0.67",
+        "0.6 0.67 0.63",
+        "0.75 0.6 0.67",
+        "0.5 0.75 0.6"
+      ],
+      "correct": 0,
+      "explanation": "Let's trace through the predictions and references:\nIndex 0: p=1, r=1 -> TP\nIndex 1: p=1, r=0 -> FP\nIndex 2: p=0, r=0 -> TN\nIndex 3: p=1, r=1 -> TP\nIndex 4: p=0, r=1 -> FN\nIndex 5: p=0, r=0 -> TN\nIndex 6: p=1, r=1 -> TP\nIndex 7: p=0, r=0 -> TN\nIndex 8: p=1, r=0 -> FP\nIndex 9: p=0, r=0 -> TN\n\nTP=3, FP=2, FN=1. Precision = 3/(3+2) = 0.6. Recall = 3/(3+1) = 3/4 = 0.75. F1 = 2*0.6*0.75/(0.6+0.75) = 0.9/1.35 = 0.6667, which rounds to 0.67. The print statement outputs precision, recall, f1 in that order: 0.6 0.75 0.67. Option A is correct. Option B has wrong recall (0.67 instead of 0.75). Option C swaps precision and recall. Option D has wrong precision (0.5 instead of 0.6)."
+    },
+    {
+      "id": "final-q16",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [8],
+      "question": "You have deployed an AI system with continuous evaluation. Your faithfulness metric has been steady at 0.88 for two weeks. On Monday morning, you notice it dropped to 0.71 overnight with no code deployments. What are the two most likely causes, and how would you investigate?",
+      "options": [
+        "The LLM provider silently updated the model, or your data pipeline ingested corrupted/new documents that degraded retrieval quality. Investigate by checking the provider's changelog, comparing model response patterns, and auditing the document ingestion logs for the overnight window.",
+        "Users started asking harder questions over the weekend",
+        "The evaluation metric implementation has a bug that only manifests on Mondays",
+        "Network latency caused the LLM to produce shorter, less faithful responses"
+      ],
+      "correct": 0,
+      "explanation": "A sudden overnight quality drop with no code changes has two primary causes in production AI systems: (1) The LLM provider updated the underlying model. Providers like OpenAI have historically made silent model changes that affect output quality, style, and behavior. This is why you should log the model identifier (including any version suffix) with every request. (2) The data pipeline ingested new or corrupted documents, changing what the retriever returns. A corrupted batch could introduce irrelevant chunks that poison the context window. Investigation steps: check the provider's status page and changelog, compare a sample of prompts against both the old and new model responses (if you log them), audit the ingestion pipeline for documents processed in the overnight window, and check if the quality drop is uniform or concentrated in specific query categories."
+    },
+    {
+      "id": "final-q17",
+      "type": "fill_code",
+      "points": 10,
+      "week_coverage": [8],
+      "question": "Complete the missing line in this LLM-as-a-judge evaluation function:\n\n```python\ndef llm_judge_faithfulness(answer: str, context: str) -> dict:\n    \"\"\"Use an LLM to judge if the answer is faithful to the context.\"\"\"\n    prompt = f\"\"\"Given the following context and answer, rate whether the answer\n    is faithful to (supported by) the context.\n\n    Context: {context}\n    Answer: {answer}\n\n    Rate on a scale of 1-5:\n    1 = Completely unfaithful, contradicts context\n    2 = Mostly unfaithful, significant unsupported claims\n    3 = Partially faithful, some claims not in context\n    4 = Mostly faithful, minor extrapolations\n    5 = Completely faithful, all claims supported by context\n\n    Respond with JSON: {{\"score\": <int>, \"reasoning\": \"<explanation>\"}}\"\"\"\n\n    # Simulate LLM response for this example\n    simulated_response = {\"score\": 4, \"reasoning\": \"The answer is mostly supported...\"}\n    score = simulated_response[\"score\"]\n\n    return ___MISSING___\n```\n\nWhat should replace `___MISSING___` to return a properly structured evaluation result?",
+      "options": [
+        "{\"faithful\": score >= 4, \"score\": score / 5.0, \"reasoning\": simulated_response[\"reasoning\"]}",
+        "score",
+        "{\"result\": \"pass\" if score > 3 else \"fail\"}",
+        "True if score >= 4 else False"
+      ],
+      "correct": 0,
+      "explanation": "A well-structured evaluation result should include: (1) a boolean judgment (faithful or not) based on a threshold, (2) a normalized score (0-1 range is standard for combining with other metrics), and (3) the reasoning from the judge for debugging and analysis. Option A provides all three: a boolean 'faithful' flag (True when score >= 4), a normalized score (dividing the 1-5 scale by 5 to get 0-1), and the reasoning string. Option B returns only a raw number with no context. Option C loses the score granularity and reasoning. Option D loses the score and reasoning. In production eval pipelines, you always want both the binary decision and the continuous score — the binary for gating (pass/fail in CI), the continuous for trend analysis (are we getting better or worse over time)."
+    },
+    {
+      "id": "final-q18",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [9],
+      "question": "You are designing a system similar to Notion AI that provides AI-powered writing assistance across millions of documents. Users expect responses within 2 seconds. The documents are updated frequently (multiple edits per minute for active documents). Which architectural decision is most critical?",
+      "options": [
+        "Using the most capable LLM model for highest quality responses",
+        "An incremental indexing strategy that updates embeddings for changed sections rather than re-indexing entire documents, combined with a tiered retrieval architecture (hot cache for recently accessed documents, warm index for active workspace, cold storage for archived documents)",
+        "Pre-computing all possible answers and storing them in a lookup table",
+        "Using a single large vector index for all documents across all users"
+      ],
+      "correct": 1,
+      "explanation": "The key constraints are: (1) 2-second latency budget, (2) millions of documents, (3) frequent updates. Constraint 3 eliminates any approach that requires full re-indexing on every change — you would never keep up. Incremental indexing (updating only the embeddings for changed sections) is essential for freshness. The tiered architecture addresses the latency constraint: recently accessed documents are in a hot cache (in-memory, <10ms retrieval), active workspace documents are in a warm index (fast vector DB, <100ms), and archived documents are in cold storage (slower but cheaper). This mirrors how Notion, Google Docs, and similar systems actually work. Option A ignores the latency and scalability constraints. Option C is infeasible — you cannot predict all queries. Option D creates a massive index that is slow to query and impossible to update incrementally."
+    },
+    {
+      "id": "final-q19",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [9],
+      "question": "A customer asks you to design an AI-powered fraud detection system for a bank. The system must process 50,000 transactions per minute, flag suspicious transactions for human review, and explain why each transaction was flagged. The bank's compliance team requires that all AI decisions be auditable. Which architecture best satisfies all requirements?",
+      "options": [
+        "A single LLM that analyzes each transaction in real-time and produces a fraud score with explanation",
+        "A hybrid architecture: a fast ML model (XGBoost/neural network) for real-time scoring of all transactions, with an LLM-based explanation generator that runs asynchronously only on flagged transactions, plus a complete audit log storing the model version, input features, score, and explanation for every flagged transaction",
+        "A rule-based system with manually defined fraud patterns, since AI is too risky for financial decisions",
+        "A batch processing system that analyzes all transactions at the end of each day"
+      ],
+      "correct": 1,
+      "explanation": "This is a system design question that tests multiple constraints simultaneously. The 50K transactions/minute throughput eliminates option A (LLM calls take 1-10 seconds and cost too much at this volume — you would need 833 concurrent LLM calls per second). Option D violates real-time requirements. Option C cannot adapt to new fraud patterns. The hybrid architecture satisfies all constraints: the fast ML model handles the throughput requirement (XGBoost can score in <1ms), the LLM generates human-readable explanations only for the ~0.1% of flagged transactions (reducing LLM costs by 1000x), and the audit log satisfies compliance. This separation of real-time scoring from explanation generation is a common pattern in production AI systems where throughput and explainability are both required."
+    },
+    {
+      "id": "final-q20",
+      "type": "code_output",
+      "points": 10,
+      "week_coverage": [3, 5],
+      "question": "What does this agentic RAG routing function output?\n\n```python\ndef route_query(query: str, retrieval_scores: list[float], confidence_threshold: float = 0.7) -> dict:\n    \"\"\"Route a query based on retrieval quality assessment.\"\"\"\n    avg_score = sum(retrieval_scores) / len(retrieval_scores) if retrieval_scores else 0\n    max_score = max(retrieval_scores) if retrieval_scores else 0\n    above_threshold = sum(1 for s in retrieval_scores if s >= confidence_threshold)\n\n    if max_score >= 0.9 and above_threshold >= 2:\n        action = \"direct_answer\"\n    elif avg_score >= confidence_threshold:\n        action = \"answer_with_caveat\"\n    elif max_score >= 0.5:\n        action = \"reformulate_query\"\n    else:\n        action = \"fallback_to_web_search\"\n\n    return {\"action\": action, \"avg\": round(avg_score, 2), \"above\": above_threshold}\n\nscores_a = [0.92, 0.85, 0.45, 0.30, 0.20]\nscores_b = [0.65, 0.72, 0.68, 0.71, 0.74]\nscores_c = [0.15, 0.22, 0.18, 0.10, 0.08]\n\nprint(route_query(\"q1\", scores_a)[\"action\"])\nprint(route_query(\"q2\", scores_b)[\"action\"])\nprint(route_query(\"q3\", scores_c)[\"action\"])\n```",
+      "options": [
+        "direct_answer, answer_with_caveat, fallback_to_web_search",
+        "answer_with_caveat, answer_with_caveat, fallback_to_web_search",
+        "direct_answer, direct_answer, reformulate_query",
+        "reformulate_query, answer_with_caveat, fallback_to_web_search"
+      ],
+      "correct": 0,
+      "explanation": "For scores_a [0.92, 0.85, 0.45, 0.30, 0.20]: max_score = 0.92 (>= 0.9 check passes). above_threshold counts scores >= 0.7: 0.92 (yes), 0.85 (yes), 0.45 (no), 0.30 (no), 0.20 (no) = 2. Both conditions for 'direct_answer' are met (max_score >= 0.9 AND above_threshold >= 2), so action = 'direct_answer'. For scores_b [0.65, 0.72, 0.68, 0.71, 0.74]: max_score = 0.74 (< 0.9, first condition fails). avg = (0.65+0.72+0.68+0.71+0.74)/5 = 3.50/5 = 0.70. avg 0.70 >= 0.7 is True, so action = 'answer_with_caveat'. For scores_c [0.15, 0.22, 0.18, 0.10, 0.08]: max_score = 0.22 (< 0.9 and < 0.5), avg = 0.146 (< 0.7). Falls through to the last else: 'fallback_to_web_search'. Output: direct_answer, answer_with_caveat, fallback_to_web_search, which is option A."
+    },
+    {
+      "id": "final-q21",
+      "type": "fill_code",
+      "points": 10,
+      "week_coverage": [7, 10],
+      "question": "Complete the missing line in this production health check endpoint:\n\n```python\nfrom dataclasses import dataclass, field\nfrom datetime import datetime\n\n@dataclass\nclass HealthCheck:\n    service: str\n    checks: dict = field(default_factory=dict)\n\n    def check_component(self, name: str, is_healthy: bool, latency_ms: float):\n        self.checks[name] = {\n            \"healthy\": is_healthy,\n            \"latency_ms\": round(latency_ms, 1),\n        }\n\n    def overall_status(self) -> dict:\n        all_healthy = all(c[\"healthy\"] for c in self.checks.values())\n        max_latency = max((c[\"latency_ms\"] for c in self.checks.values()), default=0)\n        return ___MISSING___\n\nhc = HealthCheck(service=\"rag-api\")\nhc.check_component(\"vector_db\", True, 45.2)\nhc.check_component(\"llm_api\", True, 850.0)\nhc.check_component(\"cache\", False, 5.1)\nresult = hc.overall_status()\nprint(result[\"status\"], result[\"max_latency_ms\"])\n```\n\nThe output should be: `unhealthy 850.0`. What should replace `___MISSING___`?",
+      "options": [
+        "{\"status\": \"healthy\" if all_healthy else \"unhealthy\", \"max_latency_ms\": max_latency, \"checks\": self.checks, \"timestamp\": datetime.now().isoformat()}",
+        "{\"status\": \"healthy\", \"latency\": max_latency}",
+        "{\"ok\": all_healthy}",
+        "{\"status\": all_healthy, \"max_latency_ms\": max_latency}"
+      ],
+      "correct": 0,
+      "explanation": "A production health check endpoint should return: (1) a human-readable status string (not a boolean — load balancers and monitoring tools often parse string status), (2) latency information for identifying slow dependencies, (3) per-component details for debugging, and (4) a timestamp for log correlation. Option A provides all four. The status is 'unhealthy' because cache is not healthy (all_healthy is False). max_latency is 850.0 (the LLM API). The output matches: 'unhealthy 850.0'. Option B always returns 'healthy'. Option C returns only a boolean. Option D returns the boolean True/False instead of the string 'healthy'/'unhealthy', which would print 'False 850.0' instead of 'unhealthy 850.0'."
+    },
+    {
+      "id": "final-q22",
+      "type": "multiple_choice",
+      "points": 10,
+      "week_coverage": [4, 6, 9, 10],
+      "question": "You are the lead AI engineer at a Series B startup. The CEO asks you to build an autonomous AI agent that can access the production database, send emails to customers, and process refunds — all without human approval. The agent would handle 80% of customer support tickets. What is your response?",
+      "options": [
+        "Build it as requested — autonomous agents are the future and the CEO has made a business decision",
+        "Refuse to build it — autonomous agents are too dangerous for any production use",
+        "Propose a phased approach: start with a human-in-the-loop system where the agent drafts responses and suggests actions but a human approves all database writes, emails, and refunds. Measure accuracy and safety for 3 months. Gradually automate low-risk actions (read-only database queries, templated email responses) while keeping human approval for high-risk actions (refunds, account modifications). Implement comprehensive audit logging, anomaly detection, and kill switches at every phase.",
+        "Build the fully autonomous system but add a disclaimer that the AI might make mistakes"
+      ],
+      "correct": 2,
+      "explanation": "This question tests engineering judgment, safety thinking, and communication skills. The fully autonomous approach (options A and D) is irresponsible: an agent that can independently send emails, access databases, and process refunds has enormous blast radius when it fails — and it will fail. Prompt injection alone could cause it to issue unauthorized refunds. But refusing entirely (option B) misses the business opportunity and does not demonstrate engineering leadership. The correct answer is a phased rollout that balances safety with progress: start with human-in-the-loop for all actions, measure quality, then gradually expand autonomy for low-risk actions while maintaining human oversight for high-risk ones. This is how Anthropic, Google, and other responsible AI companies deploy agentic systems. The key elements are: graduated autonomy, comprehensive logging, anomaly detection, and always maintaining human control over irreversible actions."
+    }
+  ]
+}

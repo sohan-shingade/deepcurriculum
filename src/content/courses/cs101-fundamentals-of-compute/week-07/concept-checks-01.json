@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In the 5-stage RISC-V pipeline, the IF/ID pipeline register stores the fetched instruction and PC+4. Why must pipeline registers capture ALL relevant signals from one stage, not just the instruction bits?",
+      "options": [
+        "Because the instruction memory is too slow to be read again in later stages",
+        "Because later stages need data produced by earlier stages, and without pipeline registers the combinational logic of one stage would interfere with the next stage's inputs",
+        "Because pipeline registers compress the instruction to save area",
+        "Because the register file can only be read once per cycle"
+      ],
+      "correct": 1,
+      "explanation": "Pipeline registers isolate the combinational logic of adjacent stages. Without them, the output of one stage (e.g., IF) would change as the next instruction enters that stage, corrupting the data needed by the following stage (e.g., ID). Each pipeline register is a synchronization boundary: it captures the complete set of signals produced by one stage at the clock edge and holds them stable for the next stage during the following clock cycle. This is what allows multiple instructions to be 'in flight' simultaneously -- each stage works on a different instruction's data, held stable by its input pipeline register."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Consider the instruction sequence:\n\nadd x1, x2, x3\nsub x4, x1, x5\n\nWith EX-to-EX forwarding, how is the data hazard on x1 resolved?",
+      "options": [
+        "The sub instruction stalls for 2 cycles until add writes x1 to the register file in WB",
+        "The result of add is forwarded from the EX/MEM pipeline register to the ALU input of sub in the next cycle, bypassing the register file entirely",
+        "The compiler reorders the instructions to eliminate the hazard",
+        "The pipeline inserts a NOP and then reads x1 from the register file"
+      ],
+      "correct": 1,
+      "explanation": "EX-to-EX forwarding works as follows: the add instruction computes x1 = x2 + x3 in its EX stage and the result is latched into the EX/MEM pipeline register at the end of that cycle. The sub instruction, one cycle behind, enters its EX stage in the next cycle. The forwarding unit detects that the EX/MEM register's rd field (x1) matches the sub's rs1 field (x1), so it routes the value from EX/MEM directly to the ALU input, bypassing the register file. The value never needs to go through MEM and WB first. This eliminates the 2-cycle stall that would otherwise be required."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A branch instruction is resolved in the EX stage of a 5-stage pipeline. Using a 'predict not taken' strategy, how many cycles are wasted when the branch is actually taken?",
+      "options": [
+        "0 cycles -- the pipeline is never wrong",
+        "1 cycle -- only the instruction fetched immediately after the branch is flushed",
+        "2 cycles -- the instructions fetched in the two cycles between IF and EX must be flushed",
+        "5 cycles -- the entire pipeline must be flushed"
+      ],
+      "correct": 2,
+      "explanation": "When the branch is in the EX stage (cycle 3), the pipeline has already fetched two subsequent instructions: one in the ID stage (cycle 2 of its execution) and one in the IF stage (cycle 1 of its execution). Both were fetched assuming the branch was not taken. Since the branch turns out to be taken, both must be flushed -- they are from the wrong execution path. This gives a 2-cycle penalty. If we move branch resolution to the ID stage (by adding a comparator there), the penalty reduces to 1 cycle, since only the instruction fetched immediately after the branch would be wrong."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "According to Amdahl's Law, if 15% of a program's execution is inherently sequential and cannot be pipelined or parallelized, what is the maximum possible speedup from any amount of pipelining?",
+      "options": [
+        "15x",
+        "6.67x",
+        "5x (limited by the 5-stage pipeline)",
+        "Infinite, given enough pipeline stages"
+      ],
+      "correct": 1,
+      "explanation": "Amdahl's Law states S_max = 1 / (1 - p) where p is the parallelizable fraction. With 15% sequential (1 - p = 0.15), S_max = 1 / 0.15 = 6.67x. No matter how many pipeline stages or processors we add, the serial 15% creates an absolute ceiling. This is why reducing the serial fraction (through better hazard resolution, more accurate branch prediction, and out-of-order execution) has an outsized impact on performance -- it raises the Amdahl ceiling."
+    }
+  ]
+}

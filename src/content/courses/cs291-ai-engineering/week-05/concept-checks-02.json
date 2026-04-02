@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In a deep research agent, why is the planning step executed before any retrieval occurs, rather than interleaving planning with search?",
+      "options": [
+        "Planning is computationally cheaper and should always come first",
+        "Up-front planning determines the dependency structure between sub-questions, enabling parallel execution of independent searches and preventing redundant queries that waste tokens and latency",
+        "Search APIs require a complete plan before accepting any requests",
+        "Planning does not affect search quality, it only organizes the output"
+      ],
+      "correct": 1,
+      "explanation": "Up-front planning serves two critical functions. First, it establishes the dependency DAG between sub-questions — which searches can run in parallel and which must wait for prior results. Without this structure, the agent executes searches sequentially, dramatically increasing latency. Second, planning prevents redundant work: if two sub-questions would produce overlapping searches, the planner can merge them. That said, real systems do re-plan — if early search results reveal the question is different than expected, the planner can revise. The key is that the initial plan provides structure for the first wave of searches."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "When the reader component encounters contradictory evidence from two credible sources, what is the recommended approach?",
+      "options": [
+        "Discard both sources as unreliable",
+        "Always prefer the more recent source",
+        "Present both positions with their sources in the report, allowing the human reader to assess the disagreement",
+        "Average the contradictory claims to find a middle ground"
+      ],
+      "correct": 2,
+      "explanation": "Resolving contradictions by discarding, averaging, or arbitrarily preferring one source introduces bias and destroys information. The correct approach — and what good human researchers do — is to present both positions with full attribution, noting the disagreement explicitly. This preserves intellectual honesty and allows the reader (who has domain context the agent lacks) to make an informed judgment. Contradictions are often informative in themselves: they may indicate an evolving consensus, different experimental conditions, or definitional disagreements."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In preference learning from human feedback for deep research agents, why is data efficiency a bigger challenge than for RLHF on language models?",
+      "options": [
+        "Research reports are longer than individual tokens",
+        "Humans cannot evaluate research quality",
+        "You get one preference signal per research session (minutes of work), compared to one per token in standard RLHF, so you need more informative features to learn from sparse feedback",
+        "The reward model for research is more complex than for language generation"
+      ],
+      "correct": 2,
+      "explanation": "Standard RLHF collects preference signals at high frequency — every human annotation covers a short generation, and you can collect thousands per hour. For deep research agents, each research session takes minutes and produces a single report. The human gives one preference signal (good/bad, or pairwise comparison) for that entire session. This means the reward model sees far fewer training examples, so it must extract more information per example. The solution is richer feature engineering: instead of raw text, use structured features like citation density, verified claim ratio, source diversity, and section coherence. These features compress the report into a tractable representation for the reward model."
+    }
+  ]
+}

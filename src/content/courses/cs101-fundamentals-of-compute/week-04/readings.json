@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "JEDEC DDR5 SDRAM Standard (JESD79-5)",
+      "authors": "JEDEC Solid State Technology Association",
+      "url": "https://www.jedec.org/standards-documents/docs/jesd79-5d",
+      "note": "The definitive specification for DDR5, including channel architecture (two independent 32-bit sub-channels), timing parameters (CL, tRCD, tRP, tRAS), on-die ECC, and speed grades from DDR5-4800 through DDR5-8800. The bandwidth calculations and timing analysis in Lecture 1 are derived directly from this standard."
+    },
+    {
+      "title": "What is High Bandwidth Memory 3 (HBM3): Complete Engineering Guide",
+      "authors": "Wevolver",
+      "url": "https://www.wevolver.com/article/what-is-high-bandwidth-memory-3-hbm3-complete-engineering-guide-2025",
+      "note": "Comprehensive technical overview of HBM3 architecture: TSV interconnects, 1024-bit interface, 16 independent channels, 3D stacking, and silicon interposer packaging. Includes bandwidth calculations showing how HBM3 achieves 819 GB/s per stack versus DDR5's 40-70 GB/s per channel."
+    },
+    {
+      "title": "Coding for SSDs: Understanding Flash Technology",
+      "authors": "Emmanuel Goossaert (Code Capsule)",
+      "url": "https://codecapsule.com/2014/02/12/coding-for-ssds-part-3-pages-blocks-and-the-flash-translation-layer/",
+      "note": "Excellent multi-part series covering SSD internals: NAND flash physics, FTL mapping (page-level vs block-level), garbage collection, write amplification, wear leveling, and how application-level I/O patterns affect SSD performance. Essential background for Problem Set 4 Exercise 3 (FTL implementation)."
+    },
+    {
+      "title": "Introduction to Compute Express Link (CXL)",
+      "authors": "Donghyun Gouk et al., ACM Computing Surveys",
+      "url": "https://dl.acm.org/doi/full/10.1145/3669900",
+      "note": "Peer-reviewed survey of CXL technology: sub-protocols (CXL.io, CXL.cache, CXL.mem), device types (Type 1/2/3), memory pooling, memory sharing, and cache coherency. Covers CXL 1.0 through 3.0 and analyzes latency characteristics of CXL-attached memory versus local DDR5."
+    },
+    {
+      "title": "Digital Design and Computer Architecture: RISC-V Edition (Chapter 5: Digital Building Blocks)",
+      "authors": "Sarah Harris, David Harris",
+      "url": "https://www.elsevier.com/books/digital-design-and-computer-architecture/harris/978-0-12-820064-3",
+      "note": "Chapter 5 covers memory arrays (SRAM, DRAM, ROM, flash), memory technologies, and error-correcting codes including Hamming codes. The treatment of SRAM 6T cell operation and DRAM read/write sequences aligns with this week's Lecture 1."
+    }
+  ]
+}

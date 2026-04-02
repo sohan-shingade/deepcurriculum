@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 3: Sequential Circuits",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following correctly describes the difference between a D latch and a D flip-flop?",
+      "options": [
+        "A D latch is edge-triggered while a D flip-flop is level-sensitive",
+        "A D latch is level-sensitive (transparent when enabled), while a D flip-flop is edge-triggered (captures data only at clock edges)",
+        "A D latch can store multiple bits while a D flip-flop stores only one bit",
+        "There is no functional difference; the terms are interchangeable"
+      ],
+      "correct": 1,
+      "explanation": "A D latch is level-sensitive: while its enable input is high, the output continuously tracks the input (the latch is 'transparent'). A D flip-flop is edge-triggered: it captures the input value only at the rising (or falling) edge of the clock, and the output remains stable between edges. The D flip-flop is typically built from two D latches (master-slave configuration) clocked with complementary signals. Edge-triggering is essential for synchronous design because it prevents data from racing through multiple stages in a single clock cycle."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A synchronous circuit has flip-flops with t_cq = 40 ps, t_su = 30 ps, and t_h = 15 ps. The combinational logic between stages has a maximum delay of 380 ps and a minimum delay of 20 ps. What is the maximum clock frequency?",
+      "options": [
+        "2.00 GHz",
+        "2.22 GHz",
+        "1.89 GHz",
+        "2.50 GHz"
+      ],
+      "correct": 1,
+      "explanation": "The maximum clock frequency is determined by the setup constraint: T_clk >= t_cq + t_comb_max + t_su = 40 + 380 + 30 = 450 ps. Therefore f_max = 1 / 450 ps = 2.22 GHz. We should also check the hold constraint: t_cq + t_comb_min >= t_h, which gives 40 + 20 = 60 >= 15 ps -- this is satisfied, so there is no hold violation. Note that the hold constraint is independent of clock frequency, which is why hold violations cannot be fixed by slowing down the clock."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why is the all-zeros state excluded from a maximal-length LFSR sequence?",
+      "options": [
+        "The feedback polynomial cannot represent zero",
+        "XOR of all zeros is zero, making the all-zeros state a fixed point from which the LFSR cannot escape",
+        "The LFSR hardware cannot physically represent all zeros",
+        "Including zero would make the sequence length a power of 2, which is undesirable"
+      ],
+      "correct": 1,
+      "explanation": "The LFSR feedback function computes the XOR of selected bit positions. XOR is a linear function over GF(2), and the XOR of any number of zero bits is always zero. If the LFSR enters the all-zeros state, the feedback bit will be 0, the shifted state will remain all zeros, and the LFSR is stuck permanently. This makes the all-zeros state a 'fixed point' or 'absorbing state.' A maximal-length n-bit LFSR visits all 2^n - 1 non-zero states. LFSRs must be initialized (seeded) with a non-zero value."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A two-flip-flop synchronizer chain is used to safely bring an asynchronous signal into a 1 GHz clock domain. The flip-flops have a metastability time constant of tau = 25 ps. Approximately how much resolution time does the synchronizer provide?",
+      "options": [
+        "500 ps (half a clock cycle)",
+        "1000 ps (one full clock cycle)",
+        "2000 ps (two full clock cycles)",
+        "25 ps (one time constant)"
+      ],
+      "correct": 2,
+      "explanation": "A two-flip-flop synchronizer provides approximately two full clock cycles of resolution time. The first flip-flop samples the asynchronous input and may go metastable. The second flip-flop samples the first flip-flop's output one clock cycle later. At 1 GHz, the clock period is 1000 ps = 1 ns, so the resolution time is approximately 2 ns. The MTBF scales as e^(t_r / tau), so 2000 ps / 25 ps = 80 time constants, giving e^80 which is astronomically large -- the MTBF would be billions of years. Even one clock cycle (1000/25 = 40 time constants) would give e^40 which is more than adequate for most applications."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a Moore FSM, when does the output change?",
+      "options": [
+        "Immediately when the input changes, within the same clock cycle",
+        "Only when the state changes, at the next clock edge after a state transition",
+        "On both input changes and state changes",
+        "The output is constant and never changes"
+      ],
+      "correct": 1,
+      "explanation": "In a Moore machine, the output function is lambda: Q -> Delta -- it depends only on the current state, not on the inputs. The output changes only when the state register updates, which happens at clock edges. This means Moore machine outputs are inherently registered (they come from flip-flops through combinational logic that depends only on state bits) and do not exhibit glitches caused by input changes. In contrast, a Mealy machine's output depends on both state and input (lambda: Q x Sigma -> Delta), so it can change mid-cycle when inputs change."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "One-hot encoding for an FSM with 12 states requires how many flip-flops, compared to binary encoding?",
+      "options": [
+        "One-hot: 12 flip-flops, Binary: 4 flip-flops",
+        "One-hot: 12 flip-flops, Binary: 3 flip-flops",
+        "One-hot: 11 flip-flops, Binary: 4 flip-flops",
+        "One-hot: 12 flip-flops, Binary: 12 flip-flops"
+      ],
+      "correct": 0,
+      "explanation": "One-hot encoding uses exactly one flip-flop per state, so 12 states need 12 flip-flops. Binary encoding uses the minimum number: ceil(log2(12)) = ceil(3.585) = 4 flip-flops (which can represent up to 16 states). One-hot uses 3x more flip-flops but produces simpler next-state logic because each state is directly identified by a single flip-flop output -- no decoder is needed. In FPGAs where flip-flops are plentiful but LUTs (for combinational logic) are limited, one-hot encoding often leads to better performance. In ASICs optimizing for area, binary encoding may be preferred."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 32-bit ripple counter uses flip-flops with t_cq = 50 ps each. What is the worst-case delay from the clock edge to the MSB becoming valid?",
+      "options": [
+        "50 ps",
+        "100 ps",
+        "800 ps",
+        "1600 ps"
+      ],
+      "correct": 3,
+      "explanation": "In a ripple counter, each flip-flop's output clocks the next flip-flop. The worst case occurs when a carry propagates through all 32 stages (e.g., when the counter transitions from 0xFFFFFFFF to 0x00000000). The total delay is n * t_cq = 32 * 50 ps = 1600 ps = 1.6 ns. At a 3 GHz clock (333 ps period), this is almost 5 clock cycles of delay, making ripple counters impractical for high-speed designs. Synchronous counters, where all flip-flops share the same clock, avoid this cumulative delay at the cost of more complex combinational logic for the carry chain."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a UART 8N1 protocol, what is the total number of bits in one frame (including overhead)?",
+      "options": [
+        "8 bits (data only)",
+        "9 bits (start + data)",
+        "10 bits (start + data + stop)",
+        "11 bits (start + data + parity + stop)"
+      ],
+      "correct": 2,
+      "explanation": "A UART 8N1 frame consists of: 1 start bit (always 0) + 8 data bits + 0 parity bits (the 'N' in 8N1 means 'no parity') + 1 stop bit (always 1) = 10 bits total. The overhead is 2 bits out of 10, or 20% -- meaning the effective data throughput at 115200 baud is 115200 / 10 = 11520 bytes per second, not 115200/8 = 14400. This per-frame overhead is the price of asynchronous communication: without a shared clock between sender and receiver, the start and stop bits are needed for synchronization."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the primary advantage of microprogrammed control over hardwired control in a processor?",
+      "options": [
+        "Microprogrammed control is always faster than hardwired control",
+        "Microprogrammed control uses less silicon area",
+        "Microprogrammed control is more flexible -- changing behavior requires updating the control store (ROM/RAM) rather than redesigning logic",
+        "Microprogrammed control eliminates the need for a state machine"
+      ],
+      "correct": 2,
+      "explanation": "Microprogrammed control stores the control sequence in a memory (the control store) rather than implementing it as hardwired combinational logic. The key advantage is flexibility: to change the processor's behavior (add instructions, fix bugs in the control sequence), you only need to update the contents of the control store, not redesign and re-verify the logic gates. This is why Intel's x86 processors use microcode for complex instructions -- microcode updates can fix hardware bugs after manufacturing (as seen with Intel's microcode patches for Spectre/Meltdown). The tradeoff is that reading from a ROM is slower than evaluating hardwired logic, which is why RISC processors with simple, regular instruction sets prefer hardwired control."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A hold time violation in a synchronous circuit can be fixed by:",
+      "options": [
+        "Reducing the clock frequency",
+        "Adding combinational delay (buffer gates) in the data path between the two flip-flops",
+        "Increasing the setup time requirement",
+        "Using a longer clock period"
+      ],
+      "correct": 1,
+      "explanation": "The hold constraint requires: t_cq + t_comb_min >= t_h. A hold violation occurs when the minimum-delay path is too fast, causing data to arrive at the next flip-flop before its hold time has elapsed. The fix is to add delay to the fast path -- typically by inserting buffer gates. Critically, reducing the clock frequency (options A and D) does NOT fix hold violations, because the hold constraint is independent of the clock period: it depends only on the timing relationship immediately after the clock edge, not on when the next edge arrives. This is why hold violations are considered more dangerous than setup violations in ASIC design."
+    }
+  ]
+}

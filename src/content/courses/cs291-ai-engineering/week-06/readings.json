@@ -1,0 +1,49 @@
+{
+  "readings": [
+    {
+      "title": "Agent-to-Agent (A2A) Protocol Specification",
+      "author": "Google",
+      "year": 2025,
+      "url": "https://google.github.io/A2A/",
+      "type": "specification",
+      "description": "The official A2A protocol specification defining Agent Cards, task lifecycle (submitted/working/completed), messaging format, and how agents discover and communicate with each other. Essential reading for understanding the emerging standard for inter-agent communication and how it complements MCP.",
+      "estimatedMinutes": 30
+    },
+    {
+      "title": "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
+      "author": "Wu et al. (Microsoft Research)",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2308.08155",
+      "type": "paper",
+      "description": "Introduces AutoGen, a framework for building multi-agent conversational systems. Defines customizable agents that can converse with each other to solve tasks, with support for human-in-the-loop and tool use. Demonstrates that multi-agent conversation can handle complex tasks like coding, math, and retrieval that single agents struggle with. Key contribution: formalizing the conversation-driven multi-agent paradigm.",
+      "estimatedMinutes": 45
+    },
+    {
+      "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+      "author": "Hong et al.",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2308.00352",
+      "type": "paper",
+      "description": "Proposes encoding human workflows (like software development) into multi-agent systems with defined roles (product manager, architect, engineer, QA). The key insight is that structured Standard Operating Procedures (SOPs) between agents dramatically reduce coordination overhead and hallucination compared to free-form agent conversation. Demonstrates the value of the hierarchical/pipeline architecture pattern with well-defined hand-offs.",
+      "estimatedMinutes": 40
+    },
+    {
+      "title": "The Landscape of Emerging AI Agent Architectures for Reasoning, Planning, and Tool Calling: A Survey",
+      "author": "Masterman et al.",
+      "year": 2024,
+      "url": "https://arxiv.org/abs/2404.11584",
+      "type": "survey",
+      "description": "A comprehensive survey of emerging AI agent architectures covering single-agent and multi-agent patterns, reasoning strategies, and tool-use paradigms. Categorizes architectures into the patterns we discuss in lecture (hierarchical, peer-to-peer, pipeline) and evaluates their tradeoffs. Provides a taxonomy for comparing different multi-agent frameworks and their design choices.",
+      "estimatedMinutes": 60
+    },
+    {
+      "title": "Communicative Agents for Software Development",
+      "author": "Qian et al. (ChatDev)",
+      "year": 2023,
+      "url": "https://arxiv.org/abs/2307.07924",
+      "type": "paper",
+      "description": "Presents ChatDev, a virtual software company powered by multi-agent collaboration. Agents play roles (CEO, CTO, programmer, reviewer, tester) and follow a waterfall-like pipeline with structured chat chains between pairs of agents. Demonstrates that role-specialized agents with well-defined communication protocols can produce complete software applications. A practical case study of the pipeline architecture pattern with peer-to-peer sub-interactions.",
+      "estimatedMinutes": 35
+    }
+  ]
+}

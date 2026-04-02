@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 9: System Design",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are designing an AI system with a p50 latency target of 200ms. Which of the following component combinations is feasible within this budget?",
+      "options": [
+        "Large LLM (1200ms) + vector retrieval (40ms) + reranker (100ms)",
+        "Small/distilled LLM (80ms) + exact-match cache check (1ms) + guardrail classifier (50ms)",
+        "Large LLM (1200ms) with streaming to mask perceived latency",
+        "Embedding model (30ms) + vector retrieval (40ms) + large LLM (1200ms) with parallel execution"
+      ],
+      "correct": 1,
+      "explanation": "With a 200ms p50 budget, the only feasible option is the small/distilled LLM (80ms) + cache check (1ms) + guardrail (50ms) = 131ms. Streaming (option C) reduces perceived latency but does not reduce actual p50 latency — the time-to-first-token is still bounded by the model's inference time for the first chunk. Parallel execution (option D) cannot parallelize the LLM call with its own input dependencies. The latency budget is a hard architectural constraint that eliminates options A, C, and D."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a RAG customer support system, you observe that 35% of queries are near-duplicates of previous queries. Which caching strategy provides the best cost-latency tradeoff?",
+      "options": [
+        "Exact-match cache on the full query string with 24-hour TTL",
+        "Semantic cache using embedding similarity with a 0.95 threshold, placed before retrieval and LLM generation",
+        "LRU cache on the final LLM response, keyed by conversation_id",
+        "No cache — regenerate every response to ensure freshness"
+      ],
+      "correct": 1,
+      "explanation": "A semantic cache with 0.95 similarity threshold is the best option. Exact-match (option A) misses paraphrases — 'how do I reset my password?' and 'I need to change my password' are functionally identical but would be cache misses. The semantic cache catches these by comparing query embeddings. Placing it before retrieval and LLM generation means cache hits skip the most expensive pipeline stages. Caching by conversation_id (option C) does not help because different users in different conversations ask the same questions. No cache (option D) wastes compute on the 35% of queries that are duplicates. The 0.95 threshold balances hit rate against the risk of returning an answer for a slightly-different question."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A content moderation system processes 100 posts per second. Using a large LLM for every post costs $0.003 per call. A tiered approach uses a fast classifier ($0.0001/call) for 85% of traffic and the LLM only for the remaining 15%. What is the approximate daily cost savings of the tiered approach?",
+      "options": [
+        "About $500 per day",
+        "About $2,200 per day",
+        "About $22,000 per day",
+        "About $220,000 per day"
+      ],
+      "correct": 2,
+      "explanation": "Daily requests = 100 RPS * 86,400 seconds = 8,640,000 requests. LLM-for-all cost = 8.64M * $0.003 = $25,920/day. Tiered cost = (8.64M * 0.85 * $0.0001) + (8.64M * 0.15 * $0.003) = $734 + $3,888 = $4,622/day. Savings = $25,920 - $4,622 = approximately $21,298/day, which is roughly $22,000. The tiered approach saves about 82% of the daily compute cost by routing the easy 85% of traffic through a cheap fast classifier and reserving the expensive LLM for only the 15% of borderline cases. This illustrates why tiered architectures are essential at scale — the cost savings compound linearly with throughput."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a multi-agent code review system, the coordinator targets 85% precision and 60% recall. Why is this asymmetry between precision and recall justified?",
+      "options": [
+        "Because recall is always less important than precision in all AI systems",
+        "Because false positives (flagging correct code as problematic) erode developer trust and cause the tool to be ignored, while missed issues can be caught by human reviewers",
+        "Because measuring recall is technically impossible for code review",
+        "Because higher recall would require a more expensive model, and the cost is not justified"
+      ],
+      "correct": 1,
+      "explanation": "Code review is a domain with asymmetric error costs. A false positive — flagging perfectly fine code as a bug — wastes developer time, creates friction, and most importantly, trains developers to ignore the tool. Once developers start dismissing findings without reading them, the tool has lost all value regardless of its recall. A false negative (missed issue) is bad, but it is the status quo — human code reviewers miss issues too, and other processes (testing, QA, production monitoring) provide additional defense. Targeting high precision means developers can trust the findings, which makes the system useful. The 60% recall, while lower, still catches more than half of all issues — strictly additive value on top of human review."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "GitHub Copilot generates multiple completion candidates and uses a secondary model to rank them before showing the best one to the user. What is the primary signal used for training this ranking model?",
+      "options": [
+        "The perplexity of each candidate as measured by the generation model",
+        "The syntactic validity of each candidate determined by a language parser",
+        "Historical acceptance/rejection data from millions of real user interactions",
+        "The Levenshtein edit distance between the candidate and the surrounding code"
+      ],
+      "correct": 2,
+      "explanation": "Copilot's reranking model is trained on implicit feedback from real user interactions — specifically, whether users accepted (tabbed to accept) or rejected (kept typing, dismissed) each suggestion. This signal captures a holistic notion of quality that includes relevance, correctness, style match, timing, and user intent — all compressed into a single binary signal. Perplexity (option A) measures model confidence but not user preference. Syntactic validity (option B) is necessary but not sufficient — a syntactically valid but irrelevant suggestion is still bad. Edit distance (option D) is a poor proxy for quality. The acceptance/rejection signal is the gold standard because it directly measures what we care about: did the user find the suggestion useful?"
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "When designing the evaluation strategy for an AI system, the framework specifies three levels: offline test sets, online production metrics, and periodic human evaluation. Which level is MOST important for detecting quality drift over time?",
+      "options": [
+        "Offline test sets, because they provide a fixed baseline for comparison",
+        "Online production metrics, because they capture real-time quality on actual user queries",
+        "Periodic human evaluation, because automated metrics can decorrelate from actual quality over time (Goodhart's Law)",
+        "All three are equally important and none can detect drift that the others cannot"
+      ],
+      "correct": 2,
+      "explanation": "Periodic human evaluation is the most important for detecting quality drift because it is the only level that measures actual quality rather than a proxy. Offline test sets (option A) use a fixed dataset — they detect regressions against known cases but miss drift caused by changes in the distribution of real queries. Online metrics (option B) measure proxies like latency, error rates, and click-through rates — these proxies can stay stable even as actual answer quality degrades (Goodhart's Law). Human evaluation directly measures whether responses are correct, helpful, and safe according to human judgment. When human evaluation diverges from automated metrics, the automated metrics are wrong — not the humans. This is why human evaluation serves as the 'ground truth anchor' in the framework."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Perplexity's search pipeline must synthesize answers from web sources within 3-5 seconds. Which architectural technique is MOST critical for meeting this latency target?",
+      "options": [
+        "Using a smaller language model to reduce generation time",
+        "Caching all web pages in a local database to avoid network fetches",
+        "Aggressive parallelism: executing multiple search queries, page fetches, and chunk processing concurrently while beginning answer generation before all sources are fully processed",
+        "Limiting the number of search results to a single source to minimize processing time"
+      ],
+      "correct": 2,
+      "explanation": "Perplexity's pipeline involves multiple stages with network I/O (web fetching) and model inference. Sequential execution of these stages would far exceed the 5-second budget. The key technique is aggressive parallelism: search queries are dispatched in parallel, page fetches for top results happen concurrently, and — critically — the answer generation model begins streaming as soon as sufficient context is available, without waiting for all sources to be fully processed. Using a smaller model (option A) helps but sacrifices answer quality. Caching all web pages (option B) is infeasible for a real-time search engine. Limiting to a single source (option D) would severely reduce answer quality and reliability. Parallelism is the architectural pattern that enables the system to include multiple high-quality sources while meeting the latency target."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the six-step AI system design framework, why must the evaluation strategy be defined as part of the initial design rather than added after deployment?",
+      "options": [
+        "Because evaluation tools must be purchased before development begins",
+        "Because the evaluation strategy determines storage requirements (every request-response pair must be logged with sufficient metadata), influences API design (metadata must be returned), and defines quality gates that affect the deployment pipeline — retrofitting these is far more expensive than building them in",
+        "Because regulatory compliance requires evaluation documentation before development starts",
+        "Because the evaluation strategy has no dependencies on other design decisions and can therefore be defined at any time"
+      ],
+      "correct": 1,
+      "explanation": "Evaluation is not an afterthought — it is an architectural concern that touches every other component. The evaluation data store must capture every request-response pair with metadata (influencing storage design). The API must return metadata like confidence scores, latency, and model version (influencing API design). Quality gates must be integrated into the CI/CD pipeline (influencing deployment). If you design the system first and add evaluation later, you discover that you are not logging the data you need, your API does not return the metadata you need, and you have no way to gate deployments on quality. Retrofitting these capabilities requires changes across the entire system. Building them in from the start costs a fraction of the effort."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are designing an enterprise support bot. A user asks about a topic that requires legal expertise. The system's intent classifier correctly identifies the query as 'legal'. What is the correct system behavior?",
+      "options": [
+        "Generate a response using RAG over the legal knowledge base, adding a disclaimer that it is not legal advice",
+        "Immediately escalate to a human agent without attempting any AI-generated response, because legal topics carry compliance risk that no automated guardrail can fully mitigate",
+        "Use a larger LLM model with a legal-specialist system prompt to provide the best possible answer",
+        "Redirect the user to the company's legal FAQ page and close the conversation"
+      ],
+      "correct": 1,
+      "explanation": "In enterprise support, legal topics are a category where the risk of an AI-generated response — even a correct one — exceeds the benefit. A disclaimer (option A) does not protect the company if the AI's response is wrong and the user acts on it. Using a better model (option C) still cannot guarantee legal accuracy and creates liability. Redirecting and closing (option D) provides a bad user experience. The architecturally correct approach is intent-based routing to human escalation: when the intent classifier detects a high-risk category like legal, the system routes directly to a human agent, providing the agent with the conversation context and relevant knowledge base passages to accelerate the human response. This is the 'architectural guardrail' layer of defense in depth — certain topics are too risky for any automated response."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Cursor uses a semantic embedding index over the entire codebase for context retrieval. When a file changes, only the affected chunks are re-embedded rather than rebuilding the entire index. What is the primary challenge with this incremental indexing approach?",
+      "options": [
+        "Incremental updates are always slower than full re-indexing because of the overhead of identifying changed chunks",
+        "The embedding model may produce slightly different vectors for unchanged chunks if the model is updated, causing index inconsistency where some chunks use old embeddings and some use new",
+        "Incremental indexing cannot handle file deletions, only modifications and additions",
+        "The vector database does not support partial updates, requiring a full index rebuild on every change"
+      ],
+      "correct": 1,
+      "explanation": "The fundamental challenge of incremental indexing is consistency when the embedding model changes. If the model is updated (new version, fine-tuning, or even a different quantization), the new embeddings exist in a different vector space than the old ones. Similarity comparisons between old and new embeddings become meaningless. This means a model update requires a full re-indexing — you cannot incrementally update. For file-level changes with the same model, incremental indexing works well: identify changed chunks via tree-sitter parsing, re-embed only those chunks, and update the index. But model updates are a forced full rebuild. Modern systems mitigate this by versioning the index by embedding model version and triggering full re-indexes as background jobs when the model changes."
+    }
+  ]
+}

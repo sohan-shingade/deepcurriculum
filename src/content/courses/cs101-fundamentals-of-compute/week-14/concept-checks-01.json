@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A CUDA kernel is launched with `kernel<<<4, 256>>>(data, n)`. Thread 650 computes its global index as `blockIdx.x * blockDim.x + threadIdx.x`. What are blockIdx.x and threadIdx.x for this thread?",
+      "options": [
+        "blockIdx.x = 2, threadIdx.x = 138 (650 = 2 * 256 + 138)",
+        "blockIdx.x = 2, threadIdx.x = 650 (threadIdx tracks global position)",
+        "blockIdx.x = 650, threadIdx.x = 0 (each thread gets its own block)",
+        "blockIdx.x = 1, threadIdx.x = 394 (650 = 1 * 256 + 394)"
+      ],
+      "correct": 0,
+      "explanation": "With blockDim.x = 256, thread 650 is in block $\\lfloor 650 / 256 \\rfloor = 2$ (the third block, since blocks are 0-indexed). Within that block, its local index is $650 \\bmod 256 = 650 - 2 \\times 256 = 138$. So blockIdx.x = 2, threadIdx.x = 138. Verification: $2 \\times 256 + 138 = 650$. Note that threadIdx always ranges from 0 to blockDim-1 (here 0 to 255), never exceeding the block size. The total launch has $4 \\times 256 = 1024$ threads, numbered 0-1023 globally."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In a 2D matrix addition kernel for an $M \\times N$ matrix where $M = 100$ and $N = 80$, using blocks of $16 \\times 16$ threads, the grid dimensions are $\\lceil 80/16 \\rceil \\times \\lceil 100/16 \\rceil = 5 \\times 7$ blocks. How many total threads are launched, and how many are 'wasted' (perform no useful work)?",
+      "options": [
+        "8,000 threads launched, 0 wasted (exact fit)",
+        "8,960 threads launched, 960 wasted (5 x 7 blocks x 256 threads = 8,960, useful = 8,000)",
+        "5,600 threads launched, no threads are wasted",
+        "8,960 threads launched, 1,960 wasted"
+      ],
+      "correct": 1,
+      "explanation": "Grid is 5 blocks in x (columns) and 7 blocks in y (rows), each block has $16 \\times 16 = 256$ threads. Total threads: $5 \\times 7 \\times 256 = 8{,}960$. Useful work: $100 \\times 80 = 8{,}000$ elements. Wasted threads: $8{,}960 - 8{,}000 = 960$ threads that pass the boundary check (`if row < M and col < N`) without doing any work. These threads still consume SM resources (registers, warp slots). The waste comes from the blocks at the right edge (covering columns 80-95) and bottom edge (covering rows 96-111) of the grid. This is why the boundary check `if row < M and col < N` is essential -- without it, those 960 threads would access out-of-bounds memory."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A kernel has a `__syncthreads()` call inside an `if (threadIdx.x < 16)` block. A thread block has 256 threads. What happens at runtime?",
+      "options": [
+        "Only the first 16 threads synchronize; the other 240 continue past the barrier without waiting",
+        "The program deadlocks: threads 0-15 wait at the barrier for threads 16-255, which never reach it because they skip the `if` block",
+        "The compiler automatically moves the __syncthreads() outside the `if` block to prevent deadlock",
+        "The behavior is undefined but the kernel will complete with incorrect results"
+      ],
+      "correct": 1,
+      "explanation": "`__syncthreads()` is a block-wide barrier that ALL threads in the block must reach. If only some threads reach it (because it is inside a conditional that not all threads enter), the waiting threads will wait indefinitely for the others to arrive -- a deadlock. This is undefined behavior in CUDA; on some hardware it may deadlock, on others it may proceed with incorrect results. The rule is simple: every `__syncthreads()` must be reached by every thread in the block, or by no threads. If you need conditional synchronization, use Cooperative Groups (`cg::thread_block_tile`) to synchronize subsets of threads."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "For a vector addition kernel (1 FLOP per 12 bytes: 2 input floats + 1 output float), the arithmetic intensity is $1/12 \\approx 0.083$ FLOPS/byte. The H100 SXM5 has 60 TFLOPS FP32 and 3.35 TB/s bandwidth, giving a ridge point of $60/3.35 \\approx 17.9$ FLOPS/byte. What does this tell us about the kernel's performance?",
+      "options": [
+        "The kernel will achieve close to 60 TFLOPS because it is a simple operation",
+        "The kernel is deeply memory-bound: its arithmetic intensity (0.083) is far below the ridge point (17.9), so it can achieve at most 0.083 x 3.35 TB/s = 0.28 TFLOPS -- less than 0.5% of peak compute",
+        "The kernel will achieve 3.35 TB/s bandwidth because memory is the bottleneck",
+        "The kernel will be limited by warp divergence, not memory bandwidth"
+      ],
+      "correct": 1,
+      "explanation": "The roofline model directly gives us the attainable performance: $\\min(\\text{peak compute}, \\text{AI} \\times \\text{peak bandwidth}) = \\min(60, 0.083 \\times 3350) = \\min(60, 0.28) = 0.28$ TFLOPS. This is less than 0.5% of the FP32 compute peak. The kernel is deeply memory-bound -- the Tensor Cores and CUDA cores sit idle while waiting for data. The practical implication: optimizing the arithmetic of a vector add is pointless. The only way to improve it is to reduce memory traffic (e.g., by fusing it with other operations to increase arithmetic intensity) or to improve memory coalescing to get closer to the 3.35 TB/s bandwidth ceiling."
+    }
+  ]
+}

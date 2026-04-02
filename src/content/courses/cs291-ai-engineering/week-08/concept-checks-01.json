@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "You have implemented trace decorators for your RAG pipeline. A user reports a wrong answer. The trace shows: vector_search returned 5 results with top score 0.92, context_assembly used 3 of 5 results (1200 tokens), llm_call returned a response with finish_reason='stop'. Which piece of information is MOST critical but MISSING from this trace for diagnosing the quality failure?",
+      "options": [
+        "The HTTP status code of the LLM API call",
+        "The actual content of the retrieved documents and the generated response",
+        "The CPU utilization of the server during the request",
+        "The user's IP address and browser user-agent"
+      ],
+      "correct": 1,
+      "explanation": "All the operational metrics look healthy — retrieval returned results with high scores, the context fit within the window, and the LLM call succeeded. But you cannot diagnose a semantic failure (wrong answer) without seeing what documents were actually retrieved and what the model actually said. This is why tiered logging with full prompt-response capture (at least on sampled traffic) is essential. Operational telemetry tells you the system ran; content telemetry tells you whether it ran correctly."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Your AI agent system has a cost distribution where p50 is $0.04 per request, p95 is $0.12, and p99 is $0.85. You serve 50,000 requests per day. Which cost metric is most important for setting a budget alert?",
+      "options": [
+        "p50 cost, because it represents the typical user experience",
+        "Mean cost, because it determines total daily spend",
+        "p99 cost, because it indicates runaway agent loops that need circuit breakers",
+        "Maximum cost, because any single expensive request is unacceptable"
+      ],
+      "correct": 2,
+      "explanation": "While mean cost determines total spend (important for budgeting), the p99 at $0.85 — over 20x the median — signals a heavy tail that likely represents agent loops running too many steps. These outliers are the requests that, if they become more frequent, will blow your budget. A circuit breaker that terminates requests exceeding a cost threshold (say $0.50) would cap these outliers. The mean cost tells you the steady-state; the p99 tells you where the system is losing control. Both matter, but the p99 is what you need alerts on to prevent catastrophic cost events."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "You are implementing OpenTelemetry instrumentation for an LLM application. Which of the following should NOT be stored as a span attribute on every LLM call?",
+      "options": [
+        "gen_ai.usage.input_tokens and gen_ai.usage.output_tokens",
+        "The full prompt text including system message and all few-shot examples",
+        "gen_ai.request.model and gen_ai.response.model",
+        "gen_ai.cost_usd calculated from token counts and pricing"
+      ],
+      "correct": 1,
+      "explanation": "Span attributes should be low-cardinality, relatively small metadata. Storing the full prompt text (which can be thousands of tokens) as a span attribute on every request creates massive storage costs, potential PII exposure, and performance issues. The full prompt should be logged in the tiered logging system — always capturing a hash or length, sampling the full content on a percentage of traffic, and capturing full content when anomalies are detected. Token counts, model names, and cost are all compact attributes that belong on every span."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Your Page-Hinkley drift detector fires an alert. The quality score rolling average has dropped from 0.85 to 0.79 over the past 3 hours. What is the correct FIRST diagnostic step?",
+      "options": [
+        "Immediately roll back to the previous model version",
+        "Stratify the quality scores by query category, model, and time window to isolate whether the degradation is global or localized to a specific segment",
+        "Increase the drift detection threshold to reduce false alarms",
+        "Switch all traffic to shadow mode until the issue is resolved"
+      ],
+      "correct": 1,
+      "explanation": "Before taking any action, you need to diagnose the root cause. A global quality drop might be caused by a model provider update (affecting all queries) or it might be localized — a new category of queries appearing in traffic, a specific retrieval index becoming stale, or a particular user segment triggering a failure mode. Stratifying by category, model, and time isolates the problem. Rolling back without diagnosis might revert unrelated improvements. Adjusting the threshold sweeps the problem under the rug. Shadow mode removes the system from production entirely, which is a last resort, not a first step."
+    }
+  ]
+}

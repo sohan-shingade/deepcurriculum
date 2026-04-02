@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A network server makes 500,000 system calls per second. If each syscall costs 300 ns of overhead (with Spectre mitigations), what fraction of one CPU core is consumed by syscall overhead alone?",
+      "options": [
+        "0.015% -- negligible",
+        "1.5% -- noticeable but acceptable",
+        "15% -- significant, worth optimizing",
+        "150% -- impossible, would require more than one core"
+      ],
+      "correct": 2,
+      "explanation": "Overhead = 500,000 syscalls/s x 300 ns/syscall = 150,000,000 ns/s = 150 ms/s = 15% of one core. This is significant -- one out of every 6.7 CPU cycles is spent on syscall overhead rather than useful work. This is why io_uring (which eliminates per-I/O syscalls via shared ring buffers) and kernel bypass (DPDK, OpenOnload) are so impactful: they can recover this 15% of a core. For a server handling 5 million syscalls per second, the overhead would be 150%, requiring more than one core just for syscall transitions."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A Linux server is configured with `isolcpus=4-15 nohz_full=4-15 rcu_nocbs=4-15`. A trading application is pinned to core 8. Without `nohz_full`, the timer tick fires every 1 ms, causing a 4 microsecond interruption each time. What is the impact of `nohz_full` on worst-case latency?",
+      "options": [
+        "No impact -- the timer tick is too short to matter",
+        "Eliminates a guaranteed 4 microsecond interruption every 1 ms, reducing worst-case latency from ~14 microseconds (isolcpus alone) to ~3 microseconds (with nohz_full + rcu_nocbs)",
+        "Reduces power consumption by letting the CPU sleep between timer ticks",
+        "Only matters for batch processing workloads, not latency-sensitive applications"
+      ],
+      "correct": 1,
+      "explanation": "The periodic timer tick (250 Hz or 1000 Hz) forces the kernel to run on every core at regular intervals, even isolated cores. Each tick causes: (1) an interrupt that preempts the running thread, (2) a context switch to the kernel timer handler, (3) cache pollution from kernel code and data, and (4) 4 microseconds of latency. With `nohz_full`, the timer tick is suppressed on isolated cores when only one runnable thread exists. Combined with `rcu_nocbs` (which offloads RCU callbacks that cause 10-100 us latency spikes), this reduces worst-case jitter from ~14 us to ~3 us. The additional step of disabling C-states (`processor.max_cstate=0`) and using `idle=poll` eliminates wake-up latency, bringing worst-case down to ~1-5 us."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A program has a 2 GB working set. The L2 STLB has 2,048 entries. With standard 4 KB pages, the TLB covers 8 MB. With 2 MB huge pages, the TLB covers 4 GB. What is the approximate TLB miss rate reduction from using huge pages?",
+      "options": [
+        "2x reduction (from 50% to 25% miss rate)",
+        "256x reduction (from ~99.6% to ~0.4% miss rate)",
+        "TLB misses are eliminated entirely (0% miss rate with huge pages)",
+        "512x reduction (the ratio of page sizes)"
+      ],
+      "correct": 2,
+      "explanation": "With 4 KB pages, TLB coverage = 2,048 x 4 KB = 8 MB. For a 2 GB working set, the TLB covers only 8/2048 = 0.4% of the working set, so approximately 99.6% of accesses (to uncovered regions) cause TLB misses. With 2 MB huge pages, TLB coverage = 2,048 x 2 MB = 4,096 MB = 4 GB. Since 4 GB > 2 GB working set, the TLB covers the entire working set, and the TLB miss rate drops to effectively 0%. Each TLB miss avoided saves approximately 50-400 ns (cached vs. full page table walk), so this optimization can improve performance by 10-30% for memory-intensive workloads with large working sets."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "DPDK achieves 1-5 microsecond latency versus 10-50 microseconds for the standard kernel networking stack. What is the primary cost of DPDK's performance advantage?",
+      "options": [
+        "DPDK requires specialized NIC hardware that costs 10x more than standard NICs",
+        "DPDK dedicates entire CPU cores to busy-wait polling (100% CPU usage even when idle), trading power efficiency and core availability for minimal latency",
+        "DPDK does not support TCP, limiting it to UDP-only applications",
+        "DPDK requires a custom operating system and cannot run on standard Linux"
+      ],
+      "correct": 1,
+      "explanation": "DPDK's Poll Mode Drivers (PMDs) continuously poll NIC receive queues in a tight busy loop -- the core never sleeps, never handles interrupts, never runs other tasks. This means: (1) Each DPDK core is 100% utilized even when no packets arrive. (2) Those cores are unavailable for other work. (3) Power consumption is maximum at all times. For a trading system using 4 DPDK cores on a 16-core server, 25% of compute capacity is dedicated to networking. The standard kernel stack uses interrupts (waking the CPU only when packets arrive), which is more power-efficient but adds 10-50 microseconds of latency per packet due to interrupt handling, context switches, and protocol processing. DPDK supports standard NICs (Intel, Mellanox, Broadcom) and runs on standard Linux."
+    }
+  ]
+}

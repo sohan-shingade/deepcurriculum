@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A hardware order book uses a price-indexed array with 1024 price levels. When the best bid level becomes empty (all orders cancelled/filled), the book must find the next-best bid. What hardware structure finds the highest non-empty index, and what is its latency?",
+      "options": [
+        "A sequential scan from the top, taking up to 1024 clock cycles in the worst case",
+        "A priority encoder (tree of OR gates) that finds the highest set bit in $O(\\log N)$ gate delays -- approximately 2-3 ns for 1024 levels (10 gate delays)",
+        "A hash table lookup that takes 1-2 cycles",
+        "A binary search requiring $\\log_2(1024) = 10$ clock cycles"
+      ],
+      "correct": 1,
+      "explanation": "A priority encoder is a combinational circuit that finds the position of the highest (or lowest) set bit in a vector. For 1024 levels, maintain a 1024-bit 'non-empty' vector where bit $i$ is set if level $i$ has quantity > 0. The priority encoder uses a tree of OR gates with $\\log_2(1024) = 10$ levels. Each level halves the search space. Since this is pure combinational logic (no clock cycles, just gate propagation), the delay is approximately $10 \\times 100$--$200$ ps per gate = 1-2 ns. This is vastly faster than a software scan (which would be 1024 comparisons) or a binary search (which would need 10 clock cycles of 5 ns each = 50 ns)."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A market-making strategy uses inventory skew: $\\text{my\\_bid} = \\text{mid} - \\text{half\\_spread} - \\text{skew} \\times \\text{position}$. If mid = 1,502,550 (in fixed-point, representing $150.2550), half_spread = 50 (representing $0.0050), skew coefficient = 2, and position = 100 shares, what is my_bid?",
+      "options": [
+        "1,502,300 (representing $150.2300)",
+        "1,502,500 (representing $150.2500)",
+        "1,502,400 (representing $150.2400)",
+        "1,502,550 (representing $150.2550, no adjustment)"
+      ],
+      "correct": 0,
+      "explanation": "skew_amount = skew_coefficient $\\times$ position = $2 \\times 100 = 200$. my_bid = mid - half_spread - skew_amount = $1{,}502{,}550 - 50 - 200 = 1{,}502{,}300$. Converting back: $1{,}502{,}300 / 10{,}000 = \\$150.2300$. The bid is lowered by 200 units (0.02 dollars = 2 ticks) below the unskewed level, discouraging further buying when we already have a long position of 100 shares. All arithmetic is integer: one multiply (DSP block), two subtracts (carry chain). Total: 1-2 clock cycles."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Five pre-trade risk checks run in parallel combinational logic: position limit, rate limit, price reasonability, notional limit, and kill switch. If each check takes approximately 3 ns of combinational delay, what is the total risk check latency?",
+      "options": [
+        "15 ns (3 ns $\\times$ 5 checks, sequential)",
+        "3 ns (all checks run in parallel, the total is the longest single check)",
+        "Approximately 3-4 ns (all checks run simultaneously in parallel hardware; the total latency is the maximum of individual delays, plus a final AND gate to combine results)",
+        "0 ns (risk checks are free because they use dedicated DSP blocks)"
+      ],
+      "correct": 2,
+      "explanation": "This is the key insight: in hardware, parallel means PHYSICALLY PARALLEL. Five comparators, each checking a different condition, operate simultaneously on the same input data. They are independent circuits sharing no signals (until the final combining gate). The total delay is the MAXIMUM of the individual delays, not the sum. If each takes ~3 ns and the final AND gate adds ~0.1 ns, the total is ~3.1 ns. In software, these would be sequential (5 if-statements = 5 branch predictions). In hardware, they are 5 independent comparator circuits producing results simultaneously. This is why FPGA risk checks add negligible latency to the pipeline."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "NYSE's Mahwah colocation facility equalizes cable lengths so all participants have equal network distance to the matching engine. If a firm places its FPGA server in a cabinet 100 feet closer to the switch than a competitor (before equalization), how much latency advantage would this provide, and why does equalization eliminate it?",
+      "options": [
+        "100 ns advantage (1 ns per foot of fiber); equalization adds extra cable to shorter paths so all paths have identical length and latency",
+        "10 ns advantage (0.1 ns per foot); equalization is unnecessary at these scales",
+        "1 $\\mu$s advantage; equalization uses electronic delay lines",
+        "No advantage; light speed is the same regardless of cable length"
+      ],
+      "correct": 0,
+      "explanation": "Light in fiber travels at approximately 1 foot per nanosecond (more precisely, $c/n \\approx 204{,}000$ km/s, or about 0.2 m/ns, close to 1 ft/ns). Being 100 feet closer = 100 ns advantage. NYSE/ICE addresses this by 'normalizing' all LCN connections: adding extra cable to shorter paths so every cabinet has the same total fiber length (and thus the same latency) to the exchange's network equipment. The connections are verified by Optical Backscatter Reflectometry. This ensures competition is based on processing speed, not real estate location within the data center."
+    }
+  ]
+}

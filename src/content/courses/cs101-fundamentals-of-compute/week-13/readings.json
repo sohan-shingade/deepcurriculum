@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "NVIDIA Hopper Architecture In-Depth",
+      "authors": "NVIDIA Developer Blog",
+      "url": "https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/",
+      "note": "The definitive technical overview of the H100's architecture. Covers the SM design, 4th-gen Tensor Cores, Transformer Engine, Thread Block Clusters, and DPX instructions. Pay particular attention to the SM block diagram and the comparison with Ampere."
+    },
+    {
+      "title": "NVIDIA Blackwell Architecture Technical Overview",
+      "authors": "NVIDIA",
+      "url": "https://resources.nvidia.com/en-us-blackwell-architecture",
+      "note": "Covers the B200's dual-die design, NV-HBI interconnect, 5th-gen Tensor Cores with FP4 support, and NVLink 5.0. Essential reading for understanding how NVIDIA bypassed the reticle limit and what this means for future GPU scaling."
+    },
+    {
+      "title": "Using CUDA Warp-Level Primitives",
+      "authors": "NVIDIA Developer Blog",
+      "url": "https://developer.nvidia.com/blog/using-cuda-warp-level-primitives/",
+      "note": "Detailed guide to shuffle, vote, and ballot operations. Shows how to implement warp-level reductions using __shfl_down_sync in 5 steps instead of using shared memory. Critical for understanding the SIMT execution model at the warp level."
+    },
+    {
+      "title": "Using Shared Memory in CUDA C/C++",
+      "authors": "NVIDIA Developer Blog",
+      "url": "https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/",
+      "note": "Comprehensive guide to shared memory: bank structure, conflict detection, padding techniques, and tiled matrix transpose. The matrix transpose example is a classic case study in bank conflict elimination."
+    },
+    {
+      "title": "CUDA Occupancy Calculation",
+      "authors": "Lei Mao",
+      "url": "https://leimao.github.io/blog/CUDA-Occupancy-Calculation/",
+      "note": "Clear walkthrough of the occupancy calculation for multiple compute capabilities. Shows worked examples of how register usage, shared memory, and block size interact to determine active warps per SM. Complements the lecture's occupancy section."
+    }
+  ]
+}

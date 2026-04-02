@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "When specifying non-functional requirements for an AI system, why should the latency budget be defined before selecting components?",
+      "options": [
+        "Because latency is the only metric that matters for AI systems",
+        "Because the latency budget eliminates or enables entire architectural choices — a 150ms budget prohibits large model inference, while a 10s budget enables multi-step retrieval pipelines",
+        "Because latency requirements are always provided by the client and cannot be negotiated",
+        "Because components with lower latency are always cheaper to operate"
+      ],
+      "correct": 1,
+      "explanation": "The latency budget is the single most constraining non-functional requirement for AI systems because it directly determines which components are feasible. A large LLM call takes 500-5000ms, so a 150ms budget means you must use a small model or a cache. A vector retrieval step takes 10-100ms, a reranker adds 50-200ms, and a guardrail classifier adds 20-100ms. These are not optimizations — they are hard constraints. Define latency first because it narrows the design space more than any other requirement. Cost and throughput matter too, but they typically have more flexible tradeoffs."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In the evaluation strategy, why is periodic human evaluation (Level 3) necessary even when automated metrics (Level 2) are running continuously?",
+      "options": [
+        "Because human evaluators are faster than automated systems at detecting quality issues",
+        "Because automated metrics can drift over time — they may stop correlating with actual quality, and human evaluation serves as the ground truth anchor",
+        "Because regulatory requirements mandate human evaluation for all AI systems",
+        "Because human evaluation is cheaper than running automated evaluation pipelines at scale"
+      ],
+      "correct": 1,
+      "explanation": "Automated metrics are proxies for quality, not quality itself. A metric like 'citation precision' might be computed by checking if cited URLs exist — but it does not check if the cited source actually supports the claim. Over time, the distribution of user queries shifts, the knowledge base evolves, and the correlation between your automated metric and actual user-perceived quality can degrade without warning. This is Goodhart's Law applied to AI evaluation: when a measure becomes a target, it ceases to be a good measure. Periodic human evaluation is the only way to detect this drift and recalibrate your automated metrics."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the RAG Customer Support design, why is the semantic cache placed BEFORE vector retrieval in the data flow, rather than caching the final LLM response?",
+      "options": [
+        "Because semantic caches can only operate on embeddings, not on text responses",
+        "Because caching the final response would prevent personalization, while caching at the retrieval level allows different responses for the same retrieved documents",
+        "Because placing the cache before retrieval means cache hits skip the most expensive steps (retrieval + reranking + LLM generation), maximizing latency and cost savings",
+        "Because the vector database cannot handle the throughput without a cache in front of it"
+      ],
+      "correct": 2,
+      "explanation": "The cache is placed early in the pipeline to maximize the cost and latency savings on a cache hit. When a semantically similar query hits the cache, the system skips retrieval (40ms), reranking (100ms), and LLM generation (1200ms) — saving ~1340ms and the associated compute cost. If you instead cached only the final response, you would still pay for retrieval and reranking on every request. The tradeoff is that early caching might return stale answers if the knowledge base has been updated since the cached response was generated. This is managed by cache invalidation on knowledge base updates."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In the Content Moderation Pipeline, the system targets <0.1% false positive rate on benign content, even though this means lower recall for actual violations. Why is this asymmetry justified?",
+      "options": [
+        "Because false positives are computationally more expensive to process than false negatives",
+        "Because removing benign content damages user trust and generates costly appeals, while brief exposure to borderline content is mitigated by Tier 2 and Tier 3 review",
+        "Because regulatory frameworks always require prioritizing user free expression over content safety",
+        "Because false positives cannot be detected by the system, making them permanently uncorrectable"
+      ],
+      "correct": 1,
+      "explanation": "Content moderation has asymmetric error costs. A false positive (removing a user's benign post) causes immediate, visible harm: the user loses trust, may submit an appeal (costing human moderator time), and may leave the platform. A false negative (briefly displaying borderline content) is mitigated by the multi-tier architecture — Tier 2 and Tier 3 provide additional review layers that catch many of the violations Tier 1 misses. The system is deliberately tuned for high precision (few false positives) at the cost of lower recall (more false negatives), because the multi-tier architecture compensates for lower recall but cannot compensate for false positives that have already damaged user trust."
+    }
+  ]
+}

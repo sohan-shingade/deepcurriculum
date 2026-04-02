@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "For Project 6, you must choose one of four tracks. A student who excelled at Problem Set 10 (cache simulation) and enjoyed the MPI collective algorithms in Week 17 should consider which track?",
+      "options": [
+        "Track A: Advanced RISC-V Processor",
+        "Track B: GPU Performance Engineering",
+        "Track C: FPGA Trading System",
+        "Track D: Interconnect Simulator"
+      ],
+      "correct": 3,
+      "explanation": "Track D (Interconnect Simulator) directly builds on cache/memory hierarchy knowledge from Project 3 and the interconnect topologies (fat tree, dragonfly, torus) and MPI collective algorithms (ring allreduce, recursive doubling) from Week 17. This track involves implementing topology generators, packet routing algorithms, and MPI collective simulations -- exactly the kind of systems-level thinking demonstrated by strong performance on cache simulation and interest in network algorithms. Tracks A, B, and C would also be valid choices depending on broader interests, but Track D is the most direct extension of the described strengths."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Tracing a market data packet through an FPGA trading system involves concepts from multiple weeks. Which week's concept is most directly responsible for the FPGA achieving deterministic latency (every packet processed in the same number of cycles)?",
+      "options": [
+        "Week 3-4: Boolean logic and combinational circuits ensure all gates evaluate in bounded time",
+        "Week 6: Pipelining -- the FPGA pipeline has fixed stages with known latency, unlike a CPU pipeline with variable-latency cache misses and branch mispredictions",
+        "Week 8: Cache hierarchy -- BRAM provides single-cycle access without cache misses",
+        "Week 15: FPGA architecture -- the custom circuit eliminates instruction decode, branch prediction, and OS scheduling"
+      ],
+      "correct": 3,
+      "explanation": "While all listed concepts contribute, the fundamental reason for deterministic latency is that the FPGA implements a custom circuit with no software abstractions. A CPU's latency is variable because of instruction decode (variable instruction lengths), branch prediction (mispredictions cause pipeline flushes), cache misses (DRAM access adds 50-100 ns), and OS scheduling (timer interrupts, context switches). The FPGA eliminates ALL of these sources of variability: there are no instructions to decode (the circuit is the computation), no branches to predict (the datapath is fixed), no cache misses (data is in BRAM with guaranteed single-cycle access), and no OS to preempt the computation. The result is that every packet takes exactly the same number of clock cycles from input to output."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Amdahl's Law states that if 5% of a program is sequential, the maximum possible speedup with infinite parallelism is 20x. In practice, what additional factor further limits speedup beyond Amdahl's Law?",
+      "options": [
+        "Compiler optimization -- compilers cannot perfectly vectorize all code",
+        "Communication overhead -- synchronization, data sharing, and coordination between parallel threads consume time that grows with the number of processors",
+        "Power limits -- more processors consume more power, which is always the binding constraint",
+        "Memory capacity -- more processors require more memory, which increases cost"
+      ],
+      "correct": 1,
+      "explanation": "Amdahl's Law assumes the parallel portion scales perfectly with $P$ processors. In reality, parallel execution introduces communication overhead: threads must synchronize (barriers, locks), share data (cache coherence traffic, message passing), and coordinate work (load balancing, scheduling). This overhead typically grows with $P$ -- more processors means more communication. Gustafson's Law addresses this by noting that for many workloads, the problem size grows with $P$, keeping the parallel fraction high. But for a fixed-size problem, communication overhead causes the actual speedup to plateau well before Amdahl's theoretical maximum. In MPI programs, the cost model $T = \\alpha \\cdot \\text{messages} + \\beta \\cdot \\text{data}$ quantifies this: both the latency term ($\\alpha$) and the bandwidth term ($\\beta$) grow with the number of processes in collective operations."
+    }
+  ]
+}

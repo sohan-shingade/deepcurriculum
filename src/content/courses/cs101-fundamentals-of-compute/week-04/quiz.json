@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 4: Memory Technologies",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a 6T SRAM cell, why is the read operation potentially destructive (read disturb), and how is it mitigated?",
+      "options": [
+        "The sense amplifier draws too much current, damaging the cell; mitigated by using low-power sense amplifiers",
+        "The precharged bit line creates a voltage divider with the pull-down transistor, potentially raising the low storage node past the switching threshold; mitigated by making the pull-down transistor stronger than the access transistor (cell ratio > 1)",
+        "The word line voltage damages the gate oxide; mitigated by using thicker oxide",
+        "The read current flows through the capacitor, depleting its charge; mitigated by immediate refresh"
+      ],
+      "correct": 1,
+      "explanation": "During a read when Q=0, the access transistor A1 connects the precharged bit line (at VDD) to node Q (at 0V). The access transistor and pull-down transistor N1 form a voltage divider that can raise Q above ground. If Q rises above the switching threshold of the P2/N2 inverter, the cell flips -- a destructive read error. The mitigation is the 'cell ratio' (CR = W/L of pull-down / W/L of access transistor), which must be > 1 (typically 1.5-2.0) to ensure the pull-down transistor keeps Q close to 0V. This is distinct from DRAM's destructive read, which is caused by charge sharing between the storage capacitor and bit line -- an inherent physical process, not a stability issue."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A DRAM cell with a storage capacitance of 25 fF and bit line capacitance of 250 fF operates at 1.1V. What is the voltage differential on the bit line (precharged to VDD/2) after a read access to a cell storing a '1'?",
+      "options": [
+        "~550 mV",
+        "~100 mV",
+        "~50 mV",
+        "~10 mV"
+      ],
+      "correct": 2,
+      "explanation": "The voltage differential is calculated from charge sharing: Delta_V = (C_S / (C_S + C_BL)) * (VDD/2) = (25 / (25 + 250)) * (1.1/2) = (25/275) * 0.55 = 0.0909 * 0.55 = 50 mV. This is a very small signal -- only about 50 mV on top of the 550 mV precharge level. The sense amplifier must detect and amplify this tiny differential before noise corrupts it. This is why DRAM sense amplifiers are carefully designed analog circuits, and why DRAM access is fundamentally slower than SRAM (which presents full-swing logic levels to its sense amplifier). The read is also destructive: charge sharing partially discharges the storage capacitor, requiring it to be rewritten after every read."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "DDR5-5600 has a transfer rate of 5600 MT/s and a CAS latency of CL36. What is the first-word latency in nanoseconds?",
+      "options": [
+        "36 ns",
+        "6.43 ns",
+        "12.86 ns",
+        "25.0 ns"
+      ],
+      "correct": 2,
+      "explanation": "DDR5-5600 operates at a clock frequency of 5600/2 = 2800 MHz (DDR transfers on both edges). The CAS latency of 36 cycles means the first data arrives 36 clock cycles after the column address is sent. First-word latency = CL / clock_MHz * 1000 = 36 / 2800 * 1000 = 12.86 ns. Note that despite CL36 sounding like a lot of cycles, the actual time in nanoseconds is modest because each cycle is only 1/2800 MHz = 0.357 ns. This is why comparing DRAM speed by CL number alone is misleading -- DDR5-6400 CL32 (10.0 ns) is actually faster in real time than DDR5-4800 CL40 (16.7 ns), even though 32 < 40."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What distinguishes a DRAM row buffer hit from a row buffer conflict, and approximately how large is the latency difference?",
+      "options": [
+        "A hit accesses the row buffer directly (CL cycles); a conflict must close the current row, then open the new one (tRP + tRCD + CL cycles) -- roughly 3x slower",
+        "A hit requires one memory access; a conflict requires two -- roughly 2x slower",
+        "There is no significant latency difference; the terms refer to different scheduling policies",
+        "A hit is a cache hit; a conflict is a cache miss -- they are unrelated to DRAM"
+      ],
+      "correct": 0,
+      "explanation": "When a DRAM row is 'activated' (opened into the row buffer), subsequent accesses to the same row are 'row buffer hits' and only incur the CAS latency (CL cycles). Accessing a different row when one is already open is a 'row buffer conflict' -- the current row must first be closed (precharged, taking tRP cycles), then the new row must be activated (tRCD cycles), and finally the column is accessed (CL cycles). For DDR5-5600 at CL36-tRCD38-tRP38: hit = 36 cycles (12.9 ns), conflict = 38 + 38 + 36 = 112 cycles (40.0 ns) -- about 3.1x slower. This is why sequential memory access patterns (which exhibit row hits) are dramatically faster than random patterns (which cause conflicts). It is also why the memory controller's FR-FCFS scheduling algorithm prioritizes row hits."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "HBM3E achieves up to 1.2+ TB/s bandwidth per stack. How does it achieve such high bandwidth compared to DDR5?",
+      "options": [
+        "By running at a much higher clock frequency than DDR5",
+        "By using a very wide bus (1024 bits via 16 channels) across a 3D-stacked architecture with through-silicon vias, rather than DDR5's 64-bit bus",
+        "By eliminating the refresh requirement",
+        "By using SRAM instead of DRAM cells"
+      ],
+      "correct": 1,
+      "explanation": "HBM achieves massive bandwidth through bus width rather than per-pin speed. HBM3E uses a 1024-bit interface (16 independent 64-bit channels) versus DDR5's 64-bit bus -- a 16x wider bus. The per-pin data rate of HBM3E (up to 9.8 Gbps) is actually comparable to high-end DDR5. The bandwidth comes from 1024 bits * 9.8 Gbps / 8 = 1254 GB/s per stack. The 3D stacking (using TSVs to connect 8-16 vertically stacked DRAM dies to a logic base die) enables this wide bus in a compact footprint. The entire stack sits on a silicon interposer alongside the GPU/accelerator, with over 1,700 signal traces routed at sub-10um precision. NVIDIA's B200 uses 8 HBM3E stacks for 8 TB/s aggregate bandwidth."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "TLC NAND flash has approximately 1,000-3,000 P/E (program/erase) cycle endurance. For a 1 TB TLC SSD with 3,000 cycle endurance, what is the approximate total data that can be written before the cells wear out?",
+      "options": [
+        "1 TB",
+        "3 PB (3,000 TB)",
+        "300 TB",
+        "30 PB"
+      ],
+      "correct": 1,
+      "explanation": "Total data written = capacity * endurance cycles = 1 TB * 3,000 = 3,000 TB = 3 PB (petabytes). This is the ideal case with perfect wear leveling (all blocks wear evenly) and a write amplification factor (WAF) of 1.0. In practice, WAF > 1.0 due to garbage collection, so the host-visible write endurance (Total Bytes Written, or TBW, as specified by the manufacturer) is lower. For example, Samsung's 990 Pro 1TB specifies 600 TBW, which implies an effective WAF budget of about 3000/600 = 5x over the drive's warranty period. Enterprise SSDs with 28% over-provisioning achieve lower WAF (1.5-2.0) and higher TBW specifications."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why does NAND flash require a Flash Translation Layer (FTL)?",
+      "options": [
+        "To compress data before writing to flash",
+        "To encrypt data for security",
+        "To abstract flash constraints (erase-before-write at block granularity, sequential page writes) into a random-access block device interface that the host OS expects",
+        "To increase the number of voltage levels in each cell"
+      ],
+      "correct": 2,
+      "explanation": "NAND flash has three constraints that conflict with the block device interface expected by operating systems: (1) Pages cannot be overwritten in place -- a page can only be programmed from the erased state (all 1s) to a programmed state (some 0s). (2) Erasing happens at block granularity (4-16 MB), not page granularity (4-16 KB). (3) Pages within a block must be programmed sequentially. The FTL maps logical addresses to physical addresses, enabling out-of-place updates (writing new data to a different physical page and updating the mapping), and handles garbage collection (reclaiming blocks with invalid pages) and wear leveling (distributing erases evenly across blocks). Without the FTL, the host would need to manage these constraints directly."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "NVMe supports up to 65,535 I/O queues with 65,536 entries each. Why is this massive queue capacity important for SSD performance?",
+      "options": [
+        "It allows the SSD to store more data",
+        "Each queue entry caches a page of data",
+        "It enables deep command pipelining across multiple CPU cores without lock contention, saturating the parallelism of modern NAND flash arrays with many channels and dies",
+        "It reduces the physical size of the SSD"
+      ],
+      "correct": 2,
+      "explanation": "Modern SSDs achieve high IOPS (1M+) by exploiting internal parallelism across multiple channels (4-8), packages, dies, and planes. To keep all these parallel resources busy, the SSD controller needs many outstanding commands. NVMe's multi-queue architecture (typically one queue pair per CPU core) eliminates the lock contention that bottlenecked the legacy AHCI protocol (which had a single 32-entry queue). Each CPU core submits commands to its own queue without synchronization, and the SSD controller processes commands from all queues concurrently. This is how NVMe SSDs can sustain >1M IOPS while AHCI/SATA SSDs plateau at ~100K IOPS despite using the same underlying NAND. The per-queue depth of 65,536 provides headroom for future NAND generations with even more internal parallelism."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the storage hierarchy, the latency gap between L1 cache (~1 ns) and a DRAM access (~100 ns) is 100x. What is the approximate latency gap between DRAM and an SSD random read (~16 microseconds)?",
+      "options": [
+        "10x",
+        "16x",
+        "160x",
+        "1,600x"
+      ],
+      "correct": 2,
+      "explanation": "SSD random read latency is approximately 16 microseconds = 16,000 nanoseconds. DRAM latency is approximately 100 nanoseconds. The ratio is 16,000 / 100 = 160x. This gap is why keeping your working set in DRAM is one of the most impactful performance optimizations. Falling from DRAM to SSD is a 160x latency penalty -- equivalent to a task that takes 1 minute in DRAM taking 2.7 hours from SSD. HDD is even worse: at ~5 ms seek time, the DRAM-to-HDD gap is 50,000x. These enormous gaps motivate the entire field of caching, buffer pools, and memory-mapped I/O."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "CXL (Compute Express Link) Type 3 devices use which sub-protocols?",
+      "options": [
+        "CXL.io + CXL.cache",
+        "CXL.io + CXL.mem",
+        "CXL.io + CXL.cache + CXL.mem",
+        "CXL.cache + CXL.mem only"
+      ],
+      "correct": 1,
+      "explanation": "CXL Type 3 devices are pure memory expanders -- they provide additional memory capacity attached to the CXL bus but have no compute capability or device-side cache. They use CXL.io (for discovery, configuration, and management via the PCIe-based transaction layer) and CXL.mem (for host-side access to the device-attached memory). They do NOT use CXL.cache because they don't cache host memory. Type 1 devices (SmartNICs, accelerators without local memory) use CXL.io + CXL.cache. Type 2 devices (GPUs, AI accelerators with their own memory) use all three protocols. Type 3 memory expanders add capacity at ~150-200 ns latency versus ~80 ns for local DDR5, enabling memory pooling and disaggregation in data center environments."
+    }
+  ]
+}

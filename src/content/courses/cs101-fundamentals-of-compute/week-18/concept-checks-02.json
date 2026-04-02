@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A program's `perf stat` output shows: 2.0 billion instructions, 4.0 billion cycles, 80 million LLC misses, 50 million branch misses. What is the IPC, and what does it suggest about the bottleneck?",
+      "options": [
+        "IPC = 0.5, suggesting the program is compute-bound (not enough ALU throughput)",
+        "IPC = 0.5, suggesting the program is memory-bound (high LLC miss count causes stalls waiting for DRAM)",
+        "IPC = 2.0, suggesting excellent performance with no bottleneck",
+        "IPC = 0.5, suggesting the program is I/O-bound"
+      ],
+      "correct": 1,
+      "explanation": "IPC = instructions / cycles = 2.0B / 4.0B = 0.5. Modern x86 CPUs can sustain IPC of 3-6 for compute-bound code. An IPC of 0.5 means the CPU is stalled (doing nothing) for most cycles. With 80 million LLC misses (each costing ~80 ns = ~320 cycles at 4 GHz), the stall cycles from LLC misses alone are 80M x 320 = 25.6 billion -- far more than the total 4 billion cycles observed. This confirms the program is severely memory-bound: the CPU spends most of its time waiting for data from DRAM rather than executing instructions. The fix would target memory access patterns: improve spatial locality (SoA layout, cache-line-aligned structures), temporal locality (tiling/blocking), or use prefetching."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A particle simulation stores 1 million particles as Array of Structures (AoS), each with fields x, y, z (8 bytes each), mass (8 bytes), and metadata (32 bytes) = 64 bytes per particle. A force computation kernel reads only x, y, z for all particles. With SoA layout, how much does cache efficiency improve for this kernel?",
+      "options": [
+        "No improvement -- both layouts access the same total data",
+        "Approximately 2.7x improvement: SoA loads 24 MB (x+y+z arrays) vs AoS loading 64 MB (all fields), so cache utilization improves from 37.5% to 100%",
+        "Exactly 8x improvement because SoA uses 8 bytes per field",
+        "SoA is worse because it requires more pointer dereferences"
+      ],
+      "correct": 1,
+      "explanation": "With AoS layout: the kernel iterates over all 1M particles. Each particle is 64 bytes (1 cache line). But the kernel only reads x, y, z = 24 bytes out of each 64-byte cache line. Cache utilization = 24/64 = 37.5%. Total data loaded from memory: 1M x 64 bytes = 64 MB. With SoA layout: the x, y, z arrays are stored contiguously. The kernel reads 1M x 8 x 3 = 24 MB, and every byte of every cache line contains useful data (100% utilization). Total data loaded: 24 MB. The improvement is 64/24 = 2.67x less memory traffic, which directly translates to 2.67x fewer cache misses and faster execution for memory-bound kernels. Additionally, SoA enables SIMD vectorization of the x, y, z arrays, which AoS layout prevents."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A sorting network for 4 elements uses 5 compare-and-swap operations, each implemented with conditional moves (no branches). A standard insertion sort for 4 elements uses at most 6 comparisons but with data-dependent branches. On a CPU with 15-cycle branch misprediction penalty, which is faster for random input?",
+      "options": [
+        "Insertion sort is faster because it uses fewer comparisons on average",
+        "The sorting network is faster because branch mispredictions on random data cost 15 cycles each, and insertion sort has ~50% misprediction rate on random data, while the sorting network has zero mispredictions",
+        "They are equal because both perform O(n^2) work",
+        "Neither -- for 4 elements, the overhead of function call and array access dominates"
+      ],
+      "correct": 1,
+      "explanation": "For random input, insertion sort's branch (is a[j] > a[j-1]?) is unpredictable -- roughly 50% taken. With 6 comparisons and 50% misprediction rate, expected mispredictions = 3, costing 3 x 15 = 45 cycles in pipeline flushes alone. The sorting network's 5 compare-and-swaps use conditional moves (cmov), which have zero misprediction cost. Each cmov takes about 1-2 cycles. Total: ~10 cycles for the network vs ~45 cycles of misprediction penalty plus ~12 cycles of actual comparison work for insertion sort. For small, fixed-size sorts in hot loops (e.g., sorting candidate lists in a search engine), sorting networks are 2-5x faster than comparison-based sorts."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A CPU running at 4.0 GHz with $V_{dd} = 1.0$ V is overclocked to 4.4 GHz (+10%) by raising voltage to 1.05 V (+5%). Using $P = \\alpha C V^2 f$, what is the power increase?",
+      "options": [
+        "Approximately 10% (proportional to frequency increase)",
+        "Approximately 15.7% (voltage increase is negligible)",
+        "Approximately 21.3% ($1.05^2 \\times 1.1 - 1 \\approx 0.213$)",
+        "Approximately 33% (proportional to voltage cubed)"
+      ],
+      "correct": 2,
+      "explanation": "Using $P = \\alpha C V^2 f$: $P_{\\text{base}} = \\alpha C \\times 1.0^2 \\times 4.0 = 4.0\\,\\alpha C$. $P_{\\text{OC}} = \\alpha C \\times 1.05^2 \\times 4.4 = \\alpha C \\times 1.1025 \\times 4.4 = 4.851\\,\\alpha C$. Increase = $(4.851 - 4.0) / 4.0 = 21.3\\%$. Equivalently, the ratio is $V_{\\text{new}}^2 \\times f_{\\text{new}} / (V_{\\text{old}}^2 \\times f_{\\text{old}}) = 1.05^2 \\times 1.1 = 1.1025 \\times 1.1 = 1.2128$, so a 21.3% increase. A mere 10% frequency boost costs 21% more power because voltage must also increase, and power scales with $V^2$. This super-linear relationship between performance and power is why frequency scaling hit a wall -- each incremental GHz costs proportionally more power and generates more heat. This is the fundamental reason the industry shifted to multi-core after Dennard scaling broke down around 2006."
+    }
+  ]
+}

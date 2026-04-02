@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 12: GPU Hardware",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The NVIDIA H100 SXM5 has 132 SMs, each with 128 FP32 CUDA cores, for a total of 16,896 CUDA cores. The B200 has 148 SMs with 128 CUDA cores each (20,480 total) across a dual-die design. What is the primary engineering reason the B200 uses two dies instead of one?",
+      "options": [
+        "Two dies allow the GPU to use two different process nodes for optimal power efficiency",
+        "The 208 billion transistors exceed the reticle limit (~858 mm^2 maximum die area), so NVIDIA connects two dies via the 10 TB/s NV-HBI interconnect on a single package",
+        "Two dies enable dual independent GPU contexts for running separate workloads simultaneously",
+        "The dual-die design is needed to support the B200's 192 GB HBM3e memory, which requires more physical pins than a single die can provide"
+      ],
+      "correct": 1,
+      "explanation": "Semiconductor lithography uses a reticle (photomask) that limits the maximum die area to approximately 858 mm^2. The B200's 208 billion transistors on TSMC 4NP would require approximately 1,600 mm^2 -- nearly double the reticle limit. NVIDIA's solution is the dual-die design: two ~800 mm^2 dies connected by NV-HBI (NVIDIA High Bandwidth Interface) at 10 TB/s, which is fast enough that software sees a single logical GPU with 148 SMs. This is a fundamental packaging innovation that bypasses the physics limitation of reticle size."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A warp of 32 threads executes a kernel where threads 0-7 take path A, threads 8-15 take path B, threads 16-23 take path C, and threads 24-31 take path D. On pre-Volta hardware, what is the effective throughput relative to a non-divergent warp?",
+      "options": [
+        "100% -- the hardware handles divergence without penalty",
+        "50% -- the warp splits into two halves",
+        "25% -- four paths execute sequentially, each with 8 active threads",
+        "12.5% -- each group of 8 threads executes independently"
+      ],
+      "correct": 2,
+      "explanation": "On pre-Volta hardware, divergent paths within a warp are serialized. With 4 distinct paths, the warp must execute each path sequentially: first path A with threads 0-7 active (others masked), then path B with threads 8-15, then path C with 16-23, then path D with 24-31. The total execution time is the sum of all four paths, meaning throughput is 1/4 = 25% of peak. The active mask during path A is 0x000000FF, during path B is 0x0000FF00, etc. After all paths complete, the mask returns to 0xFFFFFFFF at the reconvergence point."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The H100 SXM5 has 80 GB of HBM3 with 3.35 TB/s bandwidth. If a kernel needs to read a 1 GB array from global memory, what is the theoretical minimum time for this transfer?",
+      "options": [
+        "0.30 ms (1 GB / 3.35 TB/s)",
+        "0.15 ms (accounting for 50% bandwidth utilization)",
+        "1.0 ms (global memory latency dominates)",
+        "3.0 ms (must account for cache line overhead)"
+      ],
+      "correct": 0,
+      "explanation": "Theoretical minimum transfer time = data_size / bandwidth = 1 GB / 3.35 TB/s = 1 / 3350 seconds = 0.000298 seconds = 0.298 ms, approximately 0.30 ms. In practice, achieved bandwidth depends on access pattern -- a perfectly coalesced sequential read might achieve 85-90% of peak (about 0.35 ms), while random access would be dramatically slower. The latency of an individual global memory access (200-800 cycles) is irrelevant here because millions of threads are accessing memory concurrently, and what matters is aggregate bandwidth, not per-access latency. This is the throughput-oriented design philosophy of GPUs."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "On the H100, shared memory has 32 banks with 4-byte stride. A kernel declares `__shared__ float data[1024]` and 32 threads in a warp each read `data[threadIdx.x * 2]`. How many bank conflicts occur?",
+      "options": [
+        "None -- stride-2 access is conflict-free because each thread accesses a unique element",
+        "16 two-way conflicts: thread 0 and 16 both hit bank 0, thread 1 and 17 both hit bank 2, etc.",
+        "32-way conflict: all threads access bank 0",
+        "8 four-way conflicts: threads 0, 8, 16, 24 all hit bank 0, etc."
+      ],
+      "correct": 1,
+      "explanation": "Thread $i$ accesses `data[2i]`, which is at byte address $8i$. The bank is $(8i / 4) \\bmod 32 = (2i) \\bmod 32$. Thread 0: bank 0. Thread 1: bank 2. Thread 2: bank 4. ... Thread 15: bank 30. Thread 16: bank $(32) \\bmod 32 = 0$ (conflicts with thread 0). Thread 17: bank $(34) \\bmod 32 = 2$ (conflicts with thread 1). So threads pair up: {0,16} on bank 0, {1,17} on bank 2, {2,18} on bank 4, etc. This gives 16 two-way conflicts. The access requires 2 serial transactions instead of 1. Only even-numbered banks are accessed; all odd banks are unused."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A kernel uses 256 threads per block, 80 registers per thread, and 32 KB shared memory per block on an H100 SM (65,536 registers, max 2,048 threads, max 32 blocks, 228 KB shared memory). What limits occupancy?",
+      "options": [
+        "Thread limit: only 8 blocks of 256 threads fit (2,048 / 256 = 8)",
+        "Register limit: 256 x 80 = 20,480 regs per block, floor(65,536 / 20,480) = 3 blocks",
+        "Shared memory limit: floor(228 / 32) = 7 blocks",
+        "Max blocks per SM limit: 32 blocks"
+      ],
+      "correct": 1,
+      "explanation": "Thread limit: $\\lfloor 2048 / 256 \\rfloor = 8$ blocks. Register limit: $256 \\times 80 = 20{,}480$ registers per block (already a multiple of 256, so no rounding needed). $\\lfloor 65{,}536 / 20{,}480 \\rfloor = 3$ blocks. Shared memory: $\\lfloor 228 / 32 \\rfloor = 7$ blocks. Active blocks = $\\min(8, 3, 7, 32) = 3$. Occupancy = $3 \\times 8 / 64 = 37.5\\%$. Registers are the bottleneck. To improve, reduce to 64 registers per thread: $256 \\times 64 = 16{,}384$ per block, $\\lfloor 65{,}536 / 16{,}384 \\rfloor = 4$ blocks, occupancy = 50%. Or reduce to 32 registers: 8 blocks, 100%. But register reduction may cause spills."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "NVIDIA's Tensor Core evolution added TF32 in Ampere (2020), FP8 in Hopper (2022), and FP4 in Blackwell (2024). The H100 achieves 989 TFLOPS at TF32, 1,979 TFLOPS at FP16, and 3,958 TFLOPS at FP8. Why does the throughput approximately double with each precision halving?",
+      "options": [
+        "Lower precision operations require fewer clock cycles to complete",
+        "Each precision halving doubles the number of operands that fit in the same datapath width, enabling twice as many multiply-accumulate operations per cycle",
+        "NVIDIA adds twice as many Tensor Cores with each new architecture generation",
+        "Lower precision formats use simpler circuits that can be clocked at twice the frequency"
+      ],
+      "correct": 1,
+      "explanation": "Tensor Cores operate on fixed-width datapaths. When operands are half the bit-width (e.g., 8-bit vs 16-bit), twice as many operands fit in the same datapath, enabling twice as many multiply-accumulate operations per cycle. This is analogous to how a 256-bit SIMD lane can process 8 FP32 values or 16 FP16 values. Additionally, halving precision halves the memory footprint, so data can be delivered to the Tensor Cores at twice the rate for the same bandwidth. The Tensor Core count (528 on H100) stays constant across precisions -- only the per-core throughput changes."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which statement correctly describes the difference between GPU SIMT and CPU SIMD execution models?",
+      "options": [
+        "SIMT and SIMD are identical; both execute the same instruction on multiple data elements with no support for divergent control flow",
+        "SIMT allows each thread to follow independent control flow paths (with serialization cost), while SIMD requires the programmer to explicitly write vector operations with masked instructions for conditional execution",
+        "SIMD supports thread divergence naturally, while SIMT requires explicit masking",
+        "SIMT uses wider vector registers (1024-bit) compared to SIMD (256-bit or 512-bit)"
+      ],
+      "correct": 1,
+      "explanation": "SIMT (Single Instruction, Multiple Threads) and SIMD (Single Instruction, Multiple Data) both execute an operation on multiple data elements simultaneously. The key difference is programmability: in SIMD (like AVX-512), the programmer writes explicit vector instructions and manages masking for conditional operations. In SIMT, the programmer writes scalar code for a single thread, and the hardware implicitly runs it on 32 threads (a warp). When threads diverge (take different branches), SIMT hardware automatically serializes the paths using active masks -- no programmer intervention needed. This makes CUDA dramatically easier to program than hand-vectorized SIMD code, at the cost of hardware complexity for managing divergence."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A warp performs 32 float32 loads from global memory. Thread $i$ accesses byte address $128i$ (stride = 128 bytes between consecutive threads). Each load is 4 bytes. How many 128-byte memory transactions are needed, and what is the bandwidth utilization?",
+      "options": [
+        "1 transaction, 100% utilization (all accesses fit in one cache line)",
+        "4 transactions, 25% utilization",
+        "32 transactions, 3.125% utilization (each thread needs its own cache line)",
+        "16 transactions, 6.25% utilization"
+      ],
+      "correct": 2,
+      "explanation": "Thread 0 accesses byte 0 (cache line 0), thread 1 accesses byte 128 (cache line 1), thread 2 accesses byte 256 (cache line 2), ..., thread 31 accesses byte $31 \\times 128 = 3968$ (cache line 31). Each thread's address is in a different 128-byte cache line, requiring 32 separate transactions. Total bytes transferred: $32 \\times 128 = 4{,}096$ bytes. Useful bytes: $32 \\times 4 = 128$ bytes. Utilization = $128 / 4{,}096 = 3.125\\%$. This is the worst-case scenario -- 32x wasted bandwidth compared to coalesced access. The fix: restructure data so that consecutive threads access consecutive addresses."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "On the H100, each SM has 4 warp schedulers. With 132 SMs, the GPU can issue instructions to how many warps per cycle?",
+      "options": [
+        "132 warps (one per SM)",
+        "528 warps (4 per SM x 132 SMs)",
+        "8,448 warps (64 max warps per SM x 132 SMs)",
+        "16,896 warps (one per CUDA core)"
+      ],
+      "correct": 1,
+      "explanation": "Each of the H100's 132 SMs has 4 warp schedulers, and each scheduler can issue one instruction to one warp per cycle. So the GPU can issue instructions to $132 \\times 4 = 528$ warps per cycle. Note the distinction: the H100 can have up to $132 \\times 64 = 8{,}448$ warps resident (active) across all SMs, but only 528 of those warps are actually issuing instructions in any given cycle. The remaining warps are either waiting for their turn to be scheduled, stalled on memory, or blocked at a barrier. This is precisely the latency-hiding mechanism -- while 528 warps execute, thousands more are waiting, ready to swap in when a warp stalls."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "cuBLAS achieves approximately 800-850 TFLOPS for TF32 GEMM on the H100 SXM5, which is ~85% of the 989 TFLOPS theoretical peak. For small matrices (m = n = k = 128), performance drops dramatically. Why?",
+      "options": [
+        "Small matrices do not fit in the register file, causing excessive spilling",
+        "The kernel launch overhead for small matrices exceeds the computation time",
+        "Small matrices are memory-bandwidth-bound rather than compute-bound: the ratio of computation (O(n^3)) to data movement (O(n^2)) is too low to saturate the Tensor Cores",
+        "The H100's Tensor Cores require matrices larger than 256x256 to function correctly"
+      ],
+      "correct": 2,
+      "explanation": "GEMM performs $O(n^3)$ multiply-add operations on $O(n^2)$ data. The arithmetic intensity (FLOPS per byte) scales as $O(n)$. For large matrices ($n \\geq 4096$), the arithmetic intensity is high enough that Tensor Cores are the bottleneck -- the memory system can deliver data fast enough, and performance is compute-bound (achieving 80-90% of peak). For small matrices ($n = 128$), the arithmetic intensity is low: $2 \\times 128^3 / (3 \\times 128^2 \\times 4) \\approx 21$ FLOPS/byte. The H100 needs roughly $989 \\times 10^{12} / (3.35 \\times 10^{12}) \\approx 295$ FLOPS/byte to be compute-bound at TF32. At 21 FLOPS/byte, the kernel is deeply memory-bound, achieving a small fraction of peak compute."
+    }
+  ]
+}

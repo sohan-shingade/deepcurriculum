@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A RISC-V I-type instruction `ADDI x10, x11, -5` needs to be encoded. The opcode for I-type arithmetic is 0010011, funct3 for ADDI is 000. What is the 12-bit immediate field for -5?",
+      "options": [
+        "000000000101 (5 in unsigned binary)",
+        "111111111011 (two's complement of -5 in 12 bits)",
+        "100000000101 (sign bit + magnitude of 5)",
+        "111111111010 (two's complement of -6)"
+      ],
+      "correct": 1,
+      "explanation": "RISC-V immediates are sign-extended from 12 bits to 32 bits. To encode -5 in 12-bit two's complement: start with 5 = 000000000101, invert all bits to get 111111111010, add 1 to get 111111111011. Verification: sign-extend to 32 bits gives 11111111111111111111111111111011, which is -5 in 32-bit two's complement. The full encoding: imm[11:0]=111111111011, rs1=01011 (x11), funct3=000, rd=01010 (x10), opcode=0010011."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A 64 KB, 4-way set-associative cache with 64-byte blocks on a 32-bit address. How many sets does this cache have, and how many bits are used for the set index?",
+      "options": [
+        "256 sets, 8 index bits",
+        "512 sets, 9 index bits",
+        "1024 sets, 10 index bits",
+        "128 sets, 7 index bits"
+      ],
+      "correct": 0,
+      "explanation": "Number of sets: $S = \\frac{\\text{Cache size}}{\\text{Associativity} \\times \\text{Block size}} = \\frac{65536}{4 \\times 64} = \\frac{65536}{256} = 256$ sets. Set index bits: $\\log_2(256) = 8$ bits. Block offset bits: $\\log_2(64) = 6$ bits. Tag bits: $32 - 8 - 6 = 18$ bits. Always compute sets first (total size / (ways x block size)), then take log2 for index bits. A common mistake is forgetting to divide by associativity — that would give 1024 sets (correct only for direct-mapped)."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In a Tomasulo trace, instruction I2 (ADD) depends on I1 (MUL, 4-cycle latency). If I1 issues in cycle 1, when is the earliest cycle that I2 can BEGIN execution (not including the write cycle)?",
+      "options": [
+        "Cycle 5 (immediately after I1 finishes execution)",
+        "Cycle 6 (after I1 writes its result on the CDB in cycle 5, I2 captures the value and starts in cycle 6)",
+        "Cycle 7 (one cycle after I2 captures the value)",
+        "Cycle 2 (I2 does not need to wait for I1)"
+      ],
+      "correct": 1,
+      "explanation": "Timeline: I1 issues cycle 1, executes cycles 1-4 (4 cycles), writes result on CDB in cycle 5. When I1's result appears on the CDB in cycle 5, I2's reservation station captures the value (Vj updated, Qj cleared). I2 can begin execution the next cycle — cycle 6. The one-cycle gap between CDB broadcast and execution start models the time to capture the value and begin the new computation. So I2 begins execution in cycle 6, completes in cycle 6 (ADD = 1 cycle), and writes its result on the CDB in cycle 7."
+    }
+  ]
+}

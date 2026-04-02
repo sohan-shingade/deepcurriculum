@@ -1,0 +1,58 @@
+{
+  "readings": [
+    {
+      "title": "TOP500 List (November 2025)",
+      "url": "https://top500.org/lists/top500/2025/11/",
+      "type": "reference",
+      "description": "The official TOP500 ranking of the world's fastest supercomputers. Updated twice yearly. El Capitan, Frontier, Aurora, and JUPITER all crossed the exascale threshold."
+    },
+    {
+      "title": "El Capitan System Overview",
+      "url": "https://hpc.llnl.gov/hardware/compute-platforms/el-capitan",
+      "type": "reference",
+      "description": "LLNL's official page on El Capitan, including architecture details of the AMD MI300A APU and HPE Cray EX255a system design."
+    },
+    {
+      "title": "Frontier User Guide (OLCF)",
+      "url": "https://docs.olcf.ornl.gov/systems/frontier_user_guide.html",
+      "type": "reference",
+      "description": "Detailed hardware documentation for Frontier, covering node architecture, MI250X GPU specs, Slingshot interconnect, and Orion file system."
+    },
+    {
+      "title": "Kim, Dally, and Abts: Technology-Driven, Highly-Scalable Dragonfly Topology (ISCA 2008)",
+      "url": "https://research.google.com/pubs/archive/34926.pdf",
+      "type": "paper",
+      "description": "The original dragonfly topology paper. Introduces the hierarchical topology with global and local links, analyzes minimal and non-minimal routing, and demonstrates cost advantages over fat trees at scale."
+    },
+    {
+      "title": "TPU v4 Architecture (arXiv 2304.01433)",
+      "url": "https://arxiv.org/abs/2304.01433",
+      "type": "paper",
+      "description": "Google's paper on TPU v4 architecture, covering systolic arrays, 3D torus interconnect with optical circuit switching, and pod-level performance."
+    },
+    {
+      "title": "Rabenseifner: Optimization of Collective Reduction Operations (ICCS 2004)",
+      "url": "https://fs.hlrs.de/projects/rabenseifner/publ/myreduce_iccs2004_2.pdf",
+      "type": "paper",
+      "description": "The foundational paper on the Rabenseifner algorithm for MPI allreduce, combining recursive halving-doubling to achieve both logarithmic latency and near-optimal bandwidth."
+    },
+    {
+      "title": "Thakur et al.: Optimization of MPI Collective Communication (IJHPCA)",
+      "url": "https://web.cels.anl.gov/~thakur/papers/ijhpca-coll.pdf",
+      "type": "paper",
+      "description": "Comprehensive analysis of MPI collective algorithms including broadcast, reduce, allreduce, and alltoall. Covers the algorithm selection framework used in MPICH."
+    },
+    {
+      "title": "Cerebras CS-3 and WSE-3",
+      "url": "https://www.cerebras.ai/chip",
+      "type": "reference",
+      "description": "Cerebras wafer-scale engine specifications: 900,000 AI cores, 44 GB SRAM on-die, 21 PB/s memory bandwidth. Architectural overview of the SRAM-only design philosophy."
+    },
+    {
+      "title": "Al-Fares et al.: A Scalable, Commodity Data Center Network Architecture (SIGCOMM 2008)",
+      "url": "http://ccr.sigcomm.org/online/files/p63-alfares.pdf",
+      "type": "paper",
+      "description": "The fat tree (Clos network) paper that demonstrated how commodity switches can build full-bisection-bandwidth data center networks. Foundation for modern data center networking."
+    }
+  ]
+}

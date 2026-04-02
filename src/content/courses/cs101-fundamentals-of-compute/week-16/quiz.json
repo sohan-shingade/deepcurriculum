@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 15: FPGA and HFT",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Boutros et al. (IEEE FPT 2017) FPGA trading system achieved 270 ns average tick-to-trade latency at 156.2 MHz using HLS. How many clock cycles does this correspond to, and what was the resource utilization?",
+      "options": [
+        "42 clock cycles; <8% logic, ~22% BRAM, 0% DSP",
+        "270 clock cycles; 50% logic, 50% BRAM",
+        "10 clock cycles; 90% logic, 80% BRAM",
+        "156 clock cycles; 15% logic, 10% BRAM"
+      ],
+      "correct": 0,
+      "explanation": "At 156.2 MHz, clock period = $1000/156.2 \\approx 6.4$ ns. $270 / 6.4 \\approx 42$ clock cycles. The system used <8% logic, ~22% BRAM, and 0% DSP on a Kintex UltraScale XCKU115. The low utilization is remarkable: the complete trading system (network stack, FAST parser, order book, strategy, order gateway) leaves over 90% of the FPGA available for more complex strategies. This proved that HLS is viable for HFT -- you do not need hand-coded RTL to achieve competitive latency."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An FPGA order book uses a price-indexed array with 1024 levels. A software order book uses a red-black tree with O(log N) operations. For a book with 500 active price levels, how do the worst-case operation counts compare?",
+      "options": [
+        "FPGA: 1 operation, Software: 9 comparisons ($\\log_2 500$)",
+        "FPGA: 1024 operations (scan full array), Software: 9 comparisons",
+        "FPGA: 500 operations, Software: 500 operations (both linear)",
+        "FPGA: O(1) array access (1 BRAM read + 1 write = 2 cycles), Software: O(log 500) $\\approx$ 9 node traversals, each potentially cache-missing (2-5 ns per miss)"
+      ],
+      "correct": 3,
+      "explanation": "The FPGA price-indexed array maps price directly to an array index: $\\text{index} = (\\text{price} - \\text{base}) / \\text{tick}$. This is a single subtraction and a direct memory access -- 1 BRAM read to get current data, 1 write to update. Total: 2 clock cycles, deterministic. The software red-black tree traverses $\\lceil\\log_2 500\\rceil = 9$ nodes, each requiring a comparison and pointer dereference. Each pointer chase can miss in L1 cache (1-2 ns penalty), L2 cache (5 ns), or even L3 (20+ ns). The hardware approach eliminates O(log N) entirely by using the price itself as the address."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why do FPGA trading systems use fixed-point integer arithmetic instead of floating point? Select the MOST complete answer.",
+      "options": [
+        "FPGAs cannot implement floating-point hardware",
+        "Fixed-point is more accurate for all computations",
+        "Integer operations are deterministic in timing (1 cycle for add), use minimal resources (~32 LUTs for a 32-bit adder vs ~300-500 for FP), and avoid rounding surprises at tick boundaries. Floating-point adds 3-8 cycles of latency and consumes 10x more area.",
+        "Exchanges require fixed-point arithmetic in their specifications"
+      ],
+      "correct": 2,
+      "explanation": "FPGAs CAN implement floating-point (Intel Agilex even has hardened FP16/BFloat16 support). But floating-point is avoided in the latency-critical trading path for three reasons: (1) Timing: integer add = 1 cycle; FP add = 3-8 cycles (exponent alignment, mantissa add, normalization). (2) Area: 32-bit integer adder = ~32 LUTs; single-precision FP adder = 300-500 LUTs. (3) Correctness: IEEE 754 rounding can produce unexpected results near tick boundaries (e.g., is the price 150.25 or 150.249999999...?). Fixed-point using $\\text{price} \\times 10^4$ eliminates all three issues. For example, \\$150.25 = 1,502,500 exactly, with no rounding possible."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The FAST protocol uses stop-bit encoding where value 942 encodes as bytes 0x07, 0xAE. How many bytes does the value 16,384 ($2^{14}$) require?",
+      "options": [
+        "2 bytes (14 data bits / 7 bits per byte = 2)",
+        "3 bytes (14 data bits requires 3 groups of 7: 0000001 0000000 0000000)",
+        "14 bytes (one per bit)",
+        "1 byte (fits in 7 bits with stop bit)"
+      ],
+      "correct": 1,
+      "explanation": "$16384 = 2^{14}$. In binary: 100 0000 0000 0000 (15 bits). Split into 7-bit groups from LSB: $0000000 \\mid 0000000 \\mid 0000001$. Three groups = 3 bytes. Byte 1: $0|0000001 = 0x01$ (more follows). Byte 2: $0|0000000 = 0x00$ (more follows). Byte 3: $1|0000000 = 0x80$ (stop bit set). Wire bytes: 0x01, 0x00, 0x80. This is why FAST's variable-length encoding makes parallel FPGA decoding hard -- you don't know that byte 2 starts at offset 1 until you verify byte 1 does NOT have its stop bit set."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Pre-trade risk checks in an FPGA pipeline execute in parallel combinational logic. If position check takes 3 ns, rate check takes 2 ns, price check takes 3 ns, notional check takes 4 ns (DSP multiply), and the final AND gate takes 0.1 ns, what is the total risk check latency?",
+      "options": [
+        "12.1 ns (sum of all checks)",
+        "4.1 ns (max individual check + AND gate, because all checks run in parallel)",
+        "3 ns (average of checks)",
+        "0.1 ns (only the AND gate, because checks are free)"
+      ],
+      "correct": 1,
+      "explanation": "In combinational hardware, parallel means physically parallel: four independent comparator circuits compute simultaneously. The total delay is the MAXIMUM of the individual delays (not the sum). The notional check is the slowest at 4 ns (it includes a DSP multiplication). After all four results are ready, the AND gate combines them in 0.1 ns. Total: $4.0 + 0.1 = 4.1$ ns. If these were sequential (as in software), total would be $3 + 2 + 3 + 4 + 0.1 = 12.1$ ns -- nearly 3x worse. This parallelism is free in hardware: you just instantiate four comparators."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "McKay Brothers provides microwave links between CME Aurora, IL and NYSE Mahwah, NJ with 7.83 ms round-trip latency. Fiber optic achieves ~13.0 ms. What is the approximate one-way advantage of microwave, and what physical principle causes the difference?",
+      "options": [
+        "~0.5 ms advantage; microwave uses higher frequencies than fiber",
+        "~2.6 ms one-way advantage; light travels at $c/n$ in glass fiber (where $n \\approx 1.47$) but at approximately $c$ in air, making microwave ~47% faster. Fiber also follows longer geographic routes.",
+        "~5.2 ms advantage; fiber has higher electrical resistance",
+        "~1.0 ms advantage; microwave towers are closer together"
+      ],
+      "correct": 1,
+      "explanation": "One-way microwave: $7.83/2 \\approx 3.92$ ms. One-way fiber: $13.0/2 = 6.5$ ms. Advantage: $6.5 - 3.92 \\approx 2.58$ ms one-way. The physics: electromagnetic waves (light and microwave are both EM waves) travel at $c \\approx 299{,}792$ km/s in vacuum/air. In glass fiber with refractive index $n \\approx 1.47$, speed drops to $c/n \\approx 203{,}940$ km/s. The ratio $299{,}792/203{,}940 \\approx 1.47$ = same as $n$. Additionally, fiber routes follow roads and rights-of-way (longer than straight-line), while microwave towers can maintain closer to line-of-sight. For cross-exchange arbitrage (e.g., CME futures vs NYSE equities), this 2.6 ms advantage per leg is enormous."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "NYSE's Mahwah colocation facility uses Optical Backscatter Reflectometry (OBR) to verify cable equalization. What is the specific latency impact of one foot of fiber optic cable?",
+      "options": [
+        "1 picosecond per foot",
+        "1 nanosecond per foot",
+        "1 microsecond per foot",
+        "1 millisecond per foot"
+      ],
+      "correct": 1,
+      "explanation": "Light in fiber travels at $c/n \\approx 204{,}000$ km/s $\\approx 0.204$ m/ns $\\approx 0.67$ ft/ns. Inverting: approximately 1.5 ns per foot. ICE/NYSE rounds this to approximately '1 foot = 1 nanosecond' for practical purposes (the exact value depends on the fiber type and wavelength). This is why cable equalization matters: if cabinet A is 50 feet closer to the matching engine switch than cabinet B, that is ~50 ns of advantage -- comparable to an entire pipeline stage in an FPGA trading system. NYSE normalizes all connections so every customer has the same cable length."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "IMC Trading builds FPGA trading infrastructure in-house rather than purchasing off-the-shelf solutions. According to their published statements, what is the key advantage of their approach?",
+      "options": [
+        "Commercial FPGA solutions are more expensive than in-house development",
+        "Hardware engineers work 'in lockstep with software engineers and traders, carefully dissecting trading algorithms into the pieces that are best suited for hardware versus software' -- enabling maximum customization and competitive edge",
+        "In-house development is faster than buying commercial solutions",
+        "Commercial solutions do not support the FAST protocol"
+      ],
+      "correct": 1,
+      "explanation": "IMC's published articles emphasize the tight collaboration between hardware engineers, software engineers, and traders. The decision of what runs on FPGA versus CPU is 'deliberate and ongoing,' with each team bringing domain expertise. Commercial solutions (like Exegy Nexus or Algo-Logic) provide the same technology to all customers -- there is no competitive edge in using the same platform as your competitors. In-house development costs $5M+ and takes 3+ years but provides customization that cannot be replicated. The trade-off: 'As an FPGA engineer, it may take two to three hours of compilation time before you know whether your adjustment will result in the outcome you want.'"
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A published FPGA order book system (IEEE 2014) handles 119,275 instruments simultaneously with 253 ns average latency. What data structure does it use for symbol-to-book mapping, and why?",
+      "options": [
+        "Binary search tree for O(log N) lookup",
+        "Direct array indexing by symbol ID for O(1) lookup",
+        "Cuckoo hashing for O(1) worst-case lookup -- two parallel memory accesses resolve any collision, and the high load factor (>90%) is memory-efficient with 144 Mbit QDR SRAM",
+        "Content-Addressable Memory (CAM) for parallel search"
+      ],
+      "correct": 2,
+      "explanation": "Cuckoo hashing provides O(1) worst-case lookup (not just amortized average). Each key has two possible locations (computed by two hash functions). On lookup, both locations are checked in parallel using two memory accesses. If the key is in either location, it is found in exactly 2 memory reads -- deterministic timing. The system achieves >90% memory utilization with 144 Mbit QDR SRAM, enough for 119,275 instruments. Standard hash tables have O(1) average but O(N) worst case (chain traversal). CAMs would work but are limited in size (typically 1K-64K entries on FPGA). Binary trees are O(log N) with cache-miss penalties."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a market-making strategy, the inventory skew formula is: $\\text{bid} = \\text{mid} - \\text{half\\_spread} - \\text{skew} \\times \\text{position}$. If a firm is long 500 shares with skew coefficient of 2 fixed-point units per share, and mid = 1,502,500, half_spread = 50, what is the bid price, and what is the effective full spread?",
+      "options": [
+        "Bid = 1,501,450; effective spread = 2,100 (21 ticks, much wider than base)",
+        "Bid = 1,502,450; effective spread = 100 (1 tick, same as base)",
+        "Bid = 1,500,500; effective spread = 4,000 (40 ticks)",
+        "Bid = 1,501,950; effective spread = 1,100 (11 ticks)"
+      ],
+      "correct": 0,
+      "explanation": "skew_amount = $2 \\times 500 = 1000$. bid = $1{,}502{,}500 - 50 - 1000 = 1{,}501{,}450$. ask = $1{,}502{,}500 + 50 + 1000 = 1{,}503{,}550$. Effective spread = $1{,}503{,}550 - 1{,}501{,}450 = 2{,}100$ = 21 ticks = \\$0.21. The base spread was $2 \\times 50 = 100$ = 1 tick = \\$0.01. The 500-share long position has widened the spread by $21\\times$ on each side. This is intentional: the market maker wants to discourage further buying (lower bid) and encourage selling (higher ask, which is more attractive to sellers). If filled on the ask, the market maker reduces its risky long position."
+    }
+  ]
+}

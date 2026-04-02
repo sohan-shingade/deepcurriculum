@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "An instruction sequence has: I1 writes R3, I2 reads R3 (RAW), I3 writes R3 (WAW with I1), I4 reads R3 (RAW on I3). Which hazards can register renaming eliminate?",
+      "options": [
+        "RAW between I1→I2 and I3→I4, because renaming removes all dependencies",
+        "WAW between I1 and I3 only, because RAW dependencies are true data dependencies that cannot be eliminated",
+        "All hazards, because renaming assigns unique physical registers to every write",
+        "None — renaming only helps with WAR hazards"
+      ],
+      "correct": 1,
+      "explanation": "Register renaming eliminates **name dependencies** — WAR (write-after-read) and WAW (write-after-write) — but cannot eliminate **true data dependencies** (RAW). After renaming, I1 writes to physical register P10 and I3 writes to P11. The WAW conflict disappears because they write to different physical registers. However, I2 still needs the value I1 produces (true dependency on P10), and I4 still needs the value I3 produces (true dependency on P11). RAW dependencies reflect genuine data flow — no renaming trick can make a consumer not need its producer's result."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "In Tomasulo's algorithm, instruction I2 (ADD F6, F0, F8) issues in cycle 2, and F0 is being produced by I1 (MUL in Mul1). At issue time, what is stored in I2's reservation station for the F0 operand?",
+      "options": [
+        "Vj = current value of F0 from the register file, Qj = 0",
+        "Vj = undefined, Qj = Mul1 (tag of the producing reservation station)",
+        "Vj = 0, Qj = Mul1, and the reservation station stalls until F0 is ready",
+        "The instruction is not issued because F0 is not ready"
+      ],
+      "correct": 1,
+      "explanation": "When I2 issues, the register status table shows F0 → Mul1 (I1 has not yet completed). Tomasulo's algorithm does NOT stall at issue — it issues the instruction into a reservation station and records the tag (Mul1) in the Qj field. The Vj field is left undefined (it will be filled when Mul1 broadcasts its result on the CDB). The reservation station monitors the CDB, and when a broadcast with tag Mul1 appears, it captures the value into Vj and clears Qj to 0. Only when both Qj and Qk are 0 (both operands available) does the instruction begin execution. This deferred-execution model is what enables out-of-order execution — instructions issue in order but execute when their operands become available."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A processor with a 512-entry ROB is executing code that encounters a cache miss taking 200 cycles, and the processor issues at 4 instructions/cycle. What happens when the ROB fills?",
+      "options": [
+        "The processor switches to in-order execution mode until the cache miss resolves",
+        "The oldest instructions are evicted from the ROB to make room for new ones",
+        "The processor stalls — no new instructions can be issued until the cache miss resolves and the head of the ROB can commit, freeing entries",
+        "The processor commits speculative instructions to free ROB space"
+      ],
+      "correct": 2,
+      "explanation": "The ROB enforces in-order commit. When a cache miss stalls the instruction at the head of the ROB, no entries can be freed because commit happens in order. After $512 / 4 = 128$ cycles, the ROB is full and the processor stalls: it cannot issue new instructions because there are no free ROB entries. The processor remains stalled until the cache miss resolves (at cycle 200), the head instruction commits, and entries begin to free up. This is why ROB sizes keep growing — a 512-entry ROB can absorb a 128-cycle stall at 4 IPC, but a 200-cycle L2 miss requires an 800-entry ROB to avoid stalling. Real cache misses to main memory can take 200-400 cycles, which is why processors like Apple's M1 Firestorm core have an estimated 630+ entry ROB."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A processor with ROB-based speculation encounters a branch misprediction at ROB entry 45 (out of 512). ROB entries 1-44 are older instructions (some committed, some ready to commit). Entries 46-120 are younger speculative instructions. What happens?",
+      "options": [
+        "All 120 ROB entries are flushed and execution restarts from entry 1",
+        "Only entry 45 (the branch) is flushed; entries 46-120 continue executing",
+        "Entries 46-120 are flushed (squashed). Entries 1-44 are unaffected and continue committing in order. The fetch unit is redirected to the correct branch target.",
+        "The processor checkpoints the state at entry 45 and replays from there"
+      ],
+      "correct": 2,
+      "explanation": "On a branch misprediction, the ROB flushes all entries **younger** than the mispredicted branch — entries 46 through 120 in this case. These were speculatively executed along the wrong path, so their results are invalid. Their reservation stations are freed, their physical register mappings are released back to the free list, and the rename table (RAT) is restored to its state at the branch. Entries 1-44, which are older than the branch, are correct regardless of the branch outcome and continue to commit in order from the head of the ROB. The fetch unit is redirected to the correct branch target (the address computed when the branch resolved). This is precisely why the ROB exists — it ensures that mispredicted speculation never corrupts the architectural state."
+    }
+  ]
+}

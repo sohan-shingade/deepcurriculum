@@ -1,0 +1,708 @@
+---
+title: "Tool Use, Memory, and Evaluation for Agents"
+week: 4
+lecture: 2
+estimatedMinutes: 55
+---
+
+# Tool Use, Memory, and Evaluation for Agents
+
+In the previous lecture we built the skeleton of an agent: the perception-reasoning-action loop. Now we flesh out the organs. Tools give agents the ability to affect the world. Memory gives them continuity across interactions. And evaluation tells us whether the whole system actually works. These three pillars separate toy demos from production agent systems.
+
+## Tool Design Principles
+
+A tool is a function that an agent can call. That sentence hides enormous complexity. The agent does not "call" a function the way a programmer does — it generates text that gets parsed into a function call. This means the tool's interface must be designed for a language model, not for a human developer.
+
+### Granularity: The Goldilocks Problem
+
+Tools can be too coarse or too fine-grained:
+
+- **Too coarse**: A single `do_everything(task: str)` tool that takes natural language. This is just recursion — you have re-created the agent inside a tool. The model cannot reason about what the tool will do.
+- **Too fine**: Dozens of micro-operations like `open_file`, `read_line`, `close_file`. The agent wastes steps on plumbing instead of problem-solving.
+- **Just right**: Tools that correspond to meaningful atomic operations in the domain. `search_documents(query: str, limit: int)`, `execute_sql(query: str)`, `send_email(to: str, subject: str, body: str)`.
+
+The heuristic: each tool should represent one meaningful action that changes the agent's information state or the world state. If calling the tool does not advance the task by at least one conceptual step, it is too fine-grained.
+
+### Naming Conventions
+
+LLMs are sensitive to tool names. Studies by Patil et al. (2023) in **"Gorilla: Large Language Model Connected with Massive APIs"** showed that descriptive names significantly improve tool selection accuracy. Compare:
+
+- Bad: `fn_23`, `process`, `helper`
+- Good: `search_documentation`, `calculate_metric`, `create_github_issue`
+
+The name should be a verb-noun pair that unambiguously describes what the tool does. The model uses the name as a primary signal for tool selection.
+
+### Schema Design
+
+Every tool needs a typed schema that the model can understand. This is not optional — without a schema, the model guesses at the argument structure and frequently gets it wrong.
+
+```python
+import json
+from dataclasses import dataclass, field
+
+@dataclass
+class ToolParameter:
+    name: str
+    type: str  # "string", "integer", "float", "boolean", "array", "object"
+    description: str
+    required: bool = True
+    enum: list[str] | None = None
+    default: str | None = None
+
+@dataclass
+class ToolSchema:
+    name: str
+    description: str
+    parameters: list[ToolParameter] = field(default_factory=list)
+
+    def to_json_schema(self) -> dict:
+        """Convert to JSON Schema format (OpenAI function calling style)."""
+        properties = {}
+        required = []
+        for param in self.parameters:
+            prop = {
+                "type": param.type,
+                "description": param.description,
+            }
+            if param.enum:
+                prop["enum"] = param.enum
+            properties[param.name] = prop
+            if param.required:
+                required.append(param.name)
+
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        }
+
+# Define a well-designed tool schema
+search_tool = ToolSchema(
+    name="search_documents",
+    description="Search the knowledge base for documents matching a query. Returns a list of document snippets ranked by relevance.",
+    parameters=[
+        ToolParameter("query", "string", "The search query in natural language"),
+        ToolParameter("limit", "integer", "Maximum number of results to return (1-20)", required=False, default="5"),
+        ToolParameter("filter_type", "string", "Filter by document type", required=False, enum=["article", "code", "tutorial", "api_doc"]),
+    ],
+)
+
+print(json.dumps(search_tool.to_json_schema(), indent=2))
+```
+
+<ConceptCheck id="cc-1" />
+
+## The Tool Registry Pattern
+
+In production systems, tools are not hard-coded into the prompt. They are registered in a **tool registry** — a data structure that maps tool names to their implementations and schemas. This pattern enables dynamic tool discovery, schema validation, and dispatch.
+
+```python
+import json
+import math
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+@dataclass
+class RegisteredTool:
+    name: str
+    description: str
+    schema: dict
+    function: Callable
+    requires_confirmation: bool = False
+
+class ToolRegistry:
+    """Production tool registry with validation and dispatch."""
+
+    def __init__(self):
+        self._tools: dict[str, RegisteredTool] = {}
+
+    def register(self, tool: RegisteredTool) -> None:
+        """Register a tool. Raises if name conflicts."""
+        if tool.name in self._tools:
+            raise ValueError(f"Tool '{tool.name}' already registered")
+        self._tools[tool.name] = tool
+
+    def list_tools(self) -> list[dict]:
+        """Return schemas for all registered tools (sent to LLM)."""
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.schema,
+            }
+            for t in self._tools.values()
+        ]
+
+    def validate_call(self, name: str, arguments: dict) -> list[str]:
+        """Validate a tool call. Returns list of errors (empty = valid)."""
+        errors = []
+        if name not in self._tools:
+            errors.append(f"Unknown tool: '{name}'")
+            return errors
+
+        tool = self._tools[name]
+        schema = tool.schema
+        required = schema.get("required", [])
+
+        for req in required:
+            if req not in arguments:
+                errors.append(f"Missing required parameter: '{req}'")
+
+        valid_params = set(schema.get("properties", {}).keys())
+        for key in arguments:
+            if key not in valid_params:
+                errors.append(f"Unknown parameter: '{key}'")
+
+        return errors
+
+    def dispatch(self, name: str, arguments: dict) -> dict[str, Any]:
+        """Validate and execute a tool call."""
+        errors = self.validate_call(name, arguments)
+        if errors:
+            return {"success": False, "errors": errors}
+
+        tool = self._tools[name]
+        try:
+            result = tool.function(**arguments)
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "errors": [f"Execution error: {str(e)}"]}
+
+# Register tools
+registry = ToolRegistry()
+
+registry.register(RegisteredTool(
+    name="calculator",
+    description="Evaluate a mathematical expression",
+    schema={
+        "properties": {
+            "expression": {"type": "string", "description": "Math expression to evaluate"}
+        },
+        "required": ["expression"],
+    },
+    function=lambda expression: eval(expression, {"__builtins__": {}, "math": math}),
+))
+
+registry.register(RegisteredTool(
+    name="string_length",
+    description="Get the length of a string",
+    schema={
+        "properties": {
+            "text": {"type": "string", "description": "The string to measure"}
+        },
+        "required": ["text"],
+    },
+    function=lambda text: len(text),
+))
+
+# Test dispatch
+print("Valid call:", registry.dispatch("calculator", {"expression": "2 ** 10"}))
+print("Missing param:", registry.dispatch("calculator", {}))
+print("Unknown tool:", registry.dispatch("web_search", {"q": "test"}))
+print("Extra param:", registry.dispatch("string_length", {"text": "hello", "encoding": "utf8"}))
+```
+
+The registry pattern provides three critical capabilities for production systems:
+
+1. **Discovery**: The agent gets a current list of available tools, which can change dynamically based on context (e.g., admin tools only for admin users).
+2. **Validation**: Tool calls are validated before execution, catching hallucinated parameters and missing required fields.
+3. **Sandboxing**: The dispatch layer is a natural place to add permission checks, rate limiting, and audit logging.
+
+## Parallel Tool Calling and Dependency Graphs
+
+Modern LLM APIs (OpenAI, Anthropic) support **parallel tool calling** — the model can request multiple tool calls in a single response. This is the LLM Compiler pattern from our previous lecture, now at the API level.
+
+The challenge: not all tool calls are independent. If the model requests `get_user(id=5)` and `get_user_orders(user_id=5)`, the second call might depend on the first (to verify the user exists). The execution engine must analyze dependencies.
+
+```python
+from collections import defaultdict
+
+@dataclass
+class ToolCall:
+    id: str
+    tool_name: str
+    arguments: dict
+    depends_on: list[str] = field(default_factory=list)
+
+def build_execution_plan(calls: list[ToolCall]) -> list[list[ToolCall]]:
+    """
+    Build an execution plan that respects dependencies.
+    Returns a list of levels; calls in the same level can run in parallel.
+    """
+    # Build dependency graph
+    call_map = {c.id: c for c in calls}
+    in_degree = {c.id: len(c.depends_on) for c in calls}
+    dependents = defaultdict(list)
+
+    for call in calls:
+        for dep in call.depends_on:
+            dependents[dep].append(call.id)
+
+    # Topological sort by level
+    levels = []
+    queue = [cid for cid, deg in in_degree.items() if deg == 0]
+
+    while queue:
+        level = [call_map[cid] for cid in sorted(queue)]
+        levels.append(level)
+        next_queue = []
+        for cid in queue:
+            for dep_id in dependents[cid]:
+                in_degree[dep_id] -= 1
+                if in_degree[dep_id] == 0:
+                    next_queue.append(dep_id)
+        queue = next_queue
+
+    return levels
+
+# Example: three tool calls with dependencies
+calls = [
+    ToolCall("c1", "get_user", {"id": 5}),
+    ToolCall("c2", "get_weather", {"city": "NYC"}),
+    ToolCall("c3", "get_user_orders", {"user_id": 5}, depends_on=["c1"]),
+]
+
+plan = build_execution_plan(calls)
+for i, level in enumerate(plan):
+    names = [f"{c.tool_name}({c.arguments})" for c in level]
+    print(f"Level {i}: {' || '.join(names)}")
+```
+
+## Security and Sandboxing
+
+Tools are the attack surface of agent systems. An agent with a `run_sql` tool can drop tables. An agent with a `send_email` tool can spam. An agent with a `write_file` tool can overwrite critical system files. Trust boundaries are essential.
+
+**Principle of Least Privilege**: Each tool should have the minimum permissions necessary. A read-only database tool should not accept `DELETE` or `DROP` statements. A file tool should be restricted to a sandbox directory.
+
+**Input Validation**: Every tool argument must be validated before execution. This is not just type checking — it is semantic validation. A SQL tool should reject DDL statements. A file path tool should reject paths outside the sandbox.
+
+**Confirmation Gates**: High-risk operations (sending messages, making purchases, modifying data) should require human confirmation before execution. The agent proposes the action, the human approves or rejects it.
+
+```python
+def validate_sql_query(query: str) -> tuple[bool, str]:
+    """
+    Validate a SQL query for safety.
+    Returns (is_safe, reason).
+    """
+    dangerous_keywords = ["DROP", "DELETE", "TRUNCATE", "ALTER", "CREATE", "INSERT", "UPDATE"]
+    query_upper = query.upper().strip()
+
+    for keyword in dangerous_keywords:
+        if keyword in query_upper:
+            return False, f"Dangerous keyword '{keyword}' detected. Only SELECT queries are allowed."
+
+    if not query_upper.startswith("SELECT"):
+        return False, "Only SELECT queries are allowed."
+
+    # Check for SQL injection patterns
+    injection_patterns = ["--", ";", "/*", "*/", "UNION"]
+    for pattern in injection_patterns:
+        if pattern in query_upper and pattern != "--":
+            return False, f"Suspicious pattern '{pattern}' detected."
+
+    return True, "Query is safe."
+
+# Test
+test_queries = [
+    "SELECT * FROM users WHERE id = 5",
+    "DROP TABLE users",
+    "SELECT * FROM users; DELETE FROM users",
+    "SELECT * FROM users WHERE name = 'admin' -- OR 1=1",
+]
+
+for q in test_queries:
+    safe, reason = validate_sql_query(q)
+    status = "SAFE" if safe else "BLOCKED"
+    print(f"[{status}] {q[:50]}... -> {reason}")
+```
+
+<ConceptCheck id="cc-2" />
+
+## Memory Systems for Agents
+
+An agent without memory is stateless — it cannot learn from past interactions, track what it has already tried, or maintain context across long tasks. Memory is what turns a single-turn tool-calling system into a persistent agent.
+
+Following the taxonomy from **"Cognitive Architectures for Language Agents"** (Sumers et al. 2023), we distinguish four types of memory:
+
+### 1. Sensory Memory (Current Context)
+
+This is the LLM's context window — the raw input it sees on each turn. It includes the system prompt, conversation history, and tool results. It is the most immediate but most limited form of memory, bounded by the model's context length.
+
+$$M_{\text{sensory}} = [s_{\text{system}}, m_1, m_2, \ldots, m_t]$$
+
+where $s_{\text{system}}$ is the system prompt and $m_i$ are the messages in the conversation.
+
+### 2. Working Memory (Scratchpad)
+
+An explicit scratchpad where the agent stores intermediate results, plans, and notes. Unlike sensory memory, working memory is structured and agent-controlled. The agent decides what to write to and read from the scratchpad.
+
+### 3. Episodic Memory (Past Interactions)
+
+Records of past interactions, including successful strategies and failed attempts. This enables the agent to learn from experience — not through gradient updates, but through retrieval. "The last time I encountered this type of error, I fixed it by..."
+
+### 4. Semantic Memory (Knowledge Base)
+
+Long-term factual knowledge stored in a retrievable format, typically a vector database. This is the agent's "textbook" — stable knowledge that does not change between interactions.
+
+```python
+from dataclasses import dataclass, field
+from collections import deque
+import json
+
+@dataclass
+class MemoryEntry:
+    content: str
+    memory_type: str  # "observation", "thought", "action", "summary"
+    step: int
+    importance: float = 0.5  # 0-1 scale
+
+class AgentMemory:
+    """Multi-tier memory system for an agent."""
+
+    def __init__(self, window_size: int = 10, max_episodic: int = 100):
+        # Working memory: sliding window of recent entries
+        self.working: deque[MemoryEntry] = deque(maxlen=window_size)
+        # Episodic memory: stored past interaction summaries
+        self.episodic: list[MemoryEntry] = []
+        self.max_episodic = max_episodic
+        # Semantic memory: key-value knowledge store
+        self.semantic: dict[str, str] = {}
+        # Scratchpad: agent-controlled notes
+        self.scratchpad: dict[str, str] = {}
+        self._step = 0
+
+    def add_to_working(self, content: str, memory_type: str, importance: float = 0.5) -> None:
+        """Add an entry to working memory (sliding window)."""
+        entry = MemoryEntry(content, memory_type, self._step, importance)
+        self.working.append(entry)
+        self._step += 1
+
+    def summarize_and_archive(self) -> str:
+        """
+        Summarize current working memory and store in episodic memory.
+        In production, this calls the LLM for summarization.
+        """
+        if not self.working:
+            return ""
+
+        # Simulate summarization by concatenating key entries
+        important = [e for e in self.working if e.importance >= 0.7]
+        if not important:
+            important = list(self.working)[-3:]
+
+        summary_parts = [e.content for e in important]
+        summary = f"Summary (steps {important[0].step}-{important[-1].step}): " + " | ".join(summary_parts)
+
+        self.episodic.append(MemoryEntry(summary, "summary", self._step, 0.8))
+
+        # Trim episodic memory if needed
+        if len(self.episodic) > self.max_episodic:
+            # Keep the most important entries
+            self.episodic.sort(key=lambda e: e.importance, reverse=True)
+            self.episodic = self.episodic[:self.max_episodic]
+
+        return summary
+
+    def store_knowledge(self, key: str, value: str) -> None:
+        """Store a fact in semantic memory."""
+        self.semantic[key] = value
+
+    def retrieve_knowledge(self, query: str) -> list[str]:
+        """Retrieve relevant knowledge (simple keyword matching)."""
+        results = []
+        query_lower = query.lower()
+        for key, value in self.semantic.items():
+            if any(word in key.lower() for word in query_lower.split()):
+                results.append(f"{key}: {value}")
+        return results
+
+    def set_scratchpad(self, key: str, value: str) -> None:
+        """Write to the agent's scratchpad."""
+        self.scratchpad[key] = value
+
+    def get_context_string(self) -> str:
+        """Build the memory context to include in the LLM prompt."""
+        parts = []
+
+        if self.episodic:
+            parts.append("=== Past Context ===")
+            for entry in self.episodic[-3:]:
+                parts.append(entry.content)
+
+        if self.scratchpad:
+            parts.append("\n=== Scratchpad ===")
+            for k, v in self.scratchpad.items():
+                parts.append(f"{k}: {v}")
+
+        parts.append("\n=== Recent History ===")
+        for entry in self.working:
+            parts.append(f"[{entry.memory_type}] {entry.content}")
+
+        return "\n".join(parts)
+
+# Demonstrate the memory system
+memory = AgentMemory(window_size=5)
+
+# Store some semantic knowledge
+memory.store_knowledge("python_version", "Python 3.12 is the latest stable release")
+memory.store_knowledge("company_policy", "All API calls require authentication")
+
+# Simulate a multi-step interaction
+memory.add_to_working("User asks about API authentication", "observation", 0.8)
+memory.add_to_working("I should check the company policy", "thought", 0.6)
+memory.add_to_working("lookup('company_policy')", "action", 0.7)
+memory.add_to_working("All API calls require authentication", "observation", 0.9)
+memory.add_to_working("Now I'll explain auth to the user", "thought", 0.5)
+
+# Summarize and archive
+summary = memory.summarize_and_archive()
+print("Archived summary:", summary)
+print("\nFull context:")
+print(memory.get_context_string())
+```
+
+### Memory Management: The Summarization Problem
+
+The core challenge of agent memory is compression. The context window is finite, but the agent's experience grows without bound. The standard approach is **hierarchical summarization**:
+
+1. **Level 0**: Raw messages (kept in sliding window)
+2. **Level 1**: Summaries of conversation segments (kept in episodic memory)
+3. **Level 2**: Summaries of summaries (for very long interactions)
+
+Each summarization step loses information. The art is preserving the information that matters — key decisions, important facts, unresolved questions — while discarding the noise. Park et al. (2023) explored this extensively in **"Generative Agents: Interactive Simulacra of Human Behavior"**, where they implemented a memory system with importance scoring, recency weighting, and retrieval-based memory access.
+
+The formal model for memory retrieval uses a score combining recency, importance, and relevance:
+
+$$\text{score}(m) = \alpha \cdot \text{recency}(m) + \beta \cdot \text{importance}(m) + \gamma \cdot \text{relevance}(m, q)$$
+
+where $q$ is the current query, and $\alpha + \beta + \gamma = 1$.
+
+<ConceptCheck id="cc-3" />
+
+## Agent Evaluation: The Hard Problem
+
+Evaluating agents is fundamentally harder than evaluating LLMs. An LLM takes an input and produces an output — you can compare the output to a reference. An agent takes an input, executes a sequence of actions, and produces an output. You need to evaluate both the journey and the destination.
+
+### Outcome-Based Evaluation
+
+The simplest approach: did the agent get the right answer? This is necessary but insufficient. An agent that gets the right answer by calling 50 tools when 3 would suffice is inefficient. An agent that gets the right answer by hallucinating a tool call that happens to return the correct result is unreliable.
+
+$$\text{Outcome Score} = \begin{cases} 1 & \text{if answer matches reference} \\ 0 & \text{otherwise} \end{cases}$$
+
+### Trajectory-Based Evaluation
+
+Evaluate the sequence of actions, not just the final answer. Did the agent take reasonable steps? Did it use the right tools? Did it recover from errors?
+
+A trajectory is a sequence of (thought, action, observation) triples:
+
+$$\tau = [(t_1, a_1, o_1), (t_2, a_2, o_2), \ldots, (t_n, a_n, o_n)]$$
+
+We can evaluate a trajectory along multiple dimensions:
+
+1. **Tool Selection Accuracy**: Did the agent choose the right tool at each step?
+2. **Argument Correctness**: Were the tool arguments correct?
+3. **Redundancy**: Did the agent repeat actions unnecessarily?
+4. **Recovery**: When a tool call failed, did the agent recover appropriately?
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class TrajectoryStep:
+    thought: str
+    action: str
+    observation: str
+    expected_action: str = ""
+    is_redundant: bool = False
+
+@dataclass
+class EvaluationResult:
+    outcome_correct: bool
+    steps_taken: int
+    optimal_steps: int
+    tool_accuracy: float
+    redundancy_rate: float
+    total_score: float = 0.0
+
+    def compute_total(self, w_outcome: float = 0.4, w_efficiency: float = 0.3, w_accuracy: float = 0.3) -> float:
+        """Compute weighted total score."""
+        outcome_score = 1.0 if self.outcome_correct else 0.0
+        efficiency_score = min(self.optimal_steps / max(self.steps_taken, 1), 1.0)
+        accuracy_score = self.tool_accuracy
+        self.total_score = (
+            w_outcome * outcome_score +
+            w_efficiency * efficiency_score +
+            w_accuracy * accuracy_score
+        )
+        return self.total_score
+
+def evaluate_trajectory(
+    trajectory: list[TrajectoryStep],
+    expected_answer: str,
+    actual_answer: str,
+    optimal_steps: int,
+) -> EvaluationResult:
+    """Evaluate an agent trajectory."""
+    # Outcome: simple exact match (in production, use semantic similarity)
+    outcome_correct = expected_answer.lower().strip() == actual_answer.lower().strip()
+
+    # Tool accuracy: how many steps used the expected action
+    correct_tools = sum(
+        1 for step in trajectory
+        if step.expected_action and step.action == step.expected_action
+    )
+    steps_with_expected = sum(1 for s in trajectory if s.expected_action)
+    tool_accuracy = correct_tools / max(steps_with_expected, 1)
+
+    # Redundancy: what fraction of steps were redundant
+    redundant = sum(1 for s in trajectory if s.is_redundant)
+    redundancy_rate = redundant / max(len(trajectory), 1)
+
+    result = EvaluationResult(
+        outcome_correct=outcome_correct,
+        steps_taken=len(trajectory),
+        optimal_steps=optimal_steps,
+        tool_accuracy=tool_accuracy,
+        redundancy_rate=redundancy_rate,
+    )
+    result.compute_total()
+    return result
+
+# Evaluate a sample trajectory
+trajectory = [
+    TrajectoryStep("Need to find population", "search('US population')", "331M", "search('US population')"),
+    TrajectoryStep("Let me search again", "search('US population 2024')", "333M", is_redundant=True),
+    TrajectoryStep("Now calculate density", "calculator('333e6 / 3.8e6')", "87.6", "calculator('333e6 / 3.8e6')"),
+    TrajectoryStep("I have the answer", "finish('87.6 per sq mile')", "Done", "finish('87.6 per sq mile')"),
+]
+
+result = evaluate_trajectory(trajectory, "87.6 per sq mile", "87.6 per sq mile", optimal_steps=3)
+print(f"Outcome correct: {result.outcome_correct}")
+print(f"Steps: {result.steps_taken} (optimal: {result.optimal_steps})")
+print(f"Tool accuracy: {result.tool_accuracy:.2f}")
+print(f"Redundancy rate: {result.redundancy_rate:.2f}")
+print(f"Total score: {result.total_score:.2f}")
+```
+
+### Efficiency Metrics
+
+Beyond correctness, we care about resource consumption:
+
+- **Token efficiency**: Total tokens consumed (input + output) per task. Lower is better.
+- **Step efficiency**: $\eta = \frac{\text{optimal steps}}{\text{actual steps}}$. A value of 1.0 is perfect.
+- **Cost efficiency**: Dollar cost per successful task completion.
+- **Latency**: Wall-clock time from task submission to completion.
+
+These metrics matter enormously in production. An agent that is 95% accurate but uses 10x the tokens of a 90% accurate agent may not be the better choice.
+
+## The Reflexion Pattern
+
+**Shinn et al. (2023)** introduced **Reflexion** — a pattern where agents improve through self-reflection. After completing a task (successfully or not), the agent reflects on its performance and stores the reflection in memory for future tasks.
+
+The Reflexion loop:
+
+$$\text{For each task:}$$
+$$1. \text{ Execute task} \rightarrow \text{trajectory } \tau$$
+$$2. \text{ Evaluate } \tau \rightarrow \text{feedback } f$$
+$$3. \text{ Reflect on } (f, \tau) \rightarrow \text{reflection } r$$
+$$4. \text{ Store } r \text{ in memory}$$
+$$5. \text{ On next task, retrieve relevant reflections from memory}$$
+
+The key insight: the reflection is a natural language description of what went wrong and how to do better. "I called the search tool with too broad a query and got irrelevant results. Next time, I should use more specific search terms." This is stored in episodic memory and retrieved when the agent encounters a similar situation.
+
+```python
+@dataclass
+class ReflexionEntry:
+    task: str
+    success: bool
+    score: float
+    reflection: str
+    strategy_update: str
+
+class ReflexionMemory:
+    """Store and retrieve agent reflections."""
+
+    def __init__(self):
+        self.reflections: list[ReflexionEntry] = []
+
+    def add_reflection(self, entry: ReflexionEntry) -> None:
+        self.reflections.append(entry)
+
+    def get_relevant_reflections(self, task: str, k: int = 3) -> list[ReflexionEntry]:
+        """
+        Retrieve reflections relevant to the current task.
+        Uses simple keyword overlap; production uses embeddings.
+        """
+        task_words = set(task.lower().split())
+        scored = []
+        for ref in self.reflections:
+            ref_words = set(ref.task.lower().split())
+            overlap = len(task_words & ref_words) / max(len(task_words | ref_words), 1)
+            scored.append((overlap, ref))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [ref for _, ref in scored[:k]]
+
+    def build_reflexion_prompt(self, task: str) -> str:
+        """Build a prompt section with relevant past reflections."""
+        relevant = self.get_relevant_reflections(task)
+        if not relevant:
+            return ""
+
+        lines = ["=== Lessons from Past Experience ==="]
+        for ref in relevant:
+            status = "SUCCESS" if ref.success else "FAILURE"
+            lines.append(f"[{status}] Task: {ref.task}")
+            lines.append(f"  Reflection: {ref.reflection}")
+            lines.append(f"  Strategy: {ref.strategy_update}")
+        return "\n".join(lines)
+
+# Simulate Reflexion over multiple tasks
+memory = ReflexionMemory()
+
+# First attempt: agent used too-broad search
+memory.add_reflection(ReflexionEntry(
+    task="Find the GDP of France in 2023",
+    success=False,
+    score=0.3,
+    reflection="My search query 'France GDP' returned too many irrelevant results including historical data. I wasted 3 steps filtering.",
+    strategy_update="Use specific, time-bounded queries: 'France GDP 2023 current'",
+))
+
+# Second attempt: agent recovered well from a tool error
+memory.add_reflection(ReflexionEntry(
+    task="Calculate the compound interest on $10000",
+    success=True,
+    score=0.9,
+    reflection="The calculator tool errored on my first attempt because I used the ^ operator instead of **. I recovered by reformulating.",
+    strategy_update="Always use Python syntax (** not ^) for the calculator tool.",
+))
+
+# Now, when facing a similar task, retrieve relevant lessons
+new_task = "Find the GDP of Germany in 2024"
+prompt_addition = memory.build_reflexion_prompt(new_task)
+print(prompt_addition)
+```
+
+Reflexion is powerful because it addresses a fundamental limitation of LLM agents: they do not learn from experience within a session (no gradient updates). By storing natural language reflections and retrieving them, we simulate learning through retrieval rather than training. Shinn et al. showed that Reflexion improves agent performance on HumanEval coding tasks from 67% to 91% pass@1 over multiple iterations.
+
+<ConceptCheck id="cc-4" />
+
+## Putting It Together: The Complete Agent Stack
+
+A production agent system integrates all three pillars:
+
+1. **Tools**: Well-designed, typed, validated, sandboxed tools registered in a tool registry.
+2. **Memory**: Multi-tier memory with working memory (sliding window), episodic memory (past interactions), semantic memory (knowledge base), and scratchpad (agent-controlled notes).
+3. **Evaluation**: Continuous evaluation of trajectories for correctness, efficiency, and tool usage, with Reflexion-style learning from mistakes.
+
+The architecture looks like this:
+
+$$\text{User Request} \rightarrow \text{Retrieve Memory} \rightarrow \text{Plan} \rightarrow \text{[Execute with Tools]} \rightarrow \text{Evaluate} \rightarrow \text{Reflect} \rightarrow \text{Store in Memory}$$
+
+Each component has been designed with failure in mind. Tools validate inputs and return structured errors. Memory has bounded storage with importance-based eviction. Evaluation catches both outcome failures and trajectory inefficiencies. And Reflexion ensures the agent can improve without retraining.
+
+In the problem set for this week, you will build each of these components from scratch: a ReAct agent, a tool registry, a memory system, and an evaluation harness. By the end, you will have a complete agent framework — not a wrapper around someone else's library, but a system you understand from the ground up.

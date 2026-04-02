@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A startup is choosing between GPT-4o ($2.50/M input tokens) and a fine-tuned Llama 3.3 70B model ($0.40/M input tokens) for a customer-facing RAG application. On their eval suite, GPT-4o scores 0.91 and the Llama model scores 0.87. Both meet the minimum quality threshold of 0.85. What is the strongest argument for choosing the Llama model?",
+      "options": [
+        "Open-weight models are always better because you own the weights",
+        "The 6x cost reduction at scale outweighs the 4-point quality difference, especially since both exceed the quality threshold, and a better retrieval pipeline can close the quality gap",
+        "GPT-4o will be deprecated soon so it is risky to depend on it",
+        "Fine-tuned models do not hallucinate"
+      ],
+      "correct": 1,
+      "explanation": "This is the model commoditization argument in practice. When both models exceed your quality threshold, the decision should be driven by cost, latency, and architectural factors rather than marginal quality differences. At 100K queries/day, the cost difference between $2.50/M and $0.40/M is substantial. Furthermore, investments in retrieval quality (better chunking, re-ranking, hybrid search) can often close a 4-point quality gap more cost-effectively than upgrading the model. Option A is too absolute. Option C is speculation. Option D is false — all LLMs hallucinate."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A company is building an AI agent that can send emails on behalf of users. Which of the following is the MOST critical engineering requirement for production safety?",
+      "options": [
+        "Using the latest frontier model for maximum intelligence",
+        "A confirmation step before irreversible actions, with undo mechanisms and a complete audit trail",
+        "Implementing a beautiful UI for composing emails",
+        "Supporting multiple email providers for vendor diversity"
+      ],
+      "correct": 1,
+      "explanation": "When agents take real-world actions with real consequences — sending emails, modifying databases, making purchases — the primary engineering concern is safety, not capability. A confirmation step before irreversible actions prevents the agent from taking harmful actions due to hallucination, prompt injection, or misunderstanding. An audit trail enables post-hoc investigation and accountability. Undo mechanisms limit blast radius. The model quality (option A) matters but is secondary to safety infrastructure. This is a core lesson of agentic AI: the most dangerous failure mode is not a bad answer but a bad action."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An AI engineer is choosing their career specialization. They enjoy building developer tools, care deeply about API design, and want to work on infrastructure used by other engineers. Which career path is the best fit?",
+      "options": [
+        "AI Application Engineer — building user-facing AI products",
+        "ML Engineer — fine-tuning models and designing training pipelines",
+        "AI Platform Engineer — building evaluation frameworks, prompt management, and observability infrastructure",
+        "Research Engineer — implementing papers and running experiments"
+      ],
+      "correct": 2,
+      "explanation": "The described interests — developer tools, API design, infrastructure for other engineers — map directly to the AI Platform Engineer role. This role builds the tools and infrastructure that AI Application Engineers and ML Engineers use: evaluation frameworks, prompt management systems, feature flag services, observability pipelines. It sits at the intersection of platform engineering and AI infrastructure. Application Engineers focus on end-user products, ML Engineers on models, and Research Engineers on experiments. The platform role is specifically about developer experience and internal tooling."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Under the EU AI Act, an AI system used for medical diagnosis is classified as high-risk. Which engineering requirement does this classification impose?",
+      "options": [
+        "The system must use only open-source models",
+        "The system must achieve 100% accuracy on all test cases",
+        "The system must include human oversight mechanisms, transparency about AI involvement, data governance, accuracy metrics, and robustness testing",
+        "The system must not use any personally identifiable information"
+      ],
+      "correct": 2,
+      "explanation": "The EU AI Act's high-risk classification requires specific technical and organizational measures: human oversight (a human must be able to intervene), transparency (users must know they are interacting with AI), data governance (training data quality and bias auditing), accuracy metrics (documented and continuously measured), and robustness testing (adversarial and edge case testing). It does not mandate open-source (option A), perfect accuracy (option B, which is impossible), or prohibition of PII (option D, though GDPR applies separately). For engineers, this means building audit trails, explainability features, and bias testing as first-class system requirements."
+    }
+  ]
+}

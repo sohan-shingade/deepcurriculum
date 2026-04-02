@@ -1,0 +1,1020 @@
+---
+title: "Inter-Agent Communication, Synchronization, and Debugging"
+week: 6
+lecture: 2
+estimatedMinutes: 50
+---
+
+# Inter-Agent Communication, Synchronization, and Debugging
+
+Last lecture, we covered multi-agent architecture patterns — the *shapes* of multi-agent systems. This lecture is about the plumbing: how agents actually talk to each other, how they share state without stepping on each other's work, and how you debug a system where no single agent has the complete picture.
+
+These are the problems that separate a demo from a production system. A demo can use a Python dictionary as shared state and print statements for debugging. A production system serving thousands of concurrent users needs concurrency control, structured communication protocols, distributed tracing, and systematic evaluation. The gap between these two is enormous, and this lecture bridges it.
+
+---
+
+## 1. Shared State Management
+
+Every multi-agent system needs some form of shared state. Even in a pure pipeline architecture, the intermediate outputs between stages are shared state. The question is how to manage that state as agents read and write concurrently.
+
+### 1.1 The Blackboard Pattern
+
+The blackboard pattern (introduced in the Hearsay-II speech understanding system in the 1970s) provides a centralized data store that all agents can read from and write to. Think of it as a shared whiteboard in a conference room — any expert can walk up and add their contribution.
+
+A production blackboard needs three operations:
+
+1. **Read:** An agent queries the blackboard for relevant information
+2. **Write:** An agent adds or updates information on the blackboard
+3. **Subscribe:** An agent registers interest in changes to specific keys or sections
+
+The subscribe mechanism is critical. Without it, agents must poll the blackboard continuously, wasting compute. With subscriptions, agents are notified only when relevant data changes — the observer pattern applied to multi-agent coordination.
+
+```python
+from dataclasses import dataclass, field
+from typing import Any, Callable
+from collections import defaultdict
+import json
+import time
+
+@dataclass
+class BlackboardEntry:
+    """A single entry on the blackboard."""
+    key: str
+    value: Any
+    author: str
+    timestamp: float
+    version: int
+
+@dataclass
+class Blackboard:
+    """Shared state blackboard for multi-agent coordination."""
+    _store: dict[str, BlackboardEntry] = field(default_factory=dict)
+    _history: list[BlackboardEntry] = field(default_factory=list)
+    _subscribers: dict[str, list[Callable]] = field(default_factory=lambda: defaultdict(list))
+    _version_counter: int = 0
+
+    def read(self, key: str) -> BlackboardEntry | None:
+        """Read the current value for a key."""
+        return self._store.get(key)
+
+    def read_all(self) -> dict[str, Any]:
+        """Read all current values."""
+        return {k: v.value for k, v in self._store.items()}
+
+    def write(self, key: str, value: Any, author: str) -> BlackboardEntry:
+        """Write a value to the blackboard."""
+        self._version_counter += 1
+        entry = BlackboardEntry(
+            key=key,
+            value=value,
+            author=author,
+            timestamp=time.time(),
+            version=self._version_counter
+        )
+        self._store[key] = entry
+        self._history.append(entry)
+
+        # Notify subscribers
+        for callback in self._subscribers.get(key, []):
+            callback(entry)
+
+        return entry
+
+    def subscribe(self, key: str, callback: Callable):
+        """Subscribe to changes for a specific key."""
+        self._subscribers[key].append(callback)
+
+    def get_history(self, key: str = None) -> list[dict]:
+        """Get the write history, optionally filtered by key."""
+        entries = self._history
+        if key:
+            entries = [e for e in entries if e.key == key]
+        return [
+            {"key": e.key, "value": e.value, "author": e.author, "version": e.version}
+            for e in entries
+        ]
+
+    def get_contributors(self) -> dict[str, int]:
+        """Count contributions by each agent."""
+        counts = defaultdict(int)
+        for entry in self._history:
+            counts[entry.author] += 1
+        return dict(counts)
+
+
+# Demo: Research synthesis with blackboard
+board = Blackboard()
+
+# Track notifications
+notifications = []
+board.subscribe("findings", lambda e: notifications.append(f"New finding from {e.author}"))
+board.subscribe("status", lambda e: notifications.append(f"Status update: {e.value}"))
+
+# Agents write their findings
+board.write("findings", {"topic": "transformer efficiency", "summary": "FlashAttention reduces memory from O(n^2) to O(n)"}, author="literature-agent")
+board.write("findings", {"topic": "multi-agent overhead", "summary": "Communication costs dominate for >5 agents"}, author="analysis-agent")
+board.write("methodology", {"approach": "systematic review", "databases": ["arxiv", "semantic scholar"]}, author="methodology-agent")
+board.write("status", "initial findings collected", author="coordinator")
+
+print("Blackboard state:")
+for key, value in board.read_all().items():
+    print(f"  {key}: {json.dumps(value)}")
+
+print(f"\nContributors: {board.get_contributors()}")
+print(f"Notifications received: {len(notifications)}")
+for n in notifications:
+    print(f"  {n}")
+```
+
+### 1.2 Conflict Resolution
+
+When multiple agents write to the same key, you have a conflict. This is the same problem as concurrent writes in distributed databases, and the solutions are analogous.
+
+**Last-writer-wins (LWW):** The simplest strategy. The most recent write overwrites previous values. This is acceptable when agent contributions are independent and a coordinator will synthesize them later.
+
+**Version vectors:** Each agent maintains a version counter. On conflict, the system detects that two concurrent writes happened and either merges them automatically or escalates to a resolver agent.
+
+**Merge functions:** For specific data types, define how to merge concurrent writes. Two agents both adding items to a list? Merge by union. Two agents both updating a score? Average them or take the higher one. This is the CRDT (Conflict-free Replicated Data Type) approach from distributed systems.
+
+```python
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class ConflictResolvingBlackboard:
+    """Blackboard with pluggable conflict resolution strategies."""
+    _store: dict[str, dict] = field(default_factory=dict)
+    _merge_strategies: dict[str, str] = field(default_factory=dict)
+    _conflicts_resolved: int = 0
+
+    def set_merge_strategy(self, key: str, strategy: str):
+        """Set merge strategy for a key: 'lww', 'union', 'average', 'max'."""
+        self._merge_strategies[key] = strategy
+
+    def _resolve_conflict(self, key: str, old_value: Any, new_value: Any) -> Any:
+        """Resolve a write conflict based on the configured strategy."""
+        strategy = self._merge_strategies.get(key, "lww")
+        self._conflicts_resolved += 1
+
+        if strategy == "lww":
+            return new_value
+        elif strategy == "union":
+            # Both values must be lists
+            if isinstance(old_value, list) and isinstance(new_value, list):
+                return list(set(old_value + new_value))
+            return new_value
+        elif strategy == "average":
+            if isinstance(old_value, (int, float)) and isinstance(new_value, (int, float)):
+                return (old_value + new_value) / 2
+            return new_value
+        elif strategy == "max":
+            if isinstance(old_value, (int, float)) and isinstance(new_value, (int, float)):
+                return max(old_value, new_value)
+            return new_value
+        else:
+            return new_value
+
+    def write(self, key: str, value: Any, author: str) -> dict:
+        """Write with conflict resolution."""
+        if key in self._store:
+            old_value = self._store[key]["value"]
+            resolved_value = self._resolve_conflict(key, old_value, value)
+            self._store[key] = {"value": resolved_value, "author": author, "merged": True}
+        else:
+            self._store[key] = {"value": value, "author": author, "merged": False}
+        return self._store[key]
+
+    def read(self, key: str) -> Any:
+        entry = self._store.get(key)
+        return entry["value"] if entry else None
+
+
+# Demo conflict resolution
+board = ConflictResolvingBlackboard()
+
+# Findings: merge by union (combine lists from different agents)
+board.set_merge_strategy("vulnerabilities", "union")
+board.write("vulnerabilities", ["SQL injection in auth.py", "XSS in template.html"], "security-agent-1")
+board.write("vulnerabilities", ["XSS in template.html", "CSRF missing on /api/transfer"], "security-agent-2")
+print(f"Merged vulnerabilities: {board.read('vulnerabilities')}")
+
+# Scores: merge by average
+board.set_merge_strategy("risk_score", "average")
+board.write("risk_score", 7.5, "agent-a")
+board.write("risk_score", 8.5, "agent-b")
+print(f"Averaged risk score: {board.read('risk_score')}")
+
+# Confidence: merge by max
+board.set_merge_strategy("confidence", "max")
+board.write("confidence", 0.82, "agent-a")
+board.write("confidence", 0.91, "agent-b")
+print(f"Max confidence: {board.read('confidence')}")
+
+print(f"Conflicts resolved: {board._conflicts_resolved}")
+```
+
+<ConceptCheck id="cc-1" />
+
+### 1.3 Consistency Models
+
+When agents run concurrently (which they should, for performance), you face a fundamental tradeoff between consistency and availability — the CAP theorem applied to multi-agent systems.
+
+**Strong consistency:** Every agent sees the same state at the same time. Achieved via locking or consensus protocols. Simple to reason about, but agents must wait for locks, reducing parallelism. Use when correctness depends on agents seeing each other's most recent writes — for example, when one agent's decision depends on another agent's output.
+
+**Eventual consistency:** Agents may temporarily see stale data, but all writes eventually propagate. Higher throughput because agents never block on each other. Use when agents work on independent aspects of a problem and a coordinator will synthesize their outputs later.
+
+The decision rule is: **if agent B's work is invalidated by agent A's concurrent write, you need strong consistency. If agent B's work is still valid regardless of agent A's concurrent write, eventual consistency is fine.**
+
+In most multi-agent systems, eventual consistency is sufficient because the coordinator handles synthesis. The workers produce independent analyses, and the coordinator merges them. Workers do not need to see each other's intermediate results.
+
+---
+
+## 2. Message-Based Communication
+
+Not all multi-agent communication goes through a shared blackboard. The more common pattern, especially in hierarchical and pipeline architectures, is direct message passing between agents.
+
+### 2.1 Message Queue Architecture
+
+A message queue decouples senders from receivers. The coordinator posts a task message to a queue, and the worker picks it up when ready. This gives you:
+
+- **Backpressure:** If workers are overloaded, messages queue up rather than causing failures
+- **Retry semantics:** Failed messages can be re-queued automatically
+- **Load balancing:** Multiple workers can consume from the same queue
+
+```python
+from dataclasses import dataclass, field
+from collections import deque
+from typing import Any
+from enum import Enum
+import json
+
+class MessageType(Enum):
+    TASK = "task"
+    RESULT = "result"
+    ERROR = "error"
+    CONTROL = "control"
+
+@dataclass
+class AgentMessage:
+    """Structured message between agents."""
+    msg_id: str
+    msg_type: MessageType
+    sender: str
+    receiver: str
+    payload: dict
+    correlation_id: str = ""   # Links requests to responses
+    retry_count: int = 0
+    max_retries: int = 3
+
+@dataclass
+class MessageQueue:
+    """Simple message queue for inter-agent communication."""
+    _queues: dict[str, deque] = field(default_factory=lambda: defaultdict(deque))
+    _dead_letter: list[AgentMessage] = field(default_factory=list)
+    _stats: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+
+    def send(self, message: AgentMessage):
+        """Send a message to the receiver's queue."""
+        self._queues[message.receiver].append(message)
+        self._stats["sent"] += 1
+
+    def receive(self, agent_id: str) -> AgentMessage | None:
+        """Receive the next message for an agent (FIFO)."""
+        queue = self._queues.get(agent_id, deque())
+        if queue:
+            msg = queue.popleft()
+            self._stats["received"] += 1
+            return msg
+        return None
+
+    def retry(self, message: AgentMessage) -> bool:
+        """Re-queue a failed message if retries remain."""
+        if message.retry_count < message.max_retries:
+            message.retry_count += 1
+            self._queues[message.receiver].append(message)
+            self._stats["retried"] += 1
+            return True
+        else:
+            self._dead_letter.append(message)
+            self._stats["dead_lettered"] += 1
+            return False
+
+    def pending_count(self, agent_id: str) -> int:
+        return len(self._queues.get(agent_id, deque()))
+
+    def get_stats(self) -> dict:
+        return dict(self._stats)
+
+
+# Demo: Coordinator-worker communication via message queue
+mq = MessageQueue()
+
+# Coordinator sends tasks to workers
+tasks = [
+    AgentMessage("msg-1", MessageType.TASK, "coordinator", "security-agent",
+                 {"action": "review", "file": "auth.py"}, correlation_id="task-100"),
+    AgentMessage("msg-2", MessageType.TASK, "coordinator", "perf-agent",
+                 {"action": "profile", "file": "api.py"}, correlation_id="task-100"),
+    AgentMessage("msg-3", MessageType.TASK, "coordinator", "test-agent",
+                 {"action": "coverage", "file": "auth.py"}, correlation_id="task-100"),
+]
+
+for task in tasks:
+    mq.send(task)
+
+# Workers process messages
+for agent_id in ["security-agent", "perf-agent", "test-agent"]:
+    msg = mq.receive(agent_id)
+    if msg:
+        # Simulate worker processing and responding
+        response = AgentMessage(
+            f"resp-{msg.msg_id}", MessageType.RESULT,
+            sender=agent_id, receiver="coordinator",
+            payload={"status": "done", "findings": f"Reviewed {msg.payload['file']}"},
+            correlation_id=msg.correlation_id
+        )
+        mq.send(response)
+        print(f"{agent_id} processed task and sent response")
+
+# Coordinator collects results
+results = []
+while True:
+    msg = mq.receive("coordinator")
+    if msg is None:
+        break
+    results.append(msg)
+
+print(f"\nCoordinator received {len(results)} results")
+print(f"Queue stats: {mq.get_stats()}")
+```
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 3. The A2A Protocol
+
+In April 2025, Google introduced the Agent-to-Agent (A2A) protocol as an open standard for inter-agent communication. While MCP (Model Context Protocol, which we covered in Week 5) standardizes how an agent accesses tools and resources, A2A standardizes how agents communicate with each other. These are complementary protocols, not competitors.
+
+### 3.1 MCP vs A2A: Complementary Protocols
+
+The distinction is important:
+
+- **MCP:** Agent-to-tool communication. "I need to read a file." "I need to query a database." The agent is the client; the tool server is a passive resource provider.
+- **A2A:** Agent-to-agent communication. "I need you to analyze this code for security vulnerabilities." The calling agent is a client, but the remote agent is an autonomous actor that reasons, plans, and may use its own tools (via MCP) to complete the task.
+
+Think of it this way: MCP is how an agent uses a screwdriver. A2A is how an agent asks another agent to build a bookshelf.
+
+### 3.2 Agent Cards
+
+The foundation of A2A is the **Agent Card** — a JSON document that describes an agent's capabilities, endpoints, and interaction requirements. Think of it as a service's API documentation, but for an AI agent.
+
+An Agent Card contains:
+
+- **Identity:** Name, description, provider
+- **Capabilities:** What kinds of tasks the agent can handle
+- **Endpoint:** URL where the agent can be reached
+- **Authentication:** What credentials are needed
+- **Input/Output schemas:** What the agent expects and returns
+- **Constraints:** Rate limits, cost, timeout
+
+```python
+from dataclasses import dataclass, field
+import json
+
+@dataclass
+class AgentCard:
+    """A2A-style Agent Card describing an agent's capabilities."""
+    name: str
+    description: str
+    provider: str
+    version: str
+    endpoint: str
+    capabilities: list[dict]
+    authentication: dict
+    rate_limit: dict = field(default_factory=lambda: {"requests_per_minute": 60})
+    supported_modes: list[str] = field(default_factory=lambda: ["sync", "async"])
+    max_input_tokens: int = 100000
+    estimated_cost_per_task: float = 0.0
+
+    def to_json(self) -> str:
+        return json.dumps({
+            "name": self.name,
+            "description": self.description,
+            "provider": self.provider,
+            "version": self.version,
+            "url": self.endpoint,
+            "capabilities": self.capabilities,
+            "authentication": self.authentication,
+            "rateLimit": self.rate_limit,
+            "supportedModes": self.supported_modes,
+            "maxInputTokens": self.max_input_tokens,
+            "estimatedCostPerTask": self.estimated_cost_per_task,
+        }, indent=2)
+
+    def matches_task(self, task_type: str, required_skills: list[str]) -> float:
+        """Score how well this agent matches a given task (0-1)."""
+        score = 0.0
+        total_checks = 0
+
+        for cap in self.capabilities:
+            cap_type = cap.get("taskType", "")
+            cap_skills = cap.get("skills", [])
+
+            if task_type.lower() in cap_type.lower():
+                score += 1.0
+                total_checks += 1
+
+            for skill in required_skills:
+                total_checks += 1
+                if any(skill.lower() in s.lower() for s in cap_skills):
+                    score += 1.0
+
+        return score / total_checks if total_checks > 0 else 0.0
+
+
+# Define agent cards for a multi-agent system
+security_agent = AgentCard(
+    name="SecurityAnalyzer",
+    description="Analyzes code for security vulnerabilities including OWASP Top 10",
+    provider="internal",
+    version="2.1.0",
+    endpoint="https://agents.internal/security",
+    capabilities=[
+        {
+            "taskType": "security_review",
+            "skills": ["OWASP", "SQL injection", "XSS", "CSRF", "authentication", "encryption"],
+            "inputTypes": ["source_code", "config_files"],
+            "outputType": "security_report"
+        }
+    ],
+    authentication={"type": "bearer", "required": True},
+    estimated_cost_per_task=0.15
+)
+
+code_review_agent = AgentCard(
+    name="CodeQualityReviewer",
+    description="Reviews code for quality, maintainability, and best practices",
+    provider="internal",
+    version="1.5.0",
+    endpoint="https://agents.internal/code-quality",
+    capabilities=[
+        {
+            "taskType": "code_review",
+            "skills": ["code quality", "maintainability", "complexity", "style", "refactoring"],
+            "inputTypes": ["source_code"],
+            "outputType": "review_report"
+        },
+        {
+            "taskType": "refactoring",
+            "skills": ["design patterns", "SOLID principles", "code smell detection"],
+            "inputTypes": ["source_code"],
+            "outputType": "refactored_code"
+        }
+    ],
+    authentication={"type": "bearer", "required": True},
+    estimated_cost_per_task=0.10
+)
+
+# Print an agent card
+print("Agent Card:")
+print(security_agent.to_json())
+
+# Task matching
+score = security_agent.matches_task("security_review", ["SQL injection", "authentication"])
+print(f"\nSecurity agent match score for security review: {score:.2f}")
+
+score = security_agent.matches_task("code_review", ["maintainability", "style"])
+print(f"Security agent match score for code review: {score:.2f}")
+```
+
+### 3.3 Task Lifecycle
+
+A2A defines a structured task lifecycle with clear state transitions:
+
+```
+submitted → working → completed
+                   ↘ failed
+         → input-needed → working → ...
+```
+
+The key states are:
+
+1. **submitted:** The client agent has sent a task to the remote agent
+2. **working:** The remote agent is actively processing the task
+3. **input-needed:** The remote agent needs additional information from the client (this is how multi-turn interactions work)
+4. **completed:** The task is done, results are available
+5. **failed:** The task could not be completed
+
+This lifecycle is crucial for asynchronous multi-agent systems. A coordinator can submit tasks to 5 workers, do other work, and poll for completion — rather than blocking on each worker sequentially.
+
+```python
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+import json
+
+class A2ATaskState(Enum):
+    SUBMITTED = "submitted"
+    WORKING = "working"
+    INPUT_NEEDED = "input-needed"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+@dataclass
+class A2ATask:
+    """Represents a task in the A2A protocol lifecycle."""
+    task_id: str
+    client_agent: str
+    server_agent: str
+    description: str
+    state: A2ATaskState = A2ATaskState.SUBMITTED
+    input_data: dict = field(default_factory=dict)
+    output_data: dict = field(default_factory=dict)
+    messages: list[dict] = field(default_factory=list)
+    error: str = None
+
+    def transition(self, new_state: A2ATaskState, data: dict = None):
+        """Transition task to a new state with validation."""
+        valid_transitions = {
+            A2ATaskState.SUBMITTED: {A2ATaskState.WORKING, A2ATaskState.FAILED},
+            A2ATaskState.WORKING: {A2ATaskState.COMPLETED, A2ATaskState.FAILED, A2ATaskState.INPUT_NEEDED},
+            A2ATaskState.INPUT_NEEDED: {A2ATaskState.WORKING, A2ATaskState.FAILED},
+            A2ATaskState.COMPLETED: set(),  # terminal state
+            A2ATaskState.FAILED: set(),      # terminal state
+        }
+
+        if new_state not in valid_transitions.get(self.state, set()):
+            raise ValueError(f"Invalid transition: {self.state.value} -> {new_state.value}")
+
+        self.state = new_state
+        if data:
+            if new_state == A2ATaskState.COMPLETED:
+                self.output_data = data
+            elif new_state == A2ATaskState.FAILED:
+                self.error = data.get("error", "Unknown error")
+
+        self.messages.append({
+            "state": new_state.value,
+            "data": data or {}
+        })
+
+    def is_terminal(self) -> bool:
+        return self.state in {A2ATaskState.COMPLETED, A2ATaskState.FAILED}
+
+
+@dataclass
+class A2ATaskManager:
+    """Manages A2A task lifecycle for a multi-agent system."""
+    tasks: dict[str, A2ATask] = field(default_factory=dict)
+    _task_counter: int = 0
+
+    def submit_task(self, client: str, server: str, description: str, input_data: dict) -> str:
+        """Submit a new task. Returns task ID."""
+        self._task_counter += 1
+        task_id = f"task-{self._task_counter:04d}"
+        task = A2ATask(
+            task_id=task_id,
+            client_agent=client,
+            server_agent=server,
+            description=description,
+            input_data=input_data
+        )
+        self.tasks[task_id] = task
+        return task_id
+
+    def start_work(self, task_id: str):
+        self.tasks[task_id].transition(A2ATaskState.WORKING)
+
+    def complete_task(self, task_id: str, result: dict):
+        self.tasks[task_id].transition(A2ATaskState.COMPLETED, result)
+
+    def fail_task(self, task_id: str, error: str):
+        self.tasks[task_id].transition(A2ATaskState.FAILED, {"error": error})
+
+    def request_input(self, task_id: str):
+        self.tasks[task_id].transition(A2ATaskState.INPUT_NEEDED)
+
+    def get_status(self) -> dict:
+        status_counts = {}
+        for task in self.tasks.values():
+            state = task.state.value
+            status_counts[state] = status_counts.get(state, 0) + 1
+        return status_counts
+
+    def get_completed_results(self) -> list[dict]:
+        return [
+            {"task_id": t.task_id, "server": t.server_agent, "result": t.output_data}
+            for t in self.tasks.values()
+            if t.state == A2ATaskState.COMPLETED
+        ]
+
+
+# Demo: Multi-agent task orchestration
+manager = A2ATaskManager()
+
+# Coordinator submits tasks to multiple agents
+t1 = manager.submit_task("coordinator", "security-agent", "Review auth module", {"file": "auth.py"})
+t2 = manager.submit_task("coordinator", "perf-agent", "Profile API endpoints", {"file": "api.py"})
+t3 = manager.submit_task("coordinator", "test-agent", "Analyze test coverage", {"dir": "tests/"})
+
+# Agents start working
+for tid in [t1, t2, t3]:
+    manager.start_work(tid)
+
+print(f"Status after starting: {manager.get_status()}")
+
+# Agents complete (t3 needs more input first)
+manager.complete_task(t1, {"vulnerabilities": 2, "severity": "medium"})
+manager.complete_task(t2, {"p99_latency_ms": 150, "bottleneck": "db_query"})
+manager.request_input(t3)  # Test agent needs clarification
+
+print(f"Status mid-execution: {manager.get_status()}")
+
+# Provide input and complete t3
+manager.start_work(t3)
+manager.complete_task(t3, {"coverage": 0.78, "untested_files": ["utils.py"]})
+
+print(f"Final status: {manager.get_status()}")
+print(f"Results: {json.dumps(manager.get_completed_results(), indent=2)}")
+```
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 4. Debugging Multi-Agent Systems
+
+Debugging a multi-agent system is qualitatively harder than debugging a single agent. When a single agent produces a bad output, you can read its prompt and trace its reasoning. When a multi-agent system produces a bad output, the root cause could be:
+
+- A bad decomposition by the coordinator
+- A bad output by one worker that corrupted the synthesis
+- A lost or delayed message
+- A stale read from the blackboard
+- An interaction effect between two agents that neither would produce in isolation
+
+This is distributed systems debugging, and it requires distributed systems tools.
+
+### 4.1 Distributed Tracing
+
+The single most important debugging tool for multi-agent systems is **distributed tracing**. Every operation — every LLM call, every tool use, every inter-agent message — gets a trace ID that links it to the original request. This is the same concept as OpenTelemetry traces for microservices, applied to agents.
+
+A trace is a tree of **spans**. The root span is the original task. Each coordinator decomposition creates child spans. Each worker execution creates child spans under the coordinator's delegation span. The result is a hierarchical view of exactly what happened, in what order, and how long each step took.
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional
+import time
+import json
+
+@dataclass
+class Span:
+    """A single span in a distributed trace."""
+    span_id: str
+    parent_id: Optional[str]
+    trace_id: str
+    operation: str
+    agent: str
+    start_time: float
+    end_time: float = 0.0
+    status: str = "ok"
+    attributes: dict = field(default_factory=dict)
+    events: list[dict] = field(default_factory=list)
+
+    @property
+    def duration_ms(self) -> float:
+        if self.end_time > 0:
+            return (self.end_time - self.start_time) * 1000
+        return 0
+
+    def add_event(self, name: str, data: dict = None):
+        self.events.append({
+            "name": name,
+            "timestamp": time.time(),
+            "data": data or {}
+        })
+
+
+@dataclass
+class TraceCollector:
+    """Collects and analyzes distributed traces from multi-agent systems."""
+    spans: list[Span] = field(default_factory=list)
+
+    def add_span(self, span: Span):
+        self.spans.append(span)
+
+    def get_trace(self, trace_id: str) -> list[Span]:
+        return [s for s in self.spans if s.trace_id == trace_id]
+
+    def get_trace_tree(self, trace_id: str) -> dict:
+        """Build a tree representation of the trace."""
+        spans = self.get_trace(trace_id)
+        span_map = {s.span_id: s for s in spans}
+
+        def build_node(span: Span) -> dict:
+            children = [s for s in spans if s.parent_id == span.span_id]
+            return {
+                "span_id": span.span_id,
+                "operation": span.operation,
+                "agent": span.agent,
+                "duration_ms": round(span.duration_ms, 1),
+                "status": span.status,
+                "children": [build_node(c) for c in children]
+            }
+
+        roots = [s for s in spans if s.parent_id is None]
+        return [build_node(r) for r in roots]
+
+    def find_bottlenecks(self, trace_id: str) -> list[dict]:
+        """Identify the slowest spans in a trace."""
+        spans = self.get_trace(trace_id)
+        sorted_spans = sorted(spans, key=lambda s: s.duration_ms, reverse=True)
+        return [
+            {
+                "span_id": s.span_id,
+                "agent": s.agent,
+                "operation": s.operation,
+                "duration_ms": round(s.duration_ms, 1)
+            }
+            for s in sorted_spans[:5]
+        ]
+
+    def find_failures(self, trace_id: str) -> list[dict]:
+        """Find all failed spans in a trace."""
+        spans = self.get_trace(trace_id)
+        return [
+            {
+                "span_id": s.span_id,
+                "agent": s.agent,
+                "operation": s.operation,
+                "status": s.status,
+                "events": s.events
+            }
+            for s in spans if s.status != "ok"
+        ]
+
+    def calculate_agent_stats(self, trace_id: str) -> dict:
+        """Calculate per-agent statistics."""
+        spans = self.get_trace(trace_id)
+        stats = {}
+        for s in spans:
+            if s.agent not in stats:
+                stats[s.agent] = {"total_ms": 0, "span_count": 0, "failures": 0}
+            stats[s.agent]["total_ms"] += s.duration_ms
+            stats[s.agent]["span_count"] += 1
+            if s.status != "ok":
+                stats[s.agent]["failures"] += 1
+
+        for agent in stats:
+            stats[agent]["total_ms"] = round(stats[agent]["total_ms"], 1)
+        return stats
+
+
+# Build a realistic trace
+collector = TraceCollector()
+trace_id = "trace-001"
+base_time = time.time()
+
+# Root span: coordinator receives task
+root = Span("span-1", None, trace_id, "coordinate_review", "coordinator", base_time, base_time + 5.2)
+root.add_event("decomposition_complete", {"subtasks": 3})
+collector.add_span(root)
+
+# Worker spans (parallel execution, simulated with overlapping times)
+w1 = Span("span-2", "span-1", trace_id, "security_review", "security-agent", base_time + 0.5, base_time + 3.8)
+w1.add_event("llm_call", {"tokens": 4500})
+collector.add_span(w1)
+
+w2 = Span("span-3", "span-1", trace_id, "quality_review", "quality-agent", base_time + 0.5, base_time + 2.1)
+w2.add_event("llm_call", {"tokens": 3200})
+collector.add_span(w2)
+
+w3 = Span("span-4", "span-1", trace_id, "test_analysis", "test-agent", base_time + 0.5, base_time + 4.5, status="error")
+w3.add_event("error", {"message": "Timeout waiting for test execution"})
+collector.add_span(w3)
+
+# Retry span for failed worker
+w3_retry = Span("span-5", "span-1", trace_id, "test_analysis_retry", "test-agent", base_time + 4.6, base_time + 5.0)
+collector.add_span(w3_retry)
+
+# Synthesis span
+synth = Span("span-6", "span-1", trace_id, "synthesize_results", "coordinator", base_time + 5.0, base_time + 5.2)
+collector.add_span(synth)
+
+# Analyze the trace
+print("Trace tree:")
+print(json.dumps(collector.get_trace_tree(trace_id), indent=2))
+
+print("\nBottlenecks:")
+for b in collector.find_bottlenecks(trace_id):
+    print(f"  {b['agent']}/{b['operation']}: {b['duration_ms']}ms")
+
+print("\nFailures:")
+for f in collector.find_failures(trace_id):
+    print(f"  {f['agent']}/{f['operation']}: {f['status']}")
+
+print("\nAgent stats:")
+for agent, stats in collector.calculate_agent_stats(trace_id).items():
+    print(f"  {agent}: {stats}")
+```
+
+### 4.2 Replay Debugging
+
+Distributed tracing tells you *what* happened. Replay debugging lets you *reproduce* what happened. The idea is simple: record all inputs and outputs for every agent invocation, then replay them to reproduce a bug.
+
+For LLM-based agents, this means recording:
+
+1. The system prompt used
+2. The messages sent (input)
+3. The model's response (output)
+4. The tool calls made and their results
+5. The timestamp and model version
+
+With these recordings, you can replay any agent's execution deterministically (with temperature 0) or stochastically (with the original temperature) to understand why it produced a particular output.
+
+### 4.3 Agent Isolation Testing
+
+Before debugging a multi-agent interaction, verify that each agent works correctly in isolation. This is unit testing for agents:
+
+1. **Prompt testing:** Does the agent produce correct output for known inputs?
+2. **Tool testing:** Does the agent use tools correctly when given appropriate context?
+3. **Edge case testing:** How does the agent handle malformed input, empty input, or adversarial input?
+4. **Schema compliance:** Does the agent's output conform to the expected schema?
+
+Only after each agent passes isolation tests should you debug the interaction between agents. This dramatically narrows the debugging search space.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 5. Evaluation: Measuring Multi-Agent System Quality
+
+Evaluating multi-agent systems requires metrics beyond single-agent accuracy. You need to measure the system as a whole and attribute performance to individual agents.
+
+### 5.1 System-Level Metrics
+
+**Task success rate:** The fraction of tasks that the multi-agent system completes successfully. This is the top-level metric, but it hides important details.
+
+**End-to-end latency:** Total time from task submission to final output. For hierarchical systems, this includes coordinator decomposition time + max(worker execution times) + synthesis time.
+
+**Total cost:** Sum of all LLM API costs across all agents. A system that achieves 95% accuracy with $0.50/task may be preferable to one that achieves 97% accuracy with $2.00/task.
+
+### 5.2 Coordination Efficiency
+
+The **coordination overhead ratio** measures how much of the total cost goes to coordination vs. productive work:
+
+$$\eta_{\text{coord}} = \frac{C_{\text{coord}} + C_{\text{comm}}}{C_{\text{total}}}$$
+
+If $\eta_{\text{coord}} > 0.4$, you are spending more than 40% of your budget on coordination, which suggests the task may not benefit from multi-agent decomposition.
+
+The **parallelism efficiency** measures how well the system utilizes parallel execution:
+
+$$\eta_{\text{parallel}} = \frac{T_{\text{sequential}}}{T_{\text{actual}} \cdot n}$$
+
+where $T_{\text{sequential}}$ is the total time if agents ran sequentially, $T_{\text{actual}}$ is the actual wall-clock time, and $n$ is the number of agents. A value of 1 means perfect parallelism; values near $1/n$ mean essentially sequential execution.
+
+### 5.3 Cost Attribution
+
+When a multi-agent system produces a bad result, you need to know which agent is responsible. **Cost attribution** assigns credit and blame to individual agents:
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class AgentMetrics:
+    """Track per-agent performance metrics."""
+    agent_name: str
+    tasks_assigned: int = 0
+    tasks_completed: int = 0
+    tasks_failed: int = 0
+    total_tokens: int = 0
+    total_latency_ms: float = 0
+    quality_scores: list[float] = field(default_factory=list)
+
+    @property
+    def success_rate(self) -> float:
+        if self.tasks_assigned == 0:
+            return 0.0
+        return self.tasks_completed / self.tasks_assigned
+
+    @property
+    def avg_quality(self) -> float:
+        if not self.quality_scores:
+            return 0.0
+        return sum(self.quality_scores) / len(self.quality_scores)
+
+    @property
+    def avg_latency_ms(self) -> float:
+        if self.tasks_completed == 0:
+            return 0.0
+        return self.total_latency_ms / self.tasks_completed
+
+    @property
+    def cost_per_task(self) -> float:
+        """Estimated cost per task in dollars (rough: $0.01 per 1K tokens)."""
+        if self.tasks_assigned == 0:
+            return 0.0
+        return (self.total_tokens / 1000 * 0.01) / self.tasks_assigned
+
+
+@dataclass
+class SystemEvaluator:
+    """Evaluate a multi-agent system's performance."""
+    agent_metrics: dict[str, AgentMetrics] = field(default_factory=dict)
+    system_tasks: int = 0
+    system_successes: int = 0
+
+    def record_task(self, agent_name: str, completed: bool, tokens: int,
+                    latency_ms: float, quality: float = None):
+        if agent_name not in self.agent_metrics:
+            self.agent_metrics[agent_name] = AgentMetrics(agent_name)
+
+        m = self.agent_metrics[agent_name]
+        m.tasks_assigned += 1
+        m.total_tokens += tokens
+        m.total_latency_ms += latency_ms
+
+        if completed:
+            m.tasks_completed += 1
+            if quality is not None:
+                m.quality_scores.append(quality)
+        else:
+            m.tasks_failed += 1
+
+    def record_system_task(self, success: bool):
+        self.system_tasks += 1
+        if success:
+            self.system_successes += 1
+
+    def report(self) -> dict:
+        agent_reports = {}
+        total_tokens = 0
+        for name, m in self.agent_metrics.items():
+            total_tokens += m.total_tokens
+            agent_reports[name] = {
+                "success_rate": round(m.success_rate, 3),
+                "avg_quality": round(m.avg_quality, 3),
+                "avg_latency_ms": round(m.avg_latency_ms, 1),
+                "cost_per_task": round(m.cost_per_task, 4),
+                "tasks": m.tasks_assigned
+            }
+
+        coord_tokens = self.agent_metrics.get("coordinator", AgentMetrics("")).total_tokens
+        coord_overhead = coord_tokens / total_tokens if total_tokens > 0 else 0
+
+        return {
+            "system_success_rate": round(self.system_successes / max(1, self.system_tasks), 3),
+            "coordination_overhead_ratio": round(coord_overhead, 3),
+            "total_cost_estimate": round(total_tokens / 1000 * 0.01, 4),
+            "agents": agent_reports
+        }
+
+
+# Simulate evaluation data
+evaluator = SystemEvaluator()
+
+# Simulate 50 tasks across the system
+import random
+random.seed(42)
+
+for i in range(50):
+    # Coordinator always runs
+    evaluator.record_task("coordinator", True, random.randint(800, 1500), random.uniform(200, 500))
+
+    # Workers with different reliability profiles
+    sec_ok = random.random() < 0.92
+    evaluator.record_task("security-agent", sec_ok, random.randint(2000, 5000),
+                         random.uniform(1000, 4000), random.uniform(0.7, 0.95) if sec_ok else None)
+
+    qual_ok = random.random() < 0.95
+    evaluator.record_task("quality-agent", qual_ok, random.randint(1500, 3500),
+                         random.uniform(800, 2500), random.uniform(0.75, 0.98) if qual_ok else None)
+
+    test_ok = random.random() < 0.88
+    evaluator.record_task("test-agent", test_ok, random.randint(1000, 3000),
+                         random.uniform(500, 2000), random.uniform(0.65, 0.90) if test_ok else None)
+
+    # System succeeds if all workers succeed
+    evaluator.record_system_task(sec_ok and qual_ok and test_ok)
+
+report = evaluator.report()
+print(json.dumps(report, indent=2))
+```
+
+Note the **system success rate** is lower than any individual agent's success rate. This is a fundamental property of multi-agent systems: if success requires all agents to succeed, and each agent has success rate $p_i$, the system success rate is:
+
+$$P_{\text{system}} = \prod_{i=1}^{n} p_i$$
+
+With three agents each at 90% reliability, the system reliability is $0.9^3 = 0.729$. This is why retry logic and failure handling are not optional — they are essential for acceptable system-level reliability.
+
+---
+
+## Summary
+
+Multi-agent communication and debugging are distributed systems problems. The blackboard pattern provides shared state with conflict resolution. Message queues decouple agents and provide backpressure and retry semantics. The A2A protocol standardizes agent-to-agent communication with Agent Cards (capability discovery) and a structured task lifecycle (submitted -> working -> completed).
+
+Debugging requires distributed tracing (link all operations with trace IDs), replay debugging (record and reproduce agent executions), and agent isolation testing (verify each agent independently before debugging interactions).
+
+Evaluation must happen at both the system level (task success rate, latency, cost) and the agent level (per-agent reliability, quality, cost attribution). The coordination overhead ratio tells you whether your multi-agent decomposition is pulling its weight.
+
+The key insight from this lecture: **multi-agent systems are distributed systems.** The decades of distributed systems research — CAP theorem, eventual consistency, distributed tracing, circuit breakers — all apply directly. Do not reinvent these solutions; adapt them.

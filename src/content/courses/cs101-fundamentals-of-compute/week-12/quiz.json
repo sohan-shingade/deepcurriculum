@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 11: SIMD, Vectors, and Matrix Operations",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Flynn's taxonomy, what category does a processor with a single instruction stream operating on multiple data elements belong to?",
+      "options": [
+        "SISD (Single Instruction, Single Data)",
+        "SIMD (Single Instruction, Multiple Data)",
+        "MISD (Multiple Instruction, Single Data)",
+        "MIMD (Multiple Instruction, Multiple Data)"
+      ],
+      "correct": 1,
+      "explanation": "SIMD (Single Instruction, Multiple Data) describes architectures where one instruction operates on multiple data elements simultaneously. Examples include x86 SSE/AVX/AVX-512, ARM NEON/SVE, and the computational model of GPU warps. A single ADD instruction applied to a 256-bit register containing 8 floats performs 8 additions at once. This contrasts with MIMD (multicore CPUs, where each core has its own instruction stream) and SISD (a classic scalar processor)."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "AVX-512 introduced mask registers (k0-k7). What is their purpose?",
+      "options": [
+        "They store memory addresses for gather/scatter operations",
+        "They control which elements of a SIMD operation are active, enabling per-element predication without branch instructions",
+        "They provide additional general-purpose storage for integer computations",
+        "They specify the rounding mode for floating-point operations"
+      ],
+      "correct": 1,
+      "explanation": "Mask registers in AVX-512 are 8 predicate registers (k0-k7), each containing up to 64 bits. Each bit controls whether the corresponding element in a SIMD operation is active. For a 16-element float32 operation, the mask is 16 bits: bit $i$ = 1 means element $i$ participates; bit $i$ = 0 means element $i$ is either zeroed or left unchanged (depending on the instruction variant). This enables branchless conditional execution: compute a comparison into a mask, then use the mask to selectively apply operations. Before AVX-512, predicated execution required separate compare, blend, and move instructions."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "How does ARM SVE differ fundamentally from x86 AVX?",
+      "options": [
+        "SVE only supports integer operations",
+        "SVE has a scalable, implementation-defined vector length (128-2048 bits), allowing vector-length-agnostic code that runs on any SVE hardware without recompilation",
+        "SVE uses separate register files for each data type",
+        "SVE requires the programmer to specify the exact vector length at compile time"
+      ],
+      "correct": 1,
+      "explanation": "SVE's key innovation is Vector Length Agnosticism (VLA). The vector length (VLEN) is set by the hardware implementation, not the ISA. A Fujitsu A64FX implements 512-bit SVE; AWS Graviton3 implements 256-bit SVE. The same binary works on both. The programmer writes loops using `whilelt` predicates and `svcntw()` to query the hardware vector length at runtime. x86 AVX fixes the width: 256-bit (AVX) or 512-bit (AVX-512) code requires the specific hardware support and will trap on processors that lack it."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the arithmetic intensity of matrix multiplication of two $n \\times n$ matrices (32-bit floats)?",
+      "options": [
+        "$O(1)$ --- constant regardless of matrix size",
+        "$O(\\sqrt{n})$ --- grows with the square root of matrix size",
+        "$O(n)$ --- grows linearly with matrix size ($n/6$ FLOP/byte)",
+        "$O(n^2)$ --- grows quadratically with matrix size"
+      ],
+      "correct": 2,
+      "explanation": "Matrix multiplication performs $2n^3$ FLOPs on $3n^2$ elements of 4 bytes each, giving arithmetic intensity $I = 2n^3 / (3n^2 \\times 4) = n/6$ FLOP/byte. This $O(n)$ growth is unique among common operations and is what makes matrix multiplication so well-suited to modern hardware. For comparison, vector addition (BLAS Level 1) has $O(1)$ intensity ($2n$ FLOPs on $3n$ elements = $2/12 \\approx 0.17$ FLOP/byte), and matrix-vector multiply (BLAS Level 2) also has $O(1)$ intensity. Only BLAS Level 3 (matrix-matrix) achieves $O(n)$ intensity."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In tiled matrix multiplication with tile size $b$, how many nested loops are there, and what determines the optimal tile size?",
+      "options": [
+        "3 loops; tile size is always 64",
+        "6 loops; tile size is chosen so that 3 tiles ($A$, $B$, $C$ sub-blocks) fit in L1 cache",
+        "4 loops; tile size equals the matrix dimension divided by the number of cores",
+        "6 loops; tile size is always equal to the SIMD width"
+      ],
+      "correct": 1,
+      "explanation": "Tiled matrix multiplication uses 6 nested loops: 3 outer loops iterate over tiles (stepping by $b$), and 3 inner loops iterate within each tile. The optimal tile size $b$ is chosen so that three $b \\times b$ sub-matrices fit in L1 cache: $3b^2 \\times 4 \\leq L1_{size}$. For a 48 KB L1 cache (Intel Raptor Lake P-core), this gives $b \\leq \\sqrt{48 \\times 1024 / 12} \\approx 64$. In practice, $b = 32$ or $b = 64$ are common. The key benefit: each element of $B$ is loaded $m/b$ times instead of $m$ times, a factor-of-$b$ reduction in memory traffic."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Strassen's algorithm reduces the exponent of matrix multiplication from 3 to $\\log_2 7 \\approx 2.807$. How does it achieve this?",
+      "options": [
+        "By using SIMD instructions to process multiple elements per cycle",
+        "By eliminating redundant additions in the naive algorithm",
+        "By computing 7 sub-matrix multiplications instead of 8 for a 2x2 block decomposition, at the cost of 18 additional matrix additions/subtractions",
+        "By caching intermediate results to avoid recomputation"
+      ],
+      "correct": 2,
+      "explanation": "The naive recursive approach to multiply two $2 \\times 2$ block matrices requires 8 multiplications of sub-matrices. Strassen showed that 7 multiplications suffice, using cleverly chosen linear combinations of sub-matrices (M1 through M7) and 18 additions/subtractions to combine the results. Applied recursively, $T(n) = 7T(n/2) + O(n^2)$, giving $O(n^{\\log_2 7}) = O(n^{2.807})$. The trade-off is more additions (which have lower constant cost than multiplications) and worse numerical stability and cache behavior, which is why Strassen is rarely used in practice despite its better asymptotic complexity."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a systolic array for matrix multiplication, what does each Processing Element (PE) compute per cycle?",
+      "options": [
+        "A complete dot product of a row and column",
+        "A single multiply-accumulate (MAC): accumulator += a * b",
+        "A comparison of two elements",
+        "A transpose of a sub-matrix"
+      ],
+      "correct": 1,
+      "explanation": "Each PE in a systolic array has a local accumulator and performs a single MAC operation per cycle: $acc \\leftarrow acc + a \\times b$. The 'a' input arrives from the left and is passed to the right; the 'b' input arrives from above and is passed below. After $k$ cycles (the shared dimension), each PE's accumulator contains one element of the result matrix. This simple, regular computation pattern allows systolic arrays to achieve very high utilization --- near 100% for large matrices --- because data flows continuously through the array without stalling."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The NVIDIA H100 achieves approximately 1,979 TFLOPS for FP16 Tensor Core operations. cuBLAS GEMM achieves approximately 1,500-1,700 TFLOPS on large matrices. What percentage of peak is this?",
+      "options": [
+        "30-40% of peak",
+        "50-60% of peak",
+        "75-86% of peak",
+        "95-100% of peak"
+      ],
+      "correct": 2,
+      "explanation": "cuBLAS achieves $1500/1979 \\approx 76\\%$ to $1700/1979 \\approx 86\\%$ of peak FP16 Tensor Core throughput on the H100 SXM for large, square matrices ($m = n = k \\geq 4096$). This remarkably high efficiency comes from: (1) tiling that matches Tensor Core tile sizes, (2) double-buffering shared memory to overlap loads with compute, (3) asynchronous copy instructions (cp.async) that bypass the register file, and (4) careful thread block sizing to maximize SM occupancy. The remaining 14-24% is lost to kernel launch overhead, memory fence costs, and imperfect load balancing across SMs."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "For a 4x4 systolic array multiplying two 4x4 matrices, how many total cycles are needed, and what is the peak utilization?",
+      "options": [
+        "4 cycles, 100% utilization",
+        "7 cycles, approximately 57% utilization",
+        "10 cycles, approximately 40% utilization",
+        "16 cycles, 25% utilization"
+      ],
+      "correct": 2,
+      "explanation": "A $n \\times n$ systolic array multiplying matrices with shared dimension $k$ requires $k + 2(n-1)$ cycles. For $n = k = 4$: $4 + 2(3) = 10$ cycles. The total useful MAC operations are $n^3 = 64$. The total PE-cycles available are $n^2 \\times \\text{cycles} = 16 \\times 10 = 160$. Utilization = $64/160 = 40\\%$. The utilization is low because of the startup phase (PEs on the edges are idle while data propagates) and the drain phase (PEs finish at different times). For larger matrices ($n \\gg 4$), utilization approaches $n/(n + 2(n-1)) \\rightarrow 1/3$ for square matrices, or approaches 100% when $k \\gg n$ (streaming many columns through the array)."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following workloads would benefit LEAST from SIMD vectorization?",
+      "options": [
+        "Adding two large arrays element-wise: c[i] = a[i] + b[i]",
+        "Computing dot product of two vectors",
+        "Traversing a linked list and summing values at each node",
+        "Applying a 3x3 convolution filter to an image"
+      ],
+      "correct": 2,
+      "explanation": "Linked list traversal has essentially zero data-level parallelism: each step depends on the previous (you must follow the 'next' pointer to find the next node), and the nodes are scattered in memory (no contiguous access pattern). SIMD requires independent, uniform operations on contiguous data --- the exact opposite of pointer chasing. Array addition, dot product, and image convolution all have regular, independent operations on contiguous data, making them excellent SIMD targets. This is why array-of-structures (AoS) layout is poor for SIMD, while structure-of-arrays (SoA) layout is ideal."
+    }
+  ]
+}

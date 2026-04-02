@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 19: Quantitative Finance Computing",
+  "timeLimit": 25,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A Monte Carlo option pricer with 10,000 paths produces a standard error of 0.10. What standard error would you expect with 1,000,000 paths?",
+      "options": [
+        "0.001 (100x reduction)",
+        "0.01 (10x reduction)",
+        "0.05 (2x reduction)",
+        "0.0001 (1000x reduction)"
+      ],
+      "correct": 1,
+      "explanation": "Monte Carlo standard error scales as $O(1/\\sqrt{N})$. Going from $N = 10{,}000$ to $N = 1{,}000{,}000$ is a factor of 100 increase in paths, so the standard error decreases by $\\sqrt{100} = 10$. Thus $0.10 / 10 = 0.01$. This $1/\\sqrt{N}$ convergence rate is fundamental -- to gain one extra digit of accuracy, you need 100x more paths. This is why variance reduction techniques are crucial: antithetic variates can effectively double the path count for free (30-50% variance reduction), and control variates can achieve 80-95% variance reduction."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the Black-Scholes formula $C = S_0 N(d_1) - Ke^{-rT}N(d_2)$, the stock price path follows $S_T = S_0 \\exp[(r - \\sigma^2/2)T + \\sigma\\sqrt{T}Z]$. Why is the drift term $r - \\sigma^2/2$ rather than simply $r$?",
+      "options": [
+        "The $-\\sigma^2/2$ accounts for transaction costs",
+        "It is the Ito correction: log-normal returns have a lower expected geometric growth rate than arithmetic rate",
+        "It corrects for the risk premium demanded by investors",
+        "It accounts for dividends paid during the option's life"
+      ],
+      "correct": 1,
+      "explanation": "This is the Ito correction (also called the Jensen's inequality correction). Under geometric Brownian motion, if $dS/S = \\mu\\,dt + \\sigma\\,dW$, then by Ito's lemma, $d\\ln S = (\\mu - \\sigma^2/2)dt + \\sigma\\,dW$. The expected log return is $\\mu - \\sigma^2/2$, not $\\mu$. This is because $E[\\exp(X)] \\neq \\exp(E[X])$ for random $X$ (Jensen's inequality). The $-\\sigma^2/2$ term ensures that $E[S_T] = S_0 \\exp(rT)$ under the risk-neutral measure -- the expected value of the stock price grows at exactly the risk-free rate, which is required for arbitrage-free pricing."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An FPGA Black-Scholes pipeline runs at 200 MHz with a pipeline depth of 200 stages and II=1. What is the throughput and latency?",
+      "options": [
+        "Throughput: 1 million prices/sec; Latency: 1 microsecond",
+        "Throughput: 200 million prices/sec; Latency: 1 microsecond",
+        "Throughput: 200 million prices/sec; Latency: 200 microseconds",
+        "Throughput: 1 million prices/sec; Latency: 200 microseconds"
+      ],
+      "correct": 1,
+      "explanation": "With II=1 (initiation interval = 1 clock cycle), a new input enters the pipeline every cycle. At 200 MHz, that is 200 million new inputs per second = 200 million prices/second throughput. The latency for any single price is 200 cycles / 200 MHz = 1 microsecond. There are 200 prices simultaneously in-flight through different pipeline stages. This is exactly analogous to the 5-stage CPU pipeline: latency is 5 cycles per instruction, but throughput is 1 instruction per cycle because 5 instructions are in flight simultaneously."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A fixed-point number system uses 20 fractional bits ($F = 20$). What is the approximate precision (smallest representable difference from zero)?",
+      "options": [
+        "$2^{-10} \\approx 0.001$",
+        "$2^{-20} \\approx 0.00000095$",
+        "$2^{-32} \\approx 0.00000000023$",
+        "$20 \\times 2^{-1} = 10$"
+      ],
+      "correct": 1,
+      "explanation": "With $F = 20$ fractional bits, the scaling factor is $2^{20} = 1{,}048{,}576$. The smallest representable non-zero value is $1/2^{20} = 2^{-20} \\approx 9.54 \\times 10^{-7}$, or roughly 0.00000095. This gives us about 6 decimal digits of precision after the decimal point. For Black-Scholes pricing where option prices are typically in the range \\$0.01 to \\$100, this precision is more than sufficient -- a \\$10 option would be accurate to about \\$0.00001. In hardware, 20 fractional bits means the integer representation uses 20 bits for the fractional part plus however many bits are needed for the integer part."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "DPDK achieves 1-5 microsecond network latency compared to 10-50 microseconds for the standard Linux kernel path. Which of these is NOT a technique DPDK uses?",
+      "options": [
+        "Poll Mode Drivers that busy-poll the NIC instead of using interrupts",
+        "Huge pages (2MB/1GB) to reduce TLB misses by 99%",
+        "Implementing a custom TCP/IP stack in kernel space with zero-copy semantics",
+        "Core pinning to dedicate specific CPU cores exclusively to packet processing"
+      ],
+      "correct": 2,
+      "explanation": "DPDK bypasses the kernel entirely -- it does NOT implement anything in kernel space. DPDK's approach is to move all packet processing to user space using Poll Mode Drivers (PMDs) that directly access NIC hardware through memory-mapped I/O. The PMDs continuously poll the NIC receive queue in a busy loop -- no interrupts, no context switches, no kernel involvement at all. Huge pages reduce TLB misses because mapping NIC buffers with 2MB pages instead of 4KB pages means 500x fewer page table entries. Core pinning ensures DPDK threads run on dedicated cores without preemption. The option that describes a custom kernel-space TCP/IP stack is closer to what XDP or custom kernel modules do, not DPDK."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A portfolio of $n = 100$ assets has EWMA covariance matrix $\\Sigma$. How many unique entries must be updated per new return observation, and what is the computational complexity?",
+      "options": [
+        "100 entries, $O(n)$",
+        "10,000 entries, $O(n^2)$",
+        "5,050 entries, $O(n^2)$",
+        "100 entries, $O(n \\log n)$"
+      ],
+      "correct": 2,
+      "explanation": "The covariance matrix $\\Sigma$ is $100 \\times 100$ with $100 \\times 100 = 10{,}000$ total entries. But since $\\Sigma$ is symmetric ($\\Sigma_{ij} = \\Sigma_{ji}$), only the upper (or lower) triangle plus the diagonal needs to be stored and updated. That is $n(n+1)/2 = 100 \\times 101 / 2 = 5{,}050$ unique entries. Each entry requires one multiply (by $\\lambda$) and one multiply-add ($(1-\\lambda) r_i r_j$), giving $O(n^2)$ total operations. For $n = 100$ at daily update frequency, this is 5,050 multiply-adds -- trivially fast. But for intra-day updates at 1-second intervals, or for $n = 1{,}000$ assets (500,500 entries), the computation can become significant."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Microwave links from Chicago to New Jersey achieve ~7.8 ms round-trip versus ~13.0 ms for fiber. Why can't microwave achieve the theoretical minimum of ~7.72 ms?",
+      "options": [
+        "Microwave signals travel significantly slower than the speed of light",
+        "The microwave path must follow roads and railways, adding distance",
+        "Atmospheric conditions, tower relay processing latency, and the path not being perfectly straight-line all add small delays",
+        "Microwave towers must regenerate the signal, adding 1+ ms at each tower"
+      ],
+      "correct": 2,
+      "explanation": "Microwave signals travel at very nearly the speed of light in vacuum (~299,792 km/s), so propagation speed is not the issue. The ~0.1 ms gap between achieved (7.8 ms) and theoretical (7.72 ms) comes from several small factors: (1) the tower-to-tower path is not perfectly straight-line -- terrain requires slight detours, (2) each relay tower adds a small processing delay (typically 5-50 nanoseconds per tower, with dozens of towers on the route), (3) atmospheric conditions (rain, fog, humidity) cause signal attenuation requiring retransmission or adding small delays. Note that the 0.1 ms gap is remarkably small -- McKay Brothers achieves 7.82 ms RTT Aurora to Carteret, within ~1.3% of the theoretical minimum. Each relay tower does NOT add 1+ ms; modern microwave relays operate at nanosecond-scale latencies."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The antithetic variates technique for Monte Carlo simulation pairs each random draw $Z_i$ with $-Z_i$. Why does this reduce variance?",
+      "options": [
+        "It doubles the number of simulated paths, reducing error by $\\sqrt{2}$",
+        "It exploits the negative correlation between $f(Z)$ and $f(-Z)$, so their average has lower variance than two independent draws",
+        "It eliminates bias in the random number generator",
+        "It ensures the sample mean of the $Z$ values is exactly zero"
+      ],
+      "correct": 1,
+      "explanation": "The key insight is that for a monotone function $f$, if $Z$ is high, $f(Z)$ is high, and $f(-Z)$ is low (and vice versa). So $f(Z)$ and $f(-Z)$ are negatively correlated. The variance of their average is $\\text{Var}[(f(Z) + f(-Z))/2] = [\\text{Var}(f(Z)) + \\text{Var}(f(-Z)) + 2\\text{Cov}(f(Z), f(-Z))]/4$. Since $\\text{Cov}(f(Z), f(-Z)) < 0$ (negative correlation), the variance is reduced compared to two independent draws where the covariance would be zero. The total number of payoff evaluations is the same (N paths either way), but each paired estimate has lower variance. Typical variance reduction is 30-50% for vanilla options."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "PCA applied to a 500-asset covariance matrix reveals that the first 10 principal components explain 90% of total portfolio variance. How does this help Monte Carlo VaR computation?",
+      "options": [
+        "It allows us to ignore 490 assets entirely",
+        "It reduces the simulation from 500 correlated risk factors to 10 uncorrelated factors, speeding up each path by ~2,500x",
+        "It makes the simulation 10x faster by reducing the number of paths needed",
+        "It eliminates the need for random number generation"
+      ],
+      "correct": 1,
+      "explanation": "PCA decomposes the 500 correlated asset returns into 500 uncorrelated principal components. If the first 10 components explain 90% of the variance, we can approximate the full covariance structure by simulating only 10 independent factors instead of 500 correlated ones. Each path simulation involves generating $k = 10$ independent random numbers (instead of 500 correlated ones requiring a Cholesky decomposition), and the per-path computation drops from $O(n^2) = O(250{,}000)$ to $O(k \\cdot n) = O(5{,}000)$ -- roughly $n/k = 50$x speedup per path. We are NOT ignoring 490 assets; we are expressing their returns as linear combinations of 10 factors. The number of paths does not change -- PCA reduces the cost per path, not the number of paths."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A trading firm's pre-trade risk check verifies position limits, P&L limits, and rate limits. In an FPGA implementation, this takes ~20 ns and runs in parallel with order formatting (~50 ns). In a software implementation, it takes ~500 ns and runs sequentially. Why is the FPGA so much faster?",
+      "options": [
+        "The FPGA uses faster memory (HBM vs DDR)",
+        "Position state is stored in on-chip BRAM with single-cycle access, and each check is a simple comparison implemented in combinational logic",
+        "The FPGA runs the same software but at a higher clock frequency",
+        "The FPGA pre-computes all possible risk checks at startup"
+      ],
+      "correct": 1,
+      "explanation": "In an FPGA risk check, the position book (current position per instrument) is stored in on-chip Block RAM, which provides single-cycle read access (~2-5 ns at typical FPGA frequencies). Each risk check is a simple integer comparison: `current_position + order_quantity <= max_position`. This comparison is a single combinational operation that completes in one clock cycle. Multiple checks (position limit, P&L limit, rate limit) can run in parallel because they use independent BRAM ports and independent comparators. In software, the same checks require: loading position from memory (possible cache miss = 5-100 ns), locking the position book (contention with other threads = 50-500 ns), executing comparison instructions, and releasing the lock. The FPGA eliminates all of these software overheads by implementing the checks as dedicated hardware circuits with direct memory access."
+    }
+  ]
+}

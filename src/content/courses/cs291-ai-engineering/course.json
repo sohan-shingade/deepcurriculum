@@ -1,0 +1,130 @@
+{
+  "slug": "cs291-ai-engineering",
+  "title": "Production AI Engineering",
+  "code": "CS 291",
+  "description": "A comprehensive graduate-level course covering the end-to-end lifecycle of building production AI systems. From LLM fundamentals and RAG architectures to multi-agent systems, deployment, and observability — with rigorous mathematical foundations and hands-on coding throughout.",
+  "quarterLength": 10,
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "slug": "week-01",
+      "title": "Foundations of LLM Systems",
+      "description": "Transformer architecture, LLM capabilities and limitations, working with LLM APIs in production.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "The LLM Landscape: Architecture, Capabilities, and Limitations", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Working with LLM APIs: Engineering for Production", "type": "lecture", "order": 2, "estimatedMinutes": 45 },
+        { "slug": "problem-set", "title": "Problem Set 1: LLM Fundamentals", "type": "problem_set", "order": 3, "estimatedMinutes": 90 },
+        { "slug": "quiz", "title": "Quiz 1: LLM Foundations", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 2,
+      "slug": "week-02",
+      "title": "Retrieval-Augmented Generation",
+      "description": "RAG from first principles, embedding models, vector databases, failure modes, and evaluation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "RAG from First Principles", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "RAG Failure Modes and Evaluation", "type": "lecture", "order": 2, "estimatedMinutes": 45 },
+        { "slug": "problem-set", "title": "Problem Set 2: Building RAG Systems", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 2: RAG Fundamentals", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 3,
+      "slug": "week-03",
+      "title": "Advanced Retrieval & Context Engineering",
+      "description": "Chunking strategies, hybrid search, re-ranking, prompt engineering, and structured outputs.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Chunking, Hybrid Search, and Re-Ranking", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Context Engineering and Prompt Management", "type": "lecture", "order": 2, "estimatedMinutes": 45 },
+        { "slug": "problem-set", "title": "Problem Set 3: Advanced Retrieval", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 3: Retrieval & Context Engineering", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 4,
+      "slug": "week-04",
+      "title": "Agents and Tool Use",
+      "description": "Agent architecture, ReAct paradigm, tool integration, memory systems, and evaluation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Agent Architecture: From ReAct to Production", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Tool Use, Memory, and Evaluation for Agents", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 4: Building Agents", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 4: Agents & Tool Use", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 5,
+      "slug": "week-05",
+      "title": "Agentic RAG & Midterm",
+      "description": "Self-RAG, corrective RAG, agentic RAG, MCP protocol, deep research agents. Midterm exam.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "From Basic RAG to Agentic RAG", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Deep Research Agents", "type": "lecture", "order": 2, "estimatedMinutes": 45 },
+        { "slug": "problem-set", "title": "Problem Set 5: Agentic RAG", "type": "problem_set", "order": 3, "estimatedMinutes": 90 },
+        { "slug": "quiz", "title": "Quiz 5: Agentic RAG & MCP", "type": "quiz", "order": 4, "estimatedMinutes": 15 },
+        { "slug": "midterm", "title": "Midterm Exam", "type": "midterm", "order": 5, "estimatedMinutes": 45 }
+      ]
+    },
+    {
+      "weekNumber": 6,
+      "slug": "week-06",
+      "title": "Multi-Agent Systems",
+      "description": "Multi-agent architectures, coordination, A2A protocol, debugging and evaluation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Multi-Agent Architectures", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Inter-Agent Communication, Synchronization, and Debugging", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 6: Multi-Agent Systems", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 6: Multi-Agent Systems", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 7,
+      "slug": "week-07",
+      "title": "Deployment and Production Systems",
+      "description": "Docker, FastAPI, Kubernetes, CI/CD with eval gates, performance, cost, and security.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Deploying AI Applications", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Performance, Cost, and Security", "type": "lecture", "order": 2, "estimatedMinutes": 45 },
+        { "slug": "problem-set", "title": "Problem Set 7: Deployment & Security", "type": "problem_set", "order": 3, "estimatedMinutes": 120 },
+        { "slug": "quiz", "title": "Quiz 7: Production Systems", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 8,
+      "slug": "week-08",
+      "title": "Observability and Evaluation (LLMOps)",
+      "description": "AI observability, tracing, evaluation frameworks, RAGAS, continuous evaluation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Observability for AI Systems", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "Systematic Evaluation", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 8: LLMOps", "type": "problem_set", "order": 3, "estimatedMinutes": 90 },
+        { "slug": "quiz", "title": "Quiz 8: Observability & Evaluation", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 9,
+      "slug": "week-09",
+      "title": "System Design and Case Studies",
+      "description": "Real-world AI system architectures, system design framework, interview preparation.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Real-World AI System Case Studies", "type": "lecture", "order": 1, "estimatedMinutes": 50 },
+        { "slug": "lecture-02", "title": "AI System Design Framework", "type": "lecture", "order": 2, "estimatedMinutes": 50 },
+        { "slug": "problem-set", "title": "Problem Set 9: System Design", "type": "problem_set", "order": 3, "estimatedMinutes": 90 },
+        { "slug": "quiz", "title": "Quiz 9: System Design", "type": "quiz", "order": 4, "estimatedMinutes": 20 }
+      ]
+    },
+    {
+      "weekNumber": 10,
+      "slug": "week-10",
+      "title": "Capstone and Final",
+      "description": "Production readiness, future of AI engineering, capstone project, final exam.",
+      "lessons": [
+        { "slug": "lecture-01", "title": "Production Readiness and Engineering Excellence", "type": "lecture", "order": 1, "estimatedMinutes": 40 },
+        { "slug": "lecture-02", "title": "The Future of AI Engineering", "type": "lecture", "order": 2, "estimatedMinutes": 35 },
+        { "slug": "capstone", "title": "Capstone Project", "type": "capstone", "order": 3, "estimatedMinutes": 0 },
+        { "slug": "final", "title": "Final Exam", "type": "final", "order": 4, "estimatedMinutes": 60 }
+      ]
+    }
+  ]
+}

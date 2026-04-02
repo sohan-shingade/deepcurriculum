@@ -1,0 +1,588 @@
+---
+title: "Context Engineering and Prompt Management"
+week: 3
+lecture: 2
+estimatedMinutes: 50
+---
+
+# Context Engineering and Prompt Management
+
+Retrieval gets the right documents. Context engineering decides what to _do_ with them. This lecture is about the layer between retrieval and generation: how you assemble, structure, and optimize the context that enters an LLM's input window. This is where most RAG systems quietly fail — not because the retriever missed the right document, but because the right document was buried at position 7 in a 12-chunk context window, and the model ignored it.
+
+We will also cover prompt design patterns, structured output extraction, and the emerging discipline of treating prompts as versioned software artifacts rather than ad-hoc strings.
+
+---
+
+## 1. The Context Window as a Scarce Resource
+
+A context window is not free storage. It is a _computational bottleneck_. Even with models supporting 128K or 200K tokens, there are hard constraints:
+
+1. **Attention cost scales quadratically** (or near-quadratically even with FlashAttention). Doubling the context length roughly quadruples the compute.
+2. **Not all positions are equal**. Models attend more strongly to tokens near the beginning and end of the context (the primacy-recency effect).
+3. **Stuffing irrelevant context hurts**. Including documents that are topically adjacent but not actually relevant increases the probability of hallucination — the model has more plausible-sounding but incorrect material to draw from.
+
+The engineering challenge: given a retrieved set of $N$ chunks $\{c_1, c_2, \ldots, c_N\}$ sorted by relevance, a query $q$, system instructions $s$, and a context window budget of $W$ tokens, select and order a subset $S \subseteq \{c_1, \ldots, c_N\}$ that maximizes answer quality while satisfying $|s| + |q| + \sum_{c \in S} |c| \leq W$.
+
+This is fundamentally a **knapsack problem** — each chunk has a "value" (relevance) and a "weight" (token count), and you are packing a context window of fixed capacity.
+
+```python
+from dataclasses import dataclass
+from typing import List, Tuple
+
+@dataclass
+class RetrievedChunk:
+    id: str
+    content: str
+    relevance_score: float
+    token_count: int
+
+def pack_context_window(
+    chunks: List[RetrievedChunk],
+    max_tokens: int,
+    reserved_tokens: int = 500  # for system prompt + query + output buffer
+) -> List[RetrievedChunk]:
+    """Greedily pack the most relevant chunks into the context window."""
+    available = max_tokens - reserved_tokens
+    selected: List[RetrievedChunk] = []
+    total_tokens = 0
+
+    # Chunks should already be sorted by relevance (descending)
+    for chunk in sorted(chunks, key=lambda c: c.relevance_score, reverse=True):
+        if total_tokens + chunk.token_count <= available:
+            selected.append(chunk)
+            total_tokens += chunk.token_count
+
+    return selected
+
+# Example
+chunks = [
+    RetrievedChunk("c1", "Most relevant content...", 0.95, 200),
+    RetrievedChunk("c2", "Second most relevant...", 0.88, 350),
+    RetrievedChunk("c3", "Third most relevant...", 0.82, 300),
+    RetrievedChunk("c4", "Fourth chunk...", 0.75, 400),
+    RetrievedChunk("c5", "Fifth chunk...", 0.70, 250),
+]
+
+selected = pack_context_window(chunks, max_tokens=1500, reserved_tokens=500)
+print(f"Selected {len(selected)} chunks using {sum(c.token_count for c in selected)} tokens")
+for c in selected:
+    print(f"  {c.id}: score={c.relevance_score}, tokens={c.token_count}")
+```
+
+A greedy approach works well in practice because the relevance scores drop off steeply — the marginal value of the 8th-most-relevant chunk is usually small. But there are cases where you want a more sophisticated packing strategy: when chunks are redundant (covering the same information), you should diversify; when chunks have dependencies (chunk A references chunk B), you should include both or neither.
+
+<ConceptCheck id="cc-1" />
+
+---
+
+## 2. The Lost-in-the-Middle Phenomenon
+
+Liu et al. (2023), in their paper "Lost in the Middle: How Language Models Use Long Contexts," demonstrated a striking failure mode: when relevant information is placed in the _middle_ of a long context, model performance degrades substantially compared to when the same information is at the beginning or end.
+
+Their experiment was clean: place a gold-standard answer document among distractor documents at various positions in the context. The U-shaped performance curve showed that models performed best when the answer was at position 1 (beginning) or position 20 (end of 20 documents), and worst around positions 8–12.
+
+This has direct engineering implications:
+
+**Strategy 1: Sandwich ordering.** Place the most relevant chunks at the beginning and end of the context, with less relevant chunks in the middle. If you have chunks ranked 1 through 10 by relevance, arrange them as: 1, 3, 5, 7, 9, 10, 8, 6, 4, 2.
+
+```python
+from typing import List, TypeVar
+
+T = TypeVar('T')
+
+def sandwich_order(items: List[T]) -> List[T]:
+    """Reorder items so highest-priority items are at beginning and end.
+
+    Input: items sorted by relevance (most relevant first).
+    Output: odd-indexed items at start, even-indexed items reversed at end.
+    """
+    if len(items) <= 2:
+        return items
+
+    first_half = items[::2]   # positions 0, 2, 4, ... (most relevant)
+    second_half = items[1::2] # positions 1, 3, 5, ...
+    second_half.reverse()     # reverse so 2nd-most-relevant is at the end
+
+    return first_half + second_half
+
+# Chunks sorted by relevance: 1 (best) to 8 (worst)
+chunks = ["chunk_1", "chunk_2", "chunk_3", "chunk_4",
+          "chunk_5", "chunk_6", "chunk_7", "chunk_8"]
+reordered = sandwich_order(chunks)
+print("Original order:", chunks)
+print("Sandwich order:", reordered)
+# chunk_1 at start, chunk_2 at end — both high-attention positions
+```
+
+**Strategy 2: Explicit citation instructions.** Tell the model to cite which document it is drawing from. This forces the model to attend to all documents rather than defaulting to those in high-attention positions. "Answer the question using the provided documents. For each claim, cite the document number in brackets, e.g., [Doc 3]."
+
+**Strategy 3: Summarize-then-answer.** For long contexts, ask the model to first summarize each document's relevance to the query, then answer. The summarization step forces a full pass over the context.
+
+---
+
+## 3. Prompt Design Patterns
+
+Prompting is not guesswork. There are well-studied patterns with known tradeoffs. Here are the ones that matter for production AI engineering.
+
+### 3.1 Zero-Shot and Few-Shot
+
+**Zero-shot**: Describe the task, provide no examples. Works well for tasks the model has seen extensively in training (translation, summarization, simple QA).
+
+**Few-shot** (Brown et al., 2020): Provide 3–8 examples of input-output pairs before the actual input. The model pattern-matches the demonstrated format and behavior.
+
+```python
+from typing import List, Tuple
+
+def build_few_shot_prompt(
+    task_description: str,
+    examples: List[Tuple[str, str]],
+    query: str,
+    max_examples: int = 5
+) -> str:
+    """Build a few-shot prompt with examples and a query."""
+    parts = [task_description, ""]
+
+    for i, (inp, out) in enumerate(examples[:max_examples]):
+        parts.append(f"Input: {inp}")
+        parts.append(f"Output: {out}")
+        parts.append("")
+
+    parts.append(f"Input: {query}")
+    parts.append("Output:")
+
+    return "\n".join(parts)
+
+examples = [
+    ("The food was amazing and the service was great!", "positive"),
+    ("Terrible experience, would not recommend.", "negative"),
+    ("It was okay, nothing special.", "neutral"),
+]
+
+prompt = build_few_shot_prompt(
+    "Classify the sentiment of the following review as positive, negative, or neutral.",
+    examples,
+    "The hotel was clean but the staff was rude."
+)
+print(prompt)
+```
+
+The critical insight about few-shot prompting: **example selection matters more than example count**. Three highly relevant examples outperform eight generic ones. In production, this means you should dynamically select few-shot examples based on the current query, using the same retrieval mechanisms you use for document retrieval.
+
+### 3.2 Chain-of-Thought Prompting
+
+Wei et al. (2022) showed that adding "Let's think step by step" (or providing examples with explicit reasoning steps) dramatically improves performance on multi-step reasoning tasks — arithmetic, logical deduction, multi-hop QA.
+
+The intuition: language models are autoregressive. Each token is conditioned on all previous tokens. When you force the model to _generate_ intermediate reasoning steps, those steps become part of the context for subsequent tokens, effectively giving the model a scratchpad.
+
+Formally, instead of modeling $P(\text{answer} | \text{question})$ directly, chain-of-thought models $P(\text{step}_1, \text{step}_2, \ldots, \text{step}_n, \text{answer} | \text{question})$, which decomposes into:
+
+$$P(\text{answer} | q) \approx \sum_{\text{chain}} P(\text{answer} | \text{chain}, q) \cdot P(\text{chain} | q)$$
+
+The model marginalizes over possible reasoning chains, and with chain-of-thought prompting, you bias it toward chains that make the intermediate reasoning explicit.
+
+<ConceptCheck id="cc-2" />
+
+### 3.3 Self-Consistency (Wang et al., 2022)
+
+Self-consistency extends chain-of-thought: generate multiple reasoning chains (by sampling with temperature > 0), then take a majority vote on the final answer. Different reasoning paths may reach the same correct answer through different routes, and aggregating them is more robust than any single chain.
+
+$$\hat{a} = \arg\max_a \sum_{i=1}^{k} \mathbf{1}[a_i = a]$$
+
+where $a_1, \ldots, a_k$ are the answers from $k$ sampled chains and $\hat{a}$ is the final answer.
+
+In production, self-consistency trades latency and cost for accuracy. You are running $k$ parallel LLM calls (typically $k = 5$–$20$). This is acceptable for high-stakes decisions (medical, legal, financial) where correctness dominates cost concerns.
+
+### 3.4 Tree-of-Thought (Yao et al., 2023)
+
+Tree-of-thought generalizes chain-of-thought from a single linear chain to a search tree. At each step, the model generates multiple possible next-steps, evaluates them (using the same model or a separate evaluator), and selects the most promising branches to continue exploring. This enables backtracking — if a reasoning path leads to a dead end, the model can return to an earlier branch point.
+
+This pattern is most useful for planning and puzzle-solving tasks. In production AI engineering, it appears in agent architectures where the model must plan multi-step tool use.
+
+---
+
+## 4. Prompt Versioning and Management in Production
+
+In production, a prompt is not a string. It is a **software artifact** with versions, tests, rollback capability, and performance metrics. If you change a prompt and answer quality drops by 3%, you need to know what changed, when, and why.
+
+```python
+import json
+from dataclasses import dataclass, field, asdict
+from typing import Dict, List, Optional
+from datetime import datetime
+
+@dataclass
+class PromptTemplate:
+    """A versioned prompt template with variable substitution."""
+    name: str
+    version: str
+    template: str
+    variables: List[str]
+    metadata: Dict[str, str] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def render(self, **kwargs: str) -> str:
+        """Render the template with provided variables."""
+        missing = set(self.variables) - set(kwargs.keys())
+        if missing:
+            raise ValueError(f"Missing variables: {missing}")
+        result = self.template
+        for var, value in kwargs.items():
+            result = result.replace(f"{{{{{var}}}}}", value)
+        return result
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+class PromptRegistry:
+    """Registry for managing versioned prompt templates."""
+
+    def __init__(self) -> None:
+        self._templates: Dict[str, Dict[str, PromptTemplate]] = {}
+
+    def register(self, template: PromptTemplate) -> None:
+        if template.name not in self._templates:
+            self._templates[template.name] = {}
+        self._templates[template.name][template.version] = template
+
+    def get(self, name: str, version: Optional[str] = None) -> PromptTemplate:
+        if name not in self._templates:
+            raise KeyError(f"Template '{name}' not found")
+        versions = self._templates[name]
+        if version:
+            if version not in versions:
+                raise KeyError(f"Version '{version}' not found for '{name}'")
+            return versions[version]
+        # Return latest version (lexicographic sort)
+        latest = sorted(versions.keys())[-1]
+        return versions[latest]
+
+    def list_versions(self, name: str) -> List[str]:
+        if name not in self._templates:
+            return []
+        return sorted(self._templates[name].keys())
+
+# Example usage
+registry = PromptRegistry()
+
+v1 = PromptTemplate(
+    name="qa_with_context",
+    version="1.0.0",
+    template="Answer the question based on the context.\n\nContext: {{context}}\n\nQuestion: {{question}}\n\nAnswer:",
+    variables=["context", "question"],
+    metadata={"author": "team", "model": "claude-3"}
+)
+
+v2 = PromptTemplate(
+    name="qa_with_context",
+    version="1.1.0",
+    template="You are a helpful assistant. Answer the question using ONLY the provided context. If the context does not contain the answer, say 'I don't know.'\n\nContext:\n{{context}}\n\nQuestion: {{question}}\n\nAnswer:",
+    variables=["context", "question"],
+    metadata={"author": "team", "model": "claude-3", "change": "added guardrail"}
+)
+
+registry.register(v1)
+registry.register(v2)
+
+prompt = registry.get("qa_with_context").render(
+    context="Python was created by Guido van Rossum in 1991.",
+    question="Who created Python?"
+)
+print(f"Versions available: {registry.list_versions('qa_with_context')}")
+print(f"\nRendered prompt:\n{prompt}")
+```
+
+In practice, production prompt management systems also include:
+- **A/B testing**: Serve prompt v1.0 to 90% of traffic, v1.1 to 10%, compare metrics.
+- **Rollback triggers**: If answer-quality metrics drop below a threshold, automatically revert to the previous prompt version.
+- **Cost tracking**: Different prompts produce different token counts; track cost per prompt version.
+- **Eval suites**: Before deploying a new prompt version, run it against a fixed evaluation set and require minimum quality scores.
+
+---
+
+## 5. Structured Outputs with Pydantic
+
+One of the most practical patterns in production AI engineering is **constrained decoding** — forcing the LLM to output JSON that conforms to a specific schema. Rather than parsing free-text output with regex (fragile) or hoping the model follows instructions (unreliable), you define a Pydantic model and use the model's structured output mode.
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Optional
+import json
+
+@dataclass
+class ExtractedEntity:
+    name: str
+    entity_type: str  # "person", "organization", "location"
+    confidence: float
+
+@dataclass
+class ExtractionResult:
+    entities: List[ExtractedEntity]
+    summary: str
+    source_quality: str  # "high", "medium", "low"
+
+def validate_extraction(data: dict) -> Optional[ExtractionResult]:
+    """Validate and parse an extraction result from JSON."""
+    try:
+        entities = [
+            ExtractedEntity(
+                name=e["name"],
+                entity_type=e["entity_type"],
+                confidence=float(e["confidence"])
+            )
+            for e in data.get("entities", [])
+        ]
+        # Validate confidence scores
+        for entity in entities:
+            if not 0.0 <= entity.confidence <= 1.0:
+                return None
+        # Validate source_quality
+        if data.get("source_quality") not in ("high", "medium", "low"):
+            return None
+        return ExtractionResult(
+            entities=entities,
+            summary=data.get("summary", ""),
+            source_quality=data["source_quality"]
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+# Simulate LLM output
+llm_output = {
+    "entities": [
+        {"name": "OpenAI", "entity_type": "organization", "confidence": 0.95},
+        {"name": "GPT-4", "entity_type": "product", "confidence": 0.90},
+        {"name": "San Francisco", "entity_type": "location", "confidence": 0.85}
+    ],
+    "summary": "Article discusses OpenAI's GPT-4 release from their SF headquarters.",
+    "source_quality": "high"
+}
+
+result = validate_extraction(llm_output)
+if result:
+    print(f"Extracted {len(result.entities)} entities:")
+    for e in result.entities:
+        print(f"  {e.name} ({e.entity_type}): {e.confidence:.2f}")
+    print(f"Summary: {result.summary}")
+```
+
+In production with the Anthropic API or OpenAI API, you pass the JSON schema as a parameter and the model is constrained to produce valid JSON matching that schema. This eliminates an entire class of parsing errors. The Pydantic model serves as both the contract (what the model must produce) and the validation layer (what your code accepts).
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 6. Data Extraction Patterns
+
+A common production task: extract structured information from unstructured text. Invoices, contracts, medical records, support tickets. The pattern is always the same:
+
+1. Define the output schema (Pydantic model / dataclass).
+2. Write a prompt that includes the schema definition and extraction instructions.
+3. Provide the unstructured text.
+4. Parse and validate the output.
+5. Handle failures (retry with clarification, or flag for human review).
+
+```python
+import re
+from dataclasses import dataclass
+from typing import Optional, List
+
+@dataclass
+class InvoiceData:
+    vendor_name: str
+    invoice_number: str
+    date: str
+    total_amount: float
+    line_items: List[dict]
+    currency: str = "USD"
+
+def extract_invoice_fields(text: str) -> Optional[InvoiceData]:
+    """Rule-based extraction as a fallback/supplement to LLM extraction."""
+    # Extract invoice number (various formats)
+    inv_match = re.search(r'(?:Invoice|INV)[\s#:]*([A-Z0-9-]+)', text, re.IGNORECASE)
+    inv_number = inv_match.group(1) if inv_match else "UNKNOWN"
+
+    # Extract date
+    date_match = re.search(r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', text)
+    date = date_match.group(1) if date_match else "UNKNOWN"
+
+    # Extract total amount
+    total_match = re.search(r'(?:Total|Amount Due|Balance)[\s:$]*(\d[\d,]*\.?\d*)', text, re.IGNORECASE)
+    total = float(total_match.group(1).replace(',', '')) if total_match else 0.0
+
+    return InvoiceData(
+        vendor_name="",  # Requires NLP/LLM
+        invoice_number=inv_number,
+        date=date,
+        total_amount=total,
+        line_items=[],
+        currency="USD"
+    )
+
+sample_invoice = """
+INVOICE #2024-0892
+Date: 03/15/2024
+From: Acme Cloud Services
+
+Item: GPU Compute (A100, 100 hrs)    $4,500.00
+Item: Storage (10TB, 1 month)         $200.00
+Item: Bandwidth (5TB egress)          $450.00
+
+Subtotal: $5,150.00
+Tax (8.5%): $437.75
+Total: $5,587.75
+"""
+
+result = extract_invoice_fields(sample_invoice)
+print(f"Invoice: {result.invoice_number}")
+print(f"Date: {result.date}")
+print(f"Total: ${result.total_amount:,.2f}")
+```
+
+The best production systems combine rule-based extraction (for well-structured fields like invoice numbers and dates) with LLM extraction (for ambiguous fields like vendor names and line item descriptions). The rule-based layer provides a validation check on the LLM output — if the LLM says the total is $5,587.75 and your regex also extracts $5,587.75, confidence is high.
+
+---
+
+## 7. DSPy: Programmatic Prompt Optimization
+
+DSPy (Khattab et al., 2023) represents a paradigm shift in how we think about prompts. Instead of manually crafting prompt text, you define:
+1. A **signature**: the input and output fields (e.g., `question -> answer`).
+2. A **module**: the pattern to use (e.g., chain-of-thought, retrieve-then-read).
+3. A **metric**: how to evaluate output quality.
+4. An **optimizer**: an algorithm that searches for the best prompt and few-shot examples.
+
+The optimizer then runs your pipeline against a training set and _learns_ the prompt — selecting which few-shot examples to include, what instructions to give, and how to structure the chain of thought. The prompt becomes a _compiled artifact_ rather than a hand-written string.
+
+```python
+from dataclasses import dataclass
+from typing import List, Callable, Tuple, Optional
+
+@dataclass
+class Example:
+    question: str
+    answer: str
+
+@dataclass
+class Signature:
+    """Defines the input-output contract for a DSPy-style module."""
+    input_fields: List[str]
+    output_fields: List[str]
+    instructions: str = ""
+
+class BootstrapFewShot:
+    """Simplified DSPy-style optimizer that selects best few-shot examples."""
+
+    def __init__(
+        self,
+        metric: Callable[[str, str], float],
+        max_examples: int = 4
+    ):
+        self.metric = metric
+        self.max_examples = max_examples
+
+    def compile(
+        self,
+        train_set: List[Example],
+        candidate_examples: List[Example]
+    ) -> List[Example]:
+        """Select the few-shot examples that maximize metric on train_set."""
+        best_examples: List[Example] = []
+        best_score = 0.0
+
+        # Greedy: add examples one at a time
+        remaining = list(candidate_examples)
+        for _ in range(min(self.max_examples, len(remaining))):
+            best_next: Optional[Example] = None
+            best_next_score = best_score
+
+            for candidate in remaining:
+                trial = best_examples + [candidate]
+                score = self._evaluate(trial, train_set)
+                if score > best_next_score:
+                    best_next = candidate
+                    best_next_score = score
+
+            if best_next is None:
+                break
+            best_examples.append(best_next)
+            remaining.remove(best_next)
+            best_score = best_next_score
+
+        return best_examples
+
+    def _evaluate(
+        self,
+        examples: List[Example],
+        train_set: List[Example]
+    ) -> float:
+        """Evaluate a set of few-shot examples against the training set."""
+        total_score = 0.0
+        for item in train_set:
+            # Simulate: score based on keyword overlap with examples
+            example_text = " ".join(e.answer for e in examples)
+            score = self.metric(item.answer, example_text)
+            total_score += score
+        return total_score / len(train_set)
+
+# Simple keyword overlap metric
+def keyword_overlap(predicted: str, reference: str) -> float:
+    pred_words = set(predicted.lower().split())
+    ref_words = set(reference.lower().split())
+    if not pred_words:
+        return 0.0
+    return len(pred_words & ref_words) / len(pred_words)
+
+optimizer = BootstrapFewShot(metric=keyword_overlap, max_examples=3)
+
+train = [
+    Example("What is RAG?", "Retrieval augmented generation combines search with LLMs"),
+    Example("What is BM25?", "A sparse retrieval algorithm based on term frequency"),
+]
+
+candidates = [
+    Example("Define embeddings", "Dense vector representations of text in continuous space"),
+    Example("What is chunking?", "Splitting documents into smaller retrieval units"),
+    Example("Explain TF-IDF", "Term frequency inverse document frequency for text relevance"),
+    Example("What is FAISS?", "Facebook AI similarity search library for vector retrieval"),
+]
+
+selected = optimizer.compile(train, candidates)
+print(f"Selected {len(selected)} few-shot examples:")
+for ex in selected:
+    print(f"  Q: {ex.question}")
+    print(f"  A: {ex.answer}")
+```
+
+The key insight of DSPy is that **prompt engineering is an optimization problem**, and we have decades of optimization algorithms. Manual prompt iteration is gradient-free search with a sample size of one — you change something, try it on your mental model of what a good response looks like, and declare victory. DSPy replaces this with systematic search over a defined metric on a defined evaluation set.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 8. Putting It All Together: The Context Engineering Checklist
+
+Before deploying a RAG system, verify each layer:
+
+1. **Retrieval quality**: Measure recall@k and MRR on your evaluation set. If recall@10 < 0.8, fix retrieval before touching prompts.
+2. **Context packing**: Are you fitting the most relevant chunks within your token budget? Are you leaving room for the model's output?
+3. **Position ordering**: Are the most critical chunks at the beginning and end of the context (sandwich ordering)?
+4. **Prompt structure**: Does the prompt clearly separate context from instructions? Does it include output format specifications?
+5. **Output validation**: Is the model's output parsed and validated against a schema? What happens when validation fails?
+6. **Version control**: Are prompts versioned? Can you roll back? Do you have A/B testing infrastructure?
+7. **Evaluation**: Do you have an automated eval suite that runs before every prompt change ships?
+
+The systems that succeed in production are not the ones with the cleverest prompts. They are the ones with the most rigorous evaluation and the fastest iteration cycles. Treat your prompts like code: version them, test them, measure them, and deploy them with the same discipline you apply to any production software.
+
+---
+
+## Summary
+
+This lecture covered the post-retrieval pipeline:
+
+- **Context window management** is a knapsack problem — pack the most relevant chunks within your token budget.
+- **Lost-in-the-middle** (Liu et al., 2023) shows that chunk position matters. Use sandwich ordering and explicit citation instructions.
+- **Prompt patterns** — zero-shot, few-shot, chain-of-thought (Wei et al., 2022), self-consistency, tree-of-thought — are not tricks. They are well-studied techniques with known tradeoffs between cost, latency, and accuracy.
+- **Prompt versioning** is non-negotiable in production. Prompts are software artifacts.
+- **Structured outputs** with schema validation eliminate parsing errors and provide a contract between the LLM and your application.
+- **DSPy** (Khattab et al., 2023) turns prompt engineering from manual iteration into programmatic optimization.
+
+Next week, we move from retrieval and context engineering to evaluation — how do you know if your RAG system actually works?

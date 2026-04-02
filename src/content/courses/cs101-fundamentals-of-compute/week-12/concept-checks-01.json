@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "An AVX-512 register is 512 bits wide. How many single-precision (32-bit) floating-point values can it hold and process in a single instruction?",
+      "options": [
+        "8 values",
+        "16 values",
+        "32 values",
+        "64 values"
+      ],
+      "correct": 1,
+      "explanation": "A 512-bit register divided by 32 bits per single-precision float gives $512 / 32 = 16$ values. A single AVX-512 add instruction performs 16 floating-point additions simultaneously. By comparison, SSE (128-bit) processes 4 floats, AVX (256-bit) processes 8 floats, and future extensions may go wider. For double-precision (64-bit), AVX-512 processes $512 / 64 = 8$ values. For 8-bit integers, it processes $512 / 8 = 64$ values --- which is why SIMD is especially powerful for quantized neural network inference."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "ARM SVE (Scalable Vector Extension) differs from x86 AVX in a fundamental way. What is that difference?",
+      "options": [
+        "SVE supports floating-point operations while AVX does not",
+        "SVE has a fixed 512-bit vector width while AVX is variable",
+        "SVE has a variable vector width (128-2048 bits) set by the hardware, and programs are written to be vector-length agnostic",
+        "SVE requires explicit memory alignment while AVX handles unaligned access"
+      ],
+      "correct": 2,
+      "explanation": "SVE's defining innovation is Vector Length Agnosticism (VLA). The programmer does not know (or need to know) the vector width at compile time. The hardware sets VLEN to any multiple of 128 bits from 128 to 2048 bits. Code uses predicate registers and `whilelt` instructions to handle the tail of arrays naturally, regardless of vector width. The same binary runs on a 256-bit implementation (like AWS Graviton3) and a 512-bit implementation (like Fujitsu A64FX) without recompilation. x86 AVX/AVX-512, by contrast, has fixed widths: code compiled for AVX-512 cannot run on hardware that only supports AVX (256-bit)."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A loop contains an if-else branch where half the elements take the 'if' path and half take the 'else' path. When this loop is vectorized with SIMD, what happens?",
+      "options": [
+        "The SIMD unit executes only the if-path elements, then only the else-path elements, achieving 50% utilization",
+        "Both paths are computed for all elements, and a mask selects the correct result for each element (predicated execution)",
+        "The loop cannot be vectorized and falls back to scalar execution",
+        "The hardware dynamically partitions the SIMD lanes between the two paths"
+      ],
+      "correct": 1,
+      "explanation": "SIMD cannot branch per element --- all lanes execute the same instruction. For conditional code, SIMD uses predicated execution: (1) compute the condition for all elements to generate a mask, (2) compute the if-path result for all elements, (3) compute the else-path result for all elements, (4) use the mask to blend the correct results. Both paths are always computed, so the overhead is 2x compared to a uniform path. If 90% of elements take one path, SIMD is still reasonably efficient (the mask eliminates the 10% mismatch). But if the branch is highly divergent (50/50), SIMD is only half as efficient as scalar code that avoids computing the unused path."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Why does auto-vectorization by the compiler often fail to vectorize loops?",
+      "options": [
+        "Compilers do not support SIMD instruction generation",
+        "All loops can be auto-vectorized; failure indicates a compiler bug",
+        "Loop-carried dependencies, pointer aliasing, function calls, and complex control flow prevent the compiler from proving vectorization is safe",
+        "Auto-vectorization is only available on ARM processors, not x86"
+      ],
+      "correct": 2,
+      "explanation": "Auto-vectorization requires the compiler to prove that vectorized execution produces identical results to scalar execution. This fails when: (1) Loop-carried dependencies exist ($a[i] = f(a[i-1])$) --- each iteration depends on the previous, so they cannot execute simultaneously. (2) Pointer aliasing --- the compiler cannot prove that arrays $a$, $b$, $c$ do not overlap in memory, so reordering accesses might change results. (3) Function calls with side effects prevent reordering. (4) Complex control flow (deeply nested branches) makes predicated execution impractical. The `restrict` keyword in C/C++ helps with aliasing, and `#pragma omp simd` can force vectorization, but the programmer takes responsibility for correctness."
+    }
+  ]
+}

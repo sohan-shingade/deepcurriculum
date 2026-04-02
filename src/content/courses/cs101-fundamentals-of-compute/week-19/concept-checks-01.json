@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A software feed handler using DPDK achieves 1-5 microsecond latency from wire to application. An FPGA feed handler parsing Nasdaq ITCH achieves 20-25 nanoseconds per message. What is the primary reason for this ~100x latency difference?",
+      "options": [
+        "The FPGA runs at a higher clock frequency than the CPU",
+        "The CPU must traverse the kernel network stack, while the FPGA implements parsing directly in logic with no software layers",
+        "DPDK is inefficient compared to standard socket I/O",
+        "The FPGA uses a faster network interface card"
+      ],
+      "correct": 1,
+      "explanation": "Even with DPDK kernel bypass, the CPU must execute instructions sequentially: poll the NIC, copy the packet to user space, parse the protocol fields, and update data structures. Each step involves memory accesses subject to cache behavior and branch prediction. The FPGA implements the entire parsing pipeline in dedicated logic gates: the protocol decoder is a fixed combinational/sequential circuit that processes each field in a single clock cycle. There is no instruction fetch, no cache miss, no branch misprediction, and no OS preemption. The FPGA does NOT necessarily run at a higher clock frequency -- FPGAs typically run at 100-500 MHz vs. 3-5 GHz for CPUs -- but the per-cycle work is far more efficient because the circuit is purpose-built for this exact computation."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A pairs trading strategy monitors the spread $z_t = P_{A,t} - \\beta \\cdot P_{B,t}$ between two correlated stocks. The historical mean spread is $\\bar{z} = 2.50$ with standard deviation $\\sigma_z = 0.80$. The current spread is $z_t = 4.10$. How many standard deviations from the mean is this, and what trading action would a mean-reversion pairs trader take?",
+      "options": [
+        "1.0 standard deviations; no trade (within normal range)",
+        "2.0 standard deviations; sell A, buy B (expect spread to narrow)",
+        "2.0 standard deviations; buy A, sell B (expect spread to widen)",
+        "4.1 standard deviations; sell A, buy B (extreme deviation)"
+      ],
+      "correct": 1,
+      "explanation": "The z-score is $(z_t - \\bar{z})/\\sigma_z = (4.10 - 2.50)/0.80 = 1.60/0.80 = 2.0$ standard deviations above the mean. A mean-reversion trader believes the spread will revert to its historical mean, so when the spread is unusually wide (A is expensive relative to B), you sell A and buy B. This 'sells the expensive leg and buys the cheap leg,' profiting when the spread narrows back toward $\\bar{z} = 2.50$. A signal of 2.0 standard deviations is a typical entry threshold for pairs trading strategies."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A trading firm's FPGA pipeline has the following per-stage latencies: NIC Receive (10 ns), Protocol Parse (25 ns), Order Book Update (35 ns), Strategy (45 ns), Risk Check (20 ns, runs in parallel with Order Format), Order Format (50 ns), NIC Transmit (100 ns). What is the total tick-to-trade latency?",
+      "options": [
+        "285 ns (sum of all stages)",
+        "265 ns (risk check runs in parallel with order format, so use max of 50 ns instead of 70 ns)",
+        "215 ns (pipeline means only the longest stage matters)",
+        "100 ns (only the transmit stage determines latency)"
+      ],
+      "correct": 1,
+      "explanation": "The latency is the sum of all stages along the critical path. Since the risk check (20 ns) runs in parallel with order formatting (50 ns), we take the maximum of the two (50 ns), not their sum (70 ns). The critical path is: NIC Receive (10) + Protocol Parse (25) + Order Book Update (35) + Strategy (45) + max(Risk Check, Order Format) (50) + NIC Transmit (100) = 265 ns. This is the latency for a single packet passing through the entire pipeline. Note that pipeline throughput is different -- in steady state, a new result emerges every clock cycle because multiple packets are in different stages simultaneously."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Microwave links from Chicago (CME Aurora, IL) to New Jersey achieve ~7.8 ms round-trip, while fiber optic achieves ~13.0 ms. What physical property accounts for this ~5 ms difference?",
+      "options": [
+        "Microwave signals travel faster than the speed of light in vacuum",
+        "Fiber optic cables take a longer physical route between the two cities",
+        "Light in glass fiber travels at c/1.47 due to the refractive index, while microwave through air travels at nearly c",
+        "Microwave towers have lower processing latency than fiber repeaters"
+      ],
+      "correct": 2,
+      "explanation": "The speed of light in optical fiber is reduced by the glass refractive index of ~1.47, giving an effective speed of ~204 km/ms compared to microwave at ~299 km/ms (near the speed of light in vacuum, $c \\approx 300$ km/ms). Over the ~1,156 km straight-line distance between Chicago and New Jersey, this difference in propagation speed accounts for most of the latency gap. Fiber routes are also slightly longer than straight-line distance due to following existing right-of-way infrastructure (roads, railways), adding perhaps 5-10% to the path length. McKay Brothers achieves 7.82-7.84 ms round trip via microwave, within 1% of the theoretical minimum of 7.72 ms (straight-line distance at speed of light)."
+    }
+  ]
+}

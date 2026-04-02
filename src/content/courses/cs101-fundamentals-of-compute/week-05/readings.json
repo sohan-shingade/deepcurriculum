@@ -1,0 +1,46 @@
+{
+  "readings": [
+    {
+      "title": "The RISC-V Instruction Set Manual, Volume I: Unprivileged ISA (Version 20240411)",
+      "authors": "RISC-V International",
+      "url": "https://docs.riscv.org/reference/isa/unpriv/rv32.html",
+      "note": "The definitive reference for RV32I. Read Chapter 2 carefully — it defines all 40 base instructions, the six instruction formats with bit-level encoding, and the design rationale. Pay close attention to the immediate encoding diagrams and why the bits are arranged the way they are."
+    },
+    {
+      "title": "RISC-V ISA Reference Card",
+      "authors": "SFU ENSC 254",
+      "url": "https://www.cs.sfu.ca/~ashriram/Courses/CS295/assets/notebooks/RISCV/RISCV_CARD.pdf",
+      "note": "A compact two-page reference card listing every RV32I instruction with its encoding, opcode, funct3, and funct7 values. Print this out and keep it next to your keyboard while working on the problem set and Project 2."
+    },
+    {
+      "title": "The Case for the Reduced Instruction Set Computer",
+      "authors": "Patterson and Ditzel, 1980",
+      "url": "https://dl.acm.org/doi/10.1145/641914.641917",
+      "note": "The foundational paper that launched the RISC movement. Patterson and Ditzel argue that complex instructions are rarely used by compilers, waste die area, and slow down the common case. Their measurements on VAX programs showed that simple instructions dominate execution frequency."
+    },
+    {
+      "title": "Computer Organization and Design: RISC-V Edition, 2nd Edition",
+      "authors": "David Patterson and John Hennessy",
+      "url": "https://www.elsevier.com/books/computer-organization-and-design-risc-v-edition/patterson/978-0-12-820331-6",
+      "note": "The standard textbook for computer architecture courses. Chapters 2-4 cover RISC-V instruction sets, assembly programming, and processor design. Patterson co-created both RISC and RISC-V — this book reflects decades of refinement in teaching this material."
+    },
+    {
+      "title": "RISC-V Calling Convention Specification",
+      "authors": "RISC-V International",
+      "url": "https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-cc.adoc",
+      "note": "The official RISC-V psABI (processor-specific Application Binary Interface) specification. Defines the calling convention: which registers are caller-saved vs callee-saved, how arguments are passed, stack alignment requirements, and stack frame layout."
+    },
+    {
+      "title": "CMU 18-447: Introduction to Computer Architecture — Lecture Slides",
+      "authors": "Onur Mutlu",
+      "url": "https://people.inf.ethz.ch/omutlu/lecture-videos.html",
+      "note": "Professor Mutlu's freely available lectures cover ISA design, RISC-V, and processor microarchitecture in exceptional depth. The lectures on ISA design principles and pipelining complement this week's material perfectly. Mutlu also teaches at ETH Zurich with updated materials."
+    },
+    {
+      "title": "RISC-V Registers (WikiChip)",
+      "authors": "WikiChip",
+      "url": "https://en.wikichip.org/wiki/risc-v/registers",
+      "note": "A clear reference for the 32 RISC-V registers with their ABI names, roles (argument, saved, temporary), and caller/callee-saved classifications. Useful quick reference alongside the formal psABI specification."
+    }
+  ]
+}

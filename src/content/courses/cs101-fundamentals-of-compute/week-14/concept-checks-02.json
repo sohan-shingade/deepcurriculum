@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In parallel reduction Version 1 (interleaved addressing with divergent branching), why does the condition `if (i % (2 * stride) == 0)` cause warp divergence, and how does Version 2 fix it?",
+      "options": [
+        "Version 1 causes divergence because even and odd threads in the same warp take different branches; Version 2 eliminates divergence by using sequential thread IDs (0..stride-1) so that all active threads are contiguous and fill complete warps",
+        "Version 1 causes bank conflicts, not divergence; Version 2 uses padding to fix this",
+        "Both versions have the same divergence; Version 2 is faster because it uses fewer registers",
+        "Version 1 is actually divergence-free; the improvement in Version 2 comes from better memory coalescing"
+      ],
+      "correct": 0,
+      "explanation": "In Version 1, at stride = 1, the condition `i % 2 == 0` means threads 0, 2, 4, ... are active while threads 1, 3, 5, ... are idle. Within warp 0, threads 0 and 1 take different paths -- classic warp divergence. In Version 2, threads 0, 1, 2, ..., stride-1 are active (contiguous). At stride = n/2, the first n/2 threads are all active, filling complete warps with no divergence. Only the boundary warp (if n/2 is not a multiple of 32) has any divergence. The key insight: arrange active threads contiguously so that within each warp, either all threads are active or all are inactive."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "The Hillis-Steele scan completes in $\\lceil \\log_2 n \\rceil$ steps but performs $O(n \\log n)$ total work. The Blelloch scan performs $O(n)$ total work but takes $2\\lceil \\log_2 n \\rceil$ steps. When is each algorithm preferred on a GPU?",
+      "options": [
+        "Hillis-Steele is always preferred because fewer steps means lower latency",
+        "Blelloch is always preferred because it does less total work",
+        "Hillis-Steele is preferred when the GPU has many more processors than elements (latency-limited regime); Blelloch is preferred when work efficiency matters more (throughput-limited regime, large arrays)",
+        "The two algorithms have identical performance on GPUs because the GPU has enough parallelism to hide the extra work"
+      ],
+      "correct": 2,
+      "explanation": "This is a classic work-depth trade-off. Hillis-Steele has lower depth ($\\log n$ steps) but higher work ($n \\log n$ operations). Blelloch has higher depth ($2 \\log n$ steps) but optimal work ($O(n)$). On a GPU with P processors and an array of N elements: if $P \\gg N$ (more processors than elements), the extra work of Hillis-Steele is free because processors would be idle anyway, and the lower step count wins. If $P \\ll N$ (common case: millions of elements), the extra work of Hillis-Steele wastes processor cycles, and Blelloch's work efficiency dominates. In practice, large-scale GPU scans use Blelloch within blocks and a hierarchical approach across blocks."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In tiled matrix multiplication with TILE_SIZE = 16, the naive implementation reads $2 \\times M \\times N \\times K$ floats from global memory. The tiled version reads approximately $2 \\times M \\times N \\times K / \\text{TILE\\_SIZE}$ floats. For a $4096 \\times 4096$ matrix multiply, how many global memory reads does tiling save?",
+      "options": [
+        "The tiled version saves no reads; it just changes the access pattern",
+        "The tiled version reads $2 \\times 4096^3 / 16 \\approx 8.6$ billion floats instead of $2 \\times 4096^3 \\approx 137$ billion, saving ~93.75% of reads",
+        "The tiled version reads from shared memory instead of global memory, but the total data transferred is the same",
+        "Tiling only helps with bank conflicts, not with the total amount of data read"
+      ],
+      "correct": 1,
+      "explanation": "Naive: $2 \\times 4096^3 = 2 \\times 68{,}719{,}476{,}736 \\approx 137.4$ billion float reads from global memory. Tiled with TILE_SIZE=16: $2 \\times 4096^3 / 16 \\approx 8.6$ billion reads. The reduction is exactly TILE_SIZE = 16x. Each tile of data is loaded once from global memory into shared memory and reused TILE_SIZE times by different threads. At 4 bytes per float, this means the tiled version transfers ~34.4 GB vs ~549.8 GB from global memory -- the difference between being compute-bound (achieving most of the H100's 989 TFLOPS TF32) and being hopelessly memory-bound. This reuse factor is the fundamental reason tiled GEMM dominates GPU computing."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In Ring-AllReduce with $N = 8$ GPUs and an array of $K$ elements per GPU, each GPU sends a total of $2(N-1)/N \\times K = 2 \\times 7/8 \\times K = 1.75K$ data. If $K = 1$ billion float32 values (4 GB) and each GPU's NVLink bandwidth is 900 GB/s (H100), what is the minimum time for the AllReduce?",
+      "options": [
+        "4.4 ms (4 GB / 900 GB/s)",
+        "7.8 ms (1.75 x 4 GB / 900 GB/s, accounting for the total data each GPU must send)",
+        "3.1 ms (send and receive are pipelined, so effective bandwidth is doubled)",
+        "35 ms (each of the 14 steps must complete before the next starts)"
+      ],
+      "correct": 1,
+      "explanation": "Each GPU sends $1.75K = 1.75 \\times 4 = 7$ GB of data total. At 900 GB/s NVLink bandwidth (H100): $7 / 900 \\approx 7.8$ ms. This is the bandwidth-optimal lower bound -- no AllReduce algorithm can do better. The critical insight: the communication volume per GPU is approximately $2K$ regardless of $N$ (for large $N$, $2(N-1)/N \\approx 2$). Doubling the number of GPUs does not double the communication time per GPU. This is why Ring-AllReduce scales well: going from 8 to 64 GPUs increases per-GPU communication from $1.75K$ to $1.97K$ -- only a 12.5% increase despite 8x more GPUs."
+    }
+  ]
+}

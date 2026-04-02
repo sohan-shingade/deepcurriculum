@@ -1,0 +1,40 @@
+{
+  "readings": [
+    {
+      "title": "Accelerating Python for Exotic Option Pricing",
+      "authors": "NVIDIA Developer Blog",
+      "url": "https://developer.nvidia.com/blog/accelerating-python-for-exotic-option-pricing/",
+      "note": "Covers GPU-accelerated Monte Carlo option pricing with Python and CUDA. Demonstrates path simulation for exotic options, variance reduction techniques, and achieves 100-1000x speedup over single-threaded CPU. Read sections on kernel design and cuRAND integration for context on how GPU parallelism maps to financial Monte Carlo."
+    },
+    {
+      "title": "GPU Gems 2, Chapter 45: Options Pricing on the GPU",
+      "authors": "Victor Podlozhnyuk (NVIDIA)",
+      "url": "https://developer.nvidia.com/gpugems/gpugems2/part-vi-simulation-and-numerical-algorithms/chapter-45-options-pricing-gpu",
+      "note": "The classic reference on GPU Black-Scholes implementation. Covers both closed-form evaluation and Monte Carlo simulation. The discussion of thread-to-path mapping and reduction is directly applicable to this week's problem set."
+    },
+    {
+      "title": "Build Fast, Trade Fast: FPGA-Based High-Frequency Trading Using High-Level Synthesis",
+      "authors": "Andrew Boutros et al. (University of Toronto)",
+      "url": "https://ieeexplore.ieee.org/document/8279781/",
+      "note": "The key academic paper demonstrating 270ns average tick-to-trade latency using HLS C++ on a Kintex UltraScale FPGA. Describes the complete system: network stack, FAST protocol parser, order book, trading strategy, and order gateway. Resource utilization under 8% logic shows that FPGAs have massive headroom for strategy complexity. Essential reading for Track C capstone students."
+    },
+    {
+      "title": "A Low-Latency Library in FPGA Hardware for High-Frequency Trading (HFT)",
+      "authors": "John W. Lockwood and Adwait Gupte (IEEE HOTI 2012)",
+      "url": "https://ieeexplore.ieee.org/document/6299067/",
+      "note": "Foundational paper on FPGA HFT infrastructure. Demonstrates 1 microsecond end-to-end latency at 10 Gbps Ethernet line rate, with reusable IP blocks for networking, memory, and financial protocol parsing. Established the viability of FPGA as a hybrid compute platform for trading."
+    },
+    {
+      "title": "How Are FPGAs Used in Trading?",
+      "authors": "IMC Trading",
+      "url": "https://www.imc.com/us/articles/how-are-fpgas-used-in-trading",
+      "note": "A practitioner's perspective from one of the world's largest market-making firms. Explains why IMC chose FPGAs over ASICs (flexibility for changing strategies), the build-vs-buy decision, and how hardware and software engineers collaborate. The observation that 'a software developer can know within seconds whether code works, but an FPGA engineer may wait two to three hours of compilation time' captures the fundamental development speed tradeoff."
+    },
+    {
+      "title": "Kernel Bypass in HFT",
+      "authors": "QuantVPS",
+      "url": "https://www.quantvps.com/blog/kernel-bypass-in-hft",
+      "note": "Practical overview of kernel bypass technologies for trading: DPDK, OpenOnload, and RDMA. Covers poll-mode drivers, huge pages, core pinning, and measured latency improvements. Good companion to the CPU isolation techniques (isolcpus, nohz_full, rcu_nocbs) discussed in lecture."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "Consider the Iron Law: Execution Time = Instructions x CPI x Clock Period. A CISC instruction like x86's REP MOVSB copies a memory block with a single instruction (Ninst = 1), but takes many cycles. A RISC approach uses a loop of load/store instructions (Ninst = 20), each completing in 1 cycle. If the CISC instruction takes 25 cycles and the RISC machine has a 20% faster clock, which completes the memory copy faster?",
+      "options": [
+        "CISC, because 1 instruction is always better than 20 instructions",
+        "RISC, because 20 x 1 x 0.8T = 16T is less than 1 x 25 x T = 25T",
+        "They are equal because the Iron Law shows total work is the same",
+        "Cannot determine without knowing the pipeline depth"
+      ],
+      "correct": 1,
+      "explanation": "Applying the Iron Law: CISC time = 1 x 25 x T = 25T. RISC time = 20 x 1 x 0.8T = 16T. The RISC machine is faster despite executing 20x more instructions because each instruction completes in one cycle and the clock is 20% faster. This illustrates why minimizing instruction count alone is not sufficient — what matters is the product of all three factors. The RISC philosophy bets that simpler instructions enable lower CPI and faster clocks, and this example shows that bet paying off."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Modern Intel processors crack complex x86 instructions into simpler micro-operations (uops) that are executed by an out-of-order engine. This means modern x86 processors are best described as:",
+      "options": [
+        "Pure CISC machines that execute complex instructions natively in hardware",
+        "RISC machines internally, with a CISC-to-RISC translation layer in the frontend decoder",
+        "Neither CISC nor RISC — they are a fundamentally new category",
+        "CISC machines that use pipelining to speed up complex instructions"
+      ],
+      "correct": 1,
+      "explanation": "Since Intel's P6 microarchitecture (Pentium Pro, 1995), all x86 processors have been internally RISC machines. The frontend decoder cracks variable-length CISC instructions into fixed-width micro-operations (uops), which are then processed by an out-of-order, superscalar execution engine identical in principle to a RISC design. Intel's Golden Cove core (2021) has a 6-wide decoder and a 4K-entry micro-op cache to bypass decoding for hot code. The x86 ISA persists not because of technical superiority but because of the massive ecosystem of existing software."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In RISC-V, the immediate field in a B-type (branch) instruction has its bits arranged as [12|10:5|4:1|11] rather than in a simple contiguous order. Why?",
+      "options": [
+        "To make assembly programming easier for humans",
+        "To encode the immediate as a multiple of 4 bytes instead of 2 bytes",
+        "To keep the sign bit at instruction bit 31 and maximize overlap with other format immediate positions, simplifying the hardware immediate generator",
+        "To allow branches to reach a wider range of addresses"
+      ],
+      "correct": 2,
+      "explanation": "The scrambled immediate layout is a deliberate hardware optimization. By placing the sign bit at instruction bit 31 (the same position as in I-type, S-type, U-type, and J-type), the sign-extension circuit is shared across all formats — it simply replicates bit 31. Furthermore, bits [30:25] map to imm[10:5] in both I-type, S-type, and B-type formats, so the same wiring can extract those bits regardless of format. This reduces multiplexer count in the immediate generation unit. The immediate range is not affected by bit ordering — the range is determined by how many bits are available and the 2-byte alignment constraint."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "RISC-V has no SUBI (subtract immediate) instruction. How do you subtract a constant value, say 5, from register x1?",
+      "options": [
+        "Use SUB x1, x1, 5 since SUB can take an immediate operand",
+        "Use ADDI x1, x1, -5 since adding a negative immediate is the same as subtracting",
+        "Load the constant 5 into a temporary register, then use SUB",
+        "It is impossible to subtract a constant in RISC-V without the M extension"
+      ],
+      "correct": 1,
+      "explanation": "ADDI sign-extends its 12-bit immediate, which means it natively supports values from -2048 to +2047. ADDI x1, x1, -5 computes x1 = x1 + (-5) = x1 - 5. This is why RISC-V omits SUBI: it would be a redundant instruction, since ADDI already covers subtraction of constants. This is an example of RISC-V's orthogonal design philosophy — every instruction that can be trivially synthesized from existing instructions is deliberately omitted to keep the hardware simple. Option A is wrong because SUB is an R-type instruction that takes three registers, not an immediate. Option C would work but is unnecessarily wasteful."
+    }
+  ]
+}

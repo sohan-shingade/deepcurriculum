@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In Self-RAG (Asai et al. 2023), what is the key architectural difference compared to Corrective RAG (CRAG)?",
+      "options": [
+        "Self-RAG uses a larger language model for generation",
+        "Self-RAG trains the generator itself to emit reflection tokens, while CRAG uses an external evaluator to assess retrieval quality",
+        "Self-RAG always retrieves while CRAG sometimes skips retrieval",
+        "Self-RAG uses web search as a fallback while CRAG does not"
+      ],
+      "correct": 1,
+      "explanation": "Self-RAG integrates reflection directly into the language model by training it to produce special tokens ([Retrieve], [IsREL], [IsSUP], [IsUSE]) that assess retrieval quality and generation faithfulness. CRAG, by contrast, uses an external retrieval evaluator (a separate model or classifier) that runs after retrieval and before generation, triggering corrective actions based on confidence thresholds. The fundamental distinction is intrinsic vs. extrinsic quality assessment."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Query decomposition improves multi-hop retrieval by breaking a complex query into sub-queries. What is the primary risk of this approach?",
+      "options": [
+        "Sub-queries are always slower than single queries",
+        "The decomposition may lose critical relationships between aspects of the original query, leading to fragmented retrieval that misses cross-cutting information",
+        "Embedding models cannot handle short sub-queries",
+        "Vector databases cannot process multiple queries in sequence"
+      ],
+      "correct": 1,
+      "explanation": "When you decompose 'Compare X and Y in terms of Z' into separate sub-queries about X, Y, and Z, you risk losing the relational structure of the original question. A document that specifically discusses 'X vs Y on dimension Z' might not rank highly for any individual sub-query but would be highly relevant to the composite question. This is why the synthesis step after decomposed retrieval is critical — and why some systems maintain the original query alongside sub-queries during retrieval."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An approval gate auto-approves low-risk actions and requires human approval for high-risk ones. Which of the following is the most important consideration when setting risk levels?",
+      "options": [
+        "Minimizing the number of human approvals to reduce latency",
+        "The reversibility of the action — irreversible actions (sending emails, modifying databases, calling external APIs) should require higher approval levels than reversible ones (internal searches, draft generation)",
+        "Always requiring approval for any action involving retrieval",
+        "Setting all actions to high-risk to maximize safety"
+      ],
+      "correct": 1,
+      "explanation": "The key principle for approval gate design is reversibility. An internal search is low-risk because it has no side effects — if the results are wrong, you simply discard them. Sending an email or writing to an external database is high-risk because it cannot be undone. This maps to the concept of 'blast radius' in distributed systems: the approval level should be proportional to the potential damage of an incorrect action. Setting everything to high-risk defeats the purpose — the human becomes a bottleneck and starts rubber-stamping approvals."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In the MCP (Model Context Protocol) architecture, what is the relationship between hosts, clients, and servers?",
+      "options": [
+        "One host connects to one server through one client",
+        "A host maintains multiple MCP clients, each with a 1:1 connection to an MCP server, where servers expose resources, tools, and prompts",
+        "Servers connect directly to hosts without clients",
+        "Clients are shared across multiple servers to reduce overhead"
+      ],
+      "correct": 1,
+      "explanation": "MCP follows a hub-and-spoke model: the host (e.g., Claude Desktop or your IDE) maintains multiple MCP clients, and each client has a 1:1 relationship with an MCP server. This means if you want to connect to 5 different tools (a database, a file system, a web search API, a code execution sandbox, and a vector store), the host creates 5 clients, each talking to its respective server. Servers expose three primitives: resources (data to read), tools (functions to call), and prompts (template prompts). This 1:1 client-server mapping keeps the protocol simple and stateless per connection."
+    }
+  ]
+}

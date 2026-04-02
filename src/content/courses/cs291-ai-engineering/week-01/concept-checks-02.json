@@ -1,0 +1,52 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "Why does the Anthropic API treat the system message as a separate top-level parameter rather than including it in the messages array?",
+      "options": [
+        "It's purely an aesthetic API design choice with no functional impact",
+        "System messages are cached separately for efficiency, and the separate parameter signals that it has a distinct role in prompt processing — it sets behavioral constraints with higher priority than user messages",
+        "Anthropic models don't support system messages at all",
+        "The messages array can only contain user and assistant roles due to the alternating turn requirement"
+      ],
+      "correct": 1,
+      "explanation": "The separate system parameter reflects a real architectural decision. Anthropic's models process the system prompt as a distinct input that sets behavioral context. Separating it makes caching more efficient (the system prompt doesn't change between requests in most applications) and makes the alternating user/assistant turn structure cleaner. OpenAI includes it in the messages array, which is simpler but less explicit about the system prompt's special status."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A production service makes 50,000 LLM API calls per day. Each call uses ~1,500 input tokens and ~400 output tokens. The model costs $3/1M input tokens and $15/1M output tokens. What is the approximate monthly cost?",
+      "options": [
+        "$6,750 input + $9,000 output = $15,750/month",
+        "$675 input + $900 output = $1,575/month",
+        "$67.50 input + $90 output = $157.50/month",
+        "$6,750 input + $900 output = $7,650/month"
+      ],
+      "correct": 0,
+      "explanation": "Monthly requests: 50,000 × 30 = 1,500,000. Total input tokens: 1,500,000 × 1,500 = 2.25 billion = 2,250M. Input cost: 2,250 × $3 = $6,750. Total output tokens: 1,500,000 × 400 = 600M. Output cost: 600 × $15 = $9,000. Total: $15,750/month. Notice that despite output tokens being fewer than input tokens, they cost more ($9,000 vs $6,750) because the per-token output price is 5× higher. This is why controlling output length is a powerful cost lever."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A circuit breaker is in the 'open' state with a 30-second recovery timeout. A request comes in 15 seconds after the circuit opened. What happens?",
+      "options": [
+        "The request is sent to the API and the circuit transitions to half-open",
+        "The request fails immediately without calling the API, because the recovery timeout hasn't elapsed yet",
+        "The request is queued until the recovery timeout elapses",
+        "The circuit breaker resets to closed and processes the request normally"
+      ],
+      "correct": 1,
+      "explanation": "When a circuit breaker is open, ALL requests fail immediately without calling the downstream service. This is the entire point — it prevents wasting resources on a service that is known to be failing. Only after the recovery timeout elapses does the circuit transition to 'half-open', where it allows a single test request through. If that test succeeds, the circuit closes (returns to normal). If it fails, the circuit opens again for another timeout period. This fail-fast behavior is critical for preventing cascade failures in distributed systems."
+    },
+    {
+      "id": "cc-4",
+      "type": "fill_code",
+      "question": "Complete the function to apply temperature scaling to logits and return a probability distribution. When temperature is 0, return a one-hot distribution with all probability on the maximum logit.",
+      "starterCode": "import numpy as np\n\ndef apply_temperature(logits: np.ndarray, temperature: float) -> np.ndarray:\n    \"\"\"Apply temperature scaling and return probability distribution.\"\"\"\n    if temperature == 0:\n        # TODO: return one-hot on argmax\n        pass\n    # TODO: scale logits by temperature, then apply stable softmax\n    pass",
+      "solution": "import numpy as np\n\ndef apply_temperature(logits: np.ndarray, temperature: float) -> np.ndarray:\n    \"\"\"Apply temperature scaling and return probability distribution.\"\"\"\n    if temperature == 0:\n        probs = np.zeros_like(logits, dtype=float)\n        probs[np.argmax(logits)] = 1.0\n        return probs\n    scaled = logits / temperature\n    scaled -= scaled.max()  # numerical stability\n    exp_scaled = np.exp(scaled)\n    return exp_scaled / exp_scaled.sum()",
+      "correct": -1,
+      "explanation": "Temperature scaling divides the logits by T before softmax: p_i = exp(z_i/T) / Σ exp(z_j/T). At T→0, this concentrates all probability mass on the highest logit (greedy decoding). At T=1, you get the standard softmax. At T>1, the distribution flattens toward uniform. The numerical stability trick (subtracting the max before exp) is essential — without it, exp() can overflow to infinity. This doesn't change the final probabilities because exp(z_i - c) / Σ exp(z_j - c) = exp(z_i) / Σ exp(z_j) for any constant c."
+    }
+  ]
+}

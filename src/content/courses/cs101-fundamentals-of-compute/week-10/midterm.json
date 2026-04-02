@@ -1,0 +1,357 @@
+{
+  "title": "Midterm Exam",
+  "timeLimit": 90,
+  "passingScore": 60,
+  "questions": [
+    {
+      "id": "m1",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "A MOSFET has $\\mu_n C_{ox} = 200\\;\\mu\\text{A/V}^2$, $W/L = 6$, $V_{th} = 0.45$ V, $V_{GS} = 1.1$ V, and $V_{DS} = 0.5$ V. What is the drain current $I_D$?",
+      "options": [
+        "$I_D = 240\\;\\mu\\text{A}$ (linear region)",
+        "$I_D = 253.5\\;\\mu\\text{A}$ (saturation region)",
+        "$I_D = 390\\;\\mu\\text{A}$ (linear region)",
+        "$I_D = 507\\;\\mu\\text{A}$ (saturation region)"
+      ],
+      "correct": 0,
+      "explanation": "First, check the operating region. $V_{GS} - V_{th} = 1.1 - 0.45 = 0.65$ V. Since $V_{DS} = 0.5 < 0.65 = V_{GS} - V_{th}$, the transistor is in the **linear (triode) region**. Using the linear equation: $I_D = \\mu_n C_{ox} \\frac{W}{L} \\left[(V_{GS} - V_{th}) V_{DS} - \\frac{V_{DS}^2}{2}\\right] = 200 \\times 6 \\times \\left[0.65 \\times 0.5 - \\frac{0.5^2}{2}\\right] = 1200 \\times [0.325 - 0.125] = 1200 \\times 0.200 = 240\\;\\mu\\text{A}$. The critical first step is determining the operating region. If we had mistakenly used the saturation formula: $I_D = \\frac{1}{2}(200)(6)(0.65)^2 = 600 \\times 0.4225 = 253.5\\;\\mu\\text{A}$ — that would be answer (b), which is wrong because we are in the linear region, not saturation."
+    },
+    {
+      "id": "m2",
+      "type": "multiple_choice",
+      "points": 3,
+      "question": "A CMOS chip runs at 3.5 GHz with activity factor $\\alpha = 0.15$, total switching capacitance $C = 10$ nF, and supply voltage $V_{DD} = 0.85$ V. What is its dynamic power consumption?",
+      "options": [
+        "1.90 W",
+        "3.79 W",
+        "5.31 W",
+        "7.59 W"
+      ],
+      "correct": 1,
+      "explanation": "Using $P_{dyn} = \\alpha C V_{DD}^2 f$: $P_{dyn} = 0.15 \\times 10 \\times 10^{-9} \\times (0.85)^2 \\times 3.5 \\times 10^9 = 0.15 \\times 10 \\times 10^{-9} \\times 0.7225 \\times 3.5 \\times 10^9$. The $10^{-9}$ and $10^9$ cancel: $= 0.15 \\times 10 \\times 0.7225 \\times 3.5 = 0.15 \\times 25.2875 = 3.793$ W $\\approx 3.79$ W. Note the quadratic dependence on voltage: if $V_{DD}$ increased to 1.0 V, dynamic power would jump to $0.15 \\times 10 \\times 1.0 \\times 3.5 = 5.25$ W — a 38% increase from a 18% voltage increase."
+    },
+    {
+      "id": "m3",
+      "type": "multiple_choice",
+      "points": 3,
+      "question": "Which Boolean algebra identity justifies $A \\cdot (A + B) = A$?",
+      "options": [
+        "Distributive law: $A \\cdot (A + B) = A \\cdot A + A \\cdot B = A + AB = A(1 + B) = A$",
+        "De Morgan's law: $\\overline{A \\cdot (A + B)} = \\bar{A} + \\overline{A + B}$",
+        "Consensus theorem: $AB + \\bar{A}C + BC = AB + \\bar{A}C$",
+        "Commutative law: $A \\cdot B = B \\cdot A$"
+      ],
+      "correct": 0,
+      "explanation": "This is the **absorption law**, derived from the distributive law. Expanding: $A \\cdot (A + B) = A \\cdot A + A \\cdot B = A + AB$. Factoring: $A(1 + B) = A \\cdot 1 = A$, since $1 + B = 1$ (any OR with 1 is 1). The absorption law ($A + AB = A$ or equivalently $A(A + B) = A$) is one of the most useful simplification identities in Boolean algebra. It states that if $A$ is true, anything ORed with $A$ is irrelevant when ANDed back with $A$."
+    },
+    {
+      "id": "m4",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "NAND gates are considered 'universal.' What does this mean, and why is it significant for chip design?",
+      "options": [
+        "NAND gates can operate at any voltage level, making them universally compatible",
+        "Any Boolean function can be implemented using only NAND gates — NOT, AND, OR, and all other gates can be built from NAND alone. This simplifies manufacturing because a chip factory only needs to produce one type of gate cell.",
+        "NAND gates have the fastest propagation delay of all gates",
+        "NAND gates consume the least power of all gate types"
+      ],
+      "correct": 1,
+      "explanation": "A **universal gate** is one from which any other logic function can be constructed. NAND is universal because: NOT(A) = NAND(A, A); AND(A,B) = NOT(NAND(A,B)) = NAND(NAND(A,B), NAND(A,B)); OR(A,B) = NAND(NOT(A), NOT(B)) = NAND(NAND(A,A), NAND(B,B)). Since NOT, AND, and OR can implement any Boolean function (completeness of Boolean algebra), NAND alone suffices. NOR is also universal. In CMOS technology, NAND gates have a natural advantage: the NMOS transistors are in series (pulling down) and PMOS transistors are in parallel (pulling up), which gives NAND better speed characteristics than NOR (where PMOS transistors, which are slower, are in series)."
+    },
+    {
+      "id": "m5",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "Convert the decimal number $-27.375$ to IEEE 754 single-precision floating point. What is the biased exponent field (8 bits)?",
+      "options": [
+        "10000011 (131)",
+        "10000100 (132)",
+        "10000010 (130)",
+        "01111100 (124)"
+      ],
+      "correct": 0,
+      "explanation": "Step 1: Convert magnitude to binary. $27 = 11011_2$. $0.375 = 0.011_2$ (0.375 = 1/4 + 1/8 = 0.25 + 0.125). So $27.375 = 11011.011_2$. Step 2: Normalize. $11011.011 = 1.1011011 \\times 2^4$. Step 3: Determine fields. Sign = 1 (negative). Exponent = $4 + 127 = 131 = 10000011_2$. Mantissa = 10110110000000000000000 (the digits after the implicit 1). The biased exponent is 10000011 = 131. A common mistake is forgetting the bias of 127, or miscounting the shift (the binary point moves 4 positions left, so the exponent is 4, not 3 or 5)."
+    },
+    {
+      "id": "m6",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "What is the two's complement representation of $-100$ in 8 bits?",
+      "options": [
+        "10011100",
+        "11100100",
+        "10100100",
+        "01100100"
+      ],
+      "correct": 0,
+      "explanation": "Step 1: Represent 100 in 8-bit binary. $100 = 64 + 32 + 4 = 01100100_2$. Step 2: Invert all bits: $10011011$. Step 3: Add 1: $10011011 + 1 = 10011100$. Verification: $10011100$ = $-128 + 16 + 8 + 4 = -128 + 28 = -100$. Alternatively: positional value = $-1 \\times 128 + 0 \\times 64 + 0 \\times 32 + 1 \\times 16 + 1 \\times 8 + 1 \\times 4 + 0 \\times 2 + 0 \\times 1 = -128 + 28 = -100$. The range of 8-bit two's complement is -128 to 127, so -100 is representable."
+    },
+    {
+      "id": "m7",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "A D flip-flop has setup time $t_s = 25$ ps and hold time $t_h = 10$ ps. The clock-to-q delay is $t_{cq} = 35$ ps. The combinational logic between two flip-flops has a delay of $t_{comb} = 180$ ps. What is the maximum clock frequency?",
+      "options": [
+        "4.17 GHz",
+        "3.85 GHz",
+        "4.55 GHz",
+        "5.00 GHz"
+      ],
+      "correct": 0,
+      "explanation": "The minimum clock period is: $T_{clk} = t_{cq} + t_{comb} + t_s = 35 + 180 + 25 = 240$ ps. Maximum frequency: $f_{max} = 1/T_{clk} = 1/(240 \\times 10^{-12}) = 4.167$ GHz $\\approx 4.17$ GHz. Note that the hold time is not used in the maximum frequency calculation — it constrains the minimum delay (the shortest path between flip-flops must be longer than $t_h - t_{cq}$ to avoid hold violations). For hold: we need $t_{cq} + t_{comb,min} > t_h$, i.e., $35 + t_{comb,min} > 10$, which is easily satisfied since combinational delay is always positive."
+    },
+    {
+      "id": "m8",
+      "type": "multiple_choice",
+      "points": 3,
+      "question": "A Moore FSM for a traffic light controller has states {Green, Yellow, Red}. How many flip-flops are needed to encode the state?",
+      "options": [
+        "1 flip-flop (binary encoding is sufficient for 3 states since $2^1 = 2 \\geq 3$... wait, $2^1 = 2 < 3$, so 1 is not enough)",
+        "2 flip-flops ($2^2 = 4 \\geq 3$ states, with one unused encoding)",
+        "3 flip-flops (one-hot encoding: one flip-flop per state)",
+        "Both (b) and (c) are valid; binary encoding uses 2, one-hot uses 3"
+      ],
+      "correct": 3,
+      "explanation": "With 3 states, **binary encoding** requires $\\lceil \\log_2 3 \\rceil = 2$ flip-flops (4 possible encodings, 1 unused). **One-hot encoding** uses 3 flip-flops (exactly one is high at any time: 100 = Green, 010 = Yellow, 001 = Red). Both are valid design choices. Binary encoding minimizes flip-flop count but requires more complex next-state logic (decoder). One-hot encoding uses more flip-flops but simplifies next-state logic (each transition only involves setting one bit and clearing another). In FPGAs, one-hot is often preferred because FPGAs have abundant flip-flops but limited LUT inputs for complex logic."
+    },
+    {
+      "id": "m9",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "A DRAM module has $t_{RCD} = 14$ ns (row access), $t_{CAS} = 14$ ns (column access), and $t_{RP} = 14$ ns (row precharge). For a row miss (different row already open), what is the total access latency?",
+      "options": [
+        "14 ns (just the column access for a row hit)",
+        "28 ns ($t_{RCD} + t_{CAS}$, for opening a row in an empty bank)",
+        "42 ns ($t_{RP} + t_{RCD} + t_{CAS}$, must precharge old row + open new row + read column)",
+        "56 ns ($t_{RP} + t_{RCD} + t_{CAS} + t_{RP}$ for closing after read)"
+      ],
+      "correct": 2,
+      "explanation": "For a **row miss** (a different row is currently active in the bank), three operations must occur sequentially: (1) **Precharge** ($t_{RP} = 14$ ns): close the currently open row by charging the bitlines back to $V_{DD}/2$. (2) **Row activation** ($t_{RCD} = 14$ ns): assert the new row address, the wordline opens, and the sense amplifiers latch the new row. (3) **Column access** ($t_{CAS} = 14$ ns): assert the column address and read the data. Total: $14 + 14 + 14 = 42$ ns. Compare to a **row hit** (same row already open): only $t_{CAS} = 14$ ns. This 3x latency difference is why DRAM controllers try to schedule accesses to open rows first — row buffer locality is critical for performance."
+    },
+    {
+      "id": "m10",
+      "type": "multiple_choice",
+      "points": 3,
+      "question": "In the storage hierarchy, which correctly orders technologies from fastest to slowest?",
+      "options": [
+        "SRAM → DRAM → NVMe SSD → HDD",
+        "DRAM → SRAM → NVMe SSD → HDD",
+        "SRAM → NVMe SSD → DRAM → HDD",
+        "Registers → DRAM → SRAM → HDD"
+      ],
+      "correct": 0,
+      "explanation": "The storage hierarchy ordered by latency: **Registers** (<1 ns) → **SRAM** (L1/L2/L3 caches, 1-30 ns) → **DRAM** (main memory, 50-100 ns) → **NVMe SSD** (flash storage, 10-100 $\\mu$s) → **HDD** (magnetic disk, 5-10 ms). Each level is roughly 10-100x slower than the previous level but 10-100x larger in capacity. SRAM is faster than DRAM because SRAM uses 6 transistors per bit with no refresh needed, while DRAM uses 1 transistor + 1 capacitor per bit and requires periodic refresh. The trade-off is density: DRAM stores ~4x more bits per unit area than SRAM."
+    },
+    {
+      "id": "m11",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "In RISC-V RV32I, the instruction `SW x5, 12(x10)` stores the value in x5 to memory at address x10+12. What instruction format is this, and how is the immediate 12 encoded?",
+      "options": [
+        "I-type format, immediate in bits [31:20] as a contiguous 12-bit field",
+        "S-type format, immediate split: bits [31:25] hold imm[11:5] and bits [11:7] hold imm[4:0], preserving rs1/rs2 position consistency",
+        "R-type format, with the offset encoded in the funct7 field",
+        "B-type format, with the offset encoded like a branch offset"
+      ],
+      "correct": 1,
+      "explanation": "Store instructions use the **S-type format**. The immediate is split across two fields: imm[11:5] in bits [31:25] (the upper 7 bits) and imm[4:0] in bits [11:7] (the lower 5 bits). This splitting is a deliberate RISC-V design choice to keep rs1 (bits [19:15]) and rs2 (bits [24:20]) in the same positions as R-type, simplifying the decode hardware. For immediate 12 = 000000001100_2: imm[11:5] = 0000000, imm[4:0] = 01100. The S-type format: 0000000 | 00101 (x5=rs2) | 01010 (x10=rs1) | 010 (funct3 for SW) | 01100 (imm[4:0]) | 0100011 (store opcode)."
+    },
+    {
+      "id": "m12",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "What is the RISC-V RV32I instruction format for `BEQ x1, x2, offset`? And why is the immediate in B-type encoded with the bits shuffled (not in order)?",
+      "options": [
+        "S-type. The bits are shuffled to make decoding easier for the branch target calculator.",
+        "B-type. The immediate bits are arranged so that imm[10:1] and the sign bit (imm[12]) align with the S-type immediate positions, allowing the same hardware to extract both S-type and B-type immediates with minimal mux logic.",
+        "I-type. The immediate is a standard 12-bit signed offset with no special encoding.",
+        "J-type. Branches and jumps share the same format."
+      ],
+      "correct": 1,
+      "explanation": "BEQ uses the **B-type format**. The immediate encodes a signed offset in multiples of 2 bytes (bit 0 is always 0 and not stored). The bit shuffling is intentional: RISC-V's designers arranged B-type and S-type immediates so that the overlapping bit positions can be extracted by the same immediate-generation hardware. In both S and B type, bits [31:25] and [11:7] hold immediate fragments, and the sign bit is always in position 31. This means the decode hardware uses the same wires for sign extension and the same muxes for immediate assembly across instruction formats. The design minimizes the fan-out of the instruction bits, reducing critical path delay in the decode stage."
+    },
+    {
+      "id": "m13",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "Translate the following C code to RISC-V assembly. Variables: `a` is in x10, `b` in x11, `c` in x12. Store the result in x13.\n\n```c\nif (a < b)\n    c = a + b;\nelse\n    c = a - b;\nresult = c * 2;\n```\n\nWhich assembly sequence is correct?",
+      "options": [
+        "```\nblt x10, x11, then_branch\nsub x12, x10, x11\nj done\nthen_branch: add x12, x10, x11\ndone: slli x13, x12, 1\n```",
+        "```\nbge x10, x11, else_branch\nadd x12, x10, x11\nj done\nelse_branch: sub x12, x10, x11\ndone: slli x13, x12, 1\n```",
+        "```\nblt x10, x11, else_branch\nadd x12, x10, x11\nj done\nelse_branch: sub x12, x10, x11\ndone: add x13, x12, x12\n```",
+        "```\nbge x10, x11, then_branch\nsub x12, x10, x11\nj done\nthen_branch: add x12, x10, x11\ndone: slli x13, x12, 1\n```"
+      ],
+      "correct": 1,
+      "explanation": "The C code says: if a < b, then add; else subtract. In RISC-V, we typically branch to skip the 'then' block if the condition is FALSE. So we branch on the INVERSE condition: `bge x10, x11, else_branch` (branch if a >= b, skipping the 'then' block). If a < b (condition true, branch not taken): execute `add x12, x10, x11` then jump to done. If a >= b (branch taken): execute `sub x12, x10, x11`. After both paths: `slli x13, x12, 1` computes c * 2 by left-shifting by 1 (equivalent to multiplying by 2). Option (a) uses `blt` to branch TO the then block, which also works but is less conventional. Option (b) follows the standard pattern of branching past the 'then' body on the inverse condition."
+    },
+    {
+      "id": "m14",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "In a single-cycle RISC-V processor, the clock period must accommodate the slowest instruction. Given: instruction memory = 200 ps, register file read = 50 ps, ALU = 120 ps, data memory = 200 ps, register file write = 50 ps, mux delays negligible. What is the minimum clock period?",
+      "options": [
+        "420 ps (R-type path: IM + RF read + ALU + RF write)",
+        "570 ps (BEQ path: IM + RF read + ALU + compare)",
+        "620 ps (LW path: IM + RF read + ALU + DM + RF write)",
+        "450 ps (SW path: IM + RF read + ALU + DM)"
+      ],
+      "correct": 2,
+      "explanation": "The clock period must be long enough for the **slowest** instruction path. The load word (LW) instruction traverses ALL five stages: Instruction Memory (200 ps) → Register File read (50 ps) → ALU for address computation (120 ps) → Data Memory read (200 ps) → Register File write (50 ps) = 620 ps. R-type (420 ps), Store (450 ps, no RF write), and Branch (~370 ps) are all faster. Since the clock period must accommodate the worst case, $T_{clk} = 620$ ps, giving $f_{max} = 1/620\\text{ ps} \\approx 1.61$ GHz. This is the fundamental inefficiency of single-cycle design: every instruction takes as long as the slowest one, even though most instructions could complete faster."
+    },
+    {
+      "id": "m15",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "A multi-cycle processor has the following instruction mix: R-type (40%, 4 cycles), Load (30%, 5 cycles), Store (10%, 4 cycles), Branch (15%, 3 cycles), Jump (5%, 3 cycles). The clock period is 150 ps. What is the average CPI and the average instruction execution time?",
+      "options": [
+        "CPI = 4.00, Execution time = 600 ps",
+        "CPI = 4.10, Execution time = 615 ps",
+        "CPI = 3.80, Execution time = 570 ps",
+        "CPI = 4.25, Execution time = 637.5 ps"
+      ],
+      "correct": 1,
+      "explanation": "Average CPI = $\\sum (\\text{fraction}_i \\times \\text{cycles}_i) = 0.40 \\times 4 + 0.30 \\times 5 + 0.10 \\times 4 + 0.15 \\times 3 + 0.05 \\times 3 = 1.60 + 1.50 + 0.40 + 0.45 + 0.15 = 4.10$. Average execution time = $4.10 \\times 150 = 615$ ps. The multi-cycle design improves over single-cycle because the average CPI (4.10) times the shorter clock period (150 ps) gives 615 ps, versus 620 ps for single-cycle (which uses CPI = 1 but a much longer clock period of 620 ps). The improvement is modest here because loads (the slowest at 5 cycles) constitute 30% of the mix, keeping the average CPI close to the worst case."
+    },
+    {
+      "id": "m16",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "In a 5-stage RISC-V pipeline (IF-ID-EX-MEM-WB), the instruction sequence is:\n```\nI1: ADD x5, x1, x2    (in EX stage)\nI2: SUB x6, x5, x3    (in ID stage, needs x5)\n```\nWith forwarding (EX/MEM → EX bypass), can I2 proceed without stalling?",
+      "options": [
+        "No — I1's result is not yet computed in the EX stage, so forwarding cannot help and I2 must stall 1 cycle",
+        "Yes — I1's ALU result is available at the END of the EX stage and can be forwarded to I2's EX stage input at the START of the next cycle via the EX/MEM→EX bypass path",
+        "No — forwarding only works for load instructions, not ALU instructions",
+        "Yes — but only because the register file supports write-first-then-read in the same cycle"
+      ],
+      "correct": 1,
+      "explanation": "When I1 is in the EX stage, its ALU computes the result during that cycle. At the end of the EX stage (the rising clock edge), the result is latched into the EX/MEM pipeline register. In the next cycle, I2 enters the EX stage and needs x5 as an input. The **EX/MEM→EX forwarding path** (bypass mux) routes the value from the EX/MEM pipeline register directly to the ALU input, bypassing the register file. I2 sees the correct, up-to-date value of x5 without stalling. This forwarding path eliminates the RAW hazard for back-to-back ALU instructions. Note: if I1 were a LOAD (result available after MEM stage), I2 would need either a MEM/WB→EX forward (still 1 stall cycle for load-use) or a stall."
+    },
+    {
+      "id": "m17",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "A pipelined processor has a load-use hazard:\n```\nI1: LW x5, 0(x10)     (in EX stage, computing address)\nI2: ADD x6, x5, x3    (in ID stage, needs x5)\n```\nWith full forwarding, how many stall cycles are needed?",
+      "options": [
+        "0 stalls — forwarding eliminates all RAW hazards",
+        "1 stall cycle — the load data is not available until the END of MEM stage, but I2 needs it at the START of EX. One bubble must be inserted.",
+        "2 stall cycles — I2 must wait until I1's WB stage",
+        "3 stall cycles — loads always take 3 extra cycles"
+      ],
+      "correct": 1,
+      "explanation": "The load instruction (LW) reads data from memory in the MEM stage — the value is not available until the END of the MEM stage. I2 (ADD) needs x5 at the START of its EX stage. With I1 in EX and I2 in ID at cycle $n$: in cycle $n+1$, I1 moves to MEM and I2 wants to enter EX, but x5's value is not yet available (it comes from memory at the end of MEM). So I2 must **stall for 1 cycle** (insert a bubble). In cycle $n+2$, I1 is in WB and the MEM/WB→EX forwarding path delivers x5's loaded value to I2's ALU input as I2 enters EX. Total: 1 stall cycle. This is the fundamental **load-use penalty** — it exists even with perfect forwarding because the data memory read happens one stage too late."
+    },
+    {
+      "id": "m18",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "A 5-stage pipelined processor executes a program with 25% branch instructions. The branch predictor has 92% accuracy, and the misprediction penalty is 2 cycles. Additionally, 10% of instructions are loads followed immediately by an instruction that uses the loaded value (load-use hazard, 1 stall cycle). What is the effective CPI?",
+      "options": [
+        "CPI = 1.04",
+        "CPI = 1.14",
+        "CPI = 1.24",
+        "CPI = 1.50"
+      ],
+      "correct": 1,
+      "explanation": "CPI = 1 (base) + branch stalls + load-use stalls. Branch stalls per instruction = branch frequency $\\times$ misprediction rate $\\times$ penalty $= 0.25 \\times 0.08 \\times 2 = 0.04$. Load-use stalls per instruction = $0.10 \\times 1 = 0.10$. Total CPI = $1 + 0.04 + 0.10 = 1.14$. The load-use hazard contributes more to CPI degradation (0.10) than branch misprediction (0.04) despite branches being more frequent, because 92% of branches are predicted correctly. Improving branch prediction to 96% would reduce branch stalls to 0.02, saving only 0.02 CPI. Reordering instructions to avoid load-use hazards (compiler scheduling) could save up to 0.10 CPI — a 5x larger improvement."
+    },
+    {
+      "id": "m19",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "A 2-bit saturating counter branch predictor starts in state '10' (weakly taken). The actual branch outcomes are: T, T, N, T, N, N. After processing all six outcomes, what is the predictor state?",
+      "options": [
+        "00 (strongly not-taken)",
+        "01 (weakly not-taken)",
+        "10 (weakly taken)",
+        "11 (strongly taken)"
+      ],
+      "correct": 1,
+      "explanation": "Tracing the 2-bit counter (states: 00=SN, 01=WN, 10=WT, 11=ST): Start: 10 (WT). T → increment → 11 (ST). T → already at max → 11 (ST). N → decrement → 10 (WT). T → increment → 11 (ST). N → decrement → 10 (WT). N → decrement → 01 (WN). Final state: **01 (weakly not-taken)**. The 2-bit counter's key advantage over 1-bit is that it tolerates one anomalous outcome without changing the prediction direction. After the first N (anomaly in a mostly-taken sequence), the counter stays at WT (still predicts taken). Only after two consecutive not-taken outcomes does it cross the threshold to predict not-taken."
+    },
+    {
+      "id": "m20",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "A 4 KB direct-mapped cache with 64-byte blocks on a 32-bit address space. The byte address sequence is: 0, 256, 512, 0, 256, 512. How many cache hits occur?",
+      "options": [
+        "0 hits",
+        "1 hit",
+        "2 hits",
+        "3 hits"
+      ],
+      "correct": 3,
+      "explanation": "Cache parameters: 4 KB / 64 bytes per block = 64 sets (direct-mapped). Block offset = 6 bits ($\\log_2 64$). Set index = 6 bits ($\\log_2 64$). Tag = $32 - 6 - 6 = 20$ bits. Address decomposition: Address 0: block 0, set 0 (0 mod 64 = 0), tag 0. Address 256: block 4, set 4 (4 mod 64 = 4), tag 0. Address 512: block 8, set 8 (8 mod 64 = 8), tag 0. All three addresses map to **different sets** (0, 4, and 8), so there are no conflict misses. Trace: (1) Addr 0 → set 0: MISS (compulsory). (2) Addr 256 → set 4: MISS (compulsory). (3) Addr 512 → set 8: MISS (compulsory). (4) Addr 0 → set 0: **HIT** (loaded in step 1, still in cache). (5) Addr 256 → set 4: **HIT** (loaded in step 2, still in cache). (6) Addr 512 → set 8: **HIT** (loaded in step 3, still in cache). Total: **3 hits** (steps 4, 5, 6). The first three accesses are compulsory misses (first access to each block). The second pass hits because all blocks remain in the cache — there are no conflicts since they map to different sets."
+    },
+    {
+      "id": "m21",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "A processor has L1 cache (hit time 1 ns, miss rate 5%) and L2 cache (hit time 5 ns, local miss rate 20%). Main memory access time is 100 ns. What is the AMAT?",
+      "options": [
+        "1.25 ns",
+        "2.25 ns",
+        "6.25 ns",
+        "6.00 ns"
+      ],
+      "correct": 1,
+      "explanation": "Using the multi-level AMAT formula: $\\text{AMAT} = t_{L1} + r_{L1} \\times (t_{L2} + r_{L2} \\times t_{mem})$. Here $r_{L1} = 0.05$ (L1 miss rate) and $r_{L2} = 0.20$ (local L2 miss rate — 20% of accesses that reach L2 miss and go to main memory). $\\text{AMAT} = 1 + 0.05 \\times (5 + 0.20 \\times 100) = 1 + 0.05 \\times (5 + 20) = 1 + 0.05 \\times 25 = 1 + 1.25 = 2.25$ ns. The L2 is only accessed on L1 misses (5% of the time), and main memory is only accessed on L2 misses (20% of L2 accesses = 1% of all accesses). The global miss rate to main memory is $0.05 \\times 0.20 = 0.01$ (1%), which contributes $0.01 \\times 100 = 1.0$ ns. The L2 hit contribution is $0.05 \\times 0.80 \\times 5 = 0.20$ ns. Total penalty beyond L1 = $0.20 + 1.0 = 1.20$ ns, plus the L1 miss overhead. A common mistake is computing $1 + 0.05 \\times 5 + 0.20 \\times 100 = 26.25$ ns by applying the L2 miss rate to ALL accesses rather than only L1 misses."
+    },
+    {
+      "id": "m22",
+      "type": "multiple_choice",
+      "points": 4,
+      "question": "Classify the following cache miss as compulsory, capacity, or conflict. A 4 KB direct-mapped cache with 16-byte blocks. Address sequence: A, B, C, D, A (where A, B, C, D are in different blocks but A and D map to the same cache set). The miss on the final access to A is:",
+      "options": [
+        "Compulsory — A has never been accessed before",
+        "Capacity — the cache is too small to hold A, B, C, D simultaneously",
+        "Conflict — A was evicted when D (which maps to the same set) was loaded, even though the cache has capacity for both if they were in different sets",
+        "It is a hit, not a miss"
+      ],
+      "correct": 2,
+      "explanation": "The first access to A is a **compulsory** miss (cold start). A is loaded into the cache. When D is accessed, it maps to the **same set** as A (direct-mapped = 1-way, so D evicts A). When A is accessed again, it is a **conflict miss**: the cache has room for both A and D (total cache = 4 KB = 256 blocks, and we only have 4 distinct blocks), but because A and D happen to map to the same set, they conflict. In a fully-associative cache (same size), A and D would both be present and the final access to A would be a hit. The Three C's classification: (1) **Compulsory**: first access to a block, unavoidable. (2) **Capacity**: would miss even in a fully-associative cache of the same size. (3) **Conflict**: misses due to limited associativity — would be a hit in a fully-associative cache of the same size."
+    },
+    {
+      "id": "m23",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "In RISC-V Sv39 virtual memory, a virtual address is 39 bits: VPN[2] (9 bits) | VPN[1] (9 bits) | VPN[0] (9 bits) | Page offset (12 bits). A TLB miss requires a page table walk. How many memory accesses does a full page table walk require, and what is the purpose of each?",
+      "options": [
+        "1 access: read the PTE from a flat page table indexed by the full VPN",
+        "2 accesses: read the root page table, then read the leaf PTE",
+        "3 accesses: read level-2 page table (indexed by VPN[2]), read level-1 page table (indexed by VPN[1]), read level-0 page table (indexed by VPN[0]) to get the final PTE with the physical page number",
+        "4 accesses: read SATP register, then three page table levels"
+      ],
+      "correct": 2,
+      "explanation": "Sv39 uses a **3-level radix page table**. The walk proceeds: (1) The `satp` CSR register holds the **physical address of the root (level-2) page table**. Read the PTE at root_base + VPN[2] $\\times$ 8. This PTE contains the physical page number of the level-1 page table. (2) Read the PTE at level1_base + VPN[1] $\\times$ 8. This PTE contains the physical page number of the level-0 page table. (3) Read the PTE at level0_base + VPN[0] $\\times$ 8. This final PTE contains the **physical page number** of the data page. Combine with the page offset to form the physical address. Each level is exactly one 4 KB page (512 entries $\\times$ 8 bytes/PTE). Reading the `satp` register is not a memory access (it is a CPU register), so the walk requires exactly 3 memory accesses. This is why TLBs are critical: without a TLB, every data access would require 3 additional memory accesses for address translation."
+    },
+    {
+      "id": "m24",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "In Tomasulo's algorithm with a Reorder Buffer, instruction I3 (DIV) causes a divide-by-zero exception. Instructions I4 and I5 have already completed execution out of order and their results are in the ROB. What happens?",
+      "options": [
+        "The processor immediately raises the exception, and I4/I5's results are committed since they already completed",
+        "The exception is held pending until I3 reaches the head of the ROB. At that point, the exception is raised with precise state: I1 and I2's results are committed, I3 raises the exception, and I4/I5's results are flushed from the ROB without ever reaching the architectural register file.",
+        "I4/I5's results are committed first, then I3's exception is raised",
+        "The exception is ignored because I3's result is not needed by subsequent instructions"
+      ],
+      "correct": 1,
+      "explanation": "The ROB enforces **precise exceptions** through in-order commit. When I3 completes execution and the divide-by-zero is detected, the exception is noted in I3's ROB entry. However, the exception is NOT raised immediately — it waits until I3 reaches the **head of the ROB** (meaning all older instructions I1, I2 have committed). At that point: I1 and I2 have been committed (their results are in the architectural register file). I3's exception is raised with the PC of I3, and the architectural state reflects exactly I1 and I2 completed. I4 and I5's results, though computed, are **flushed** from the ROB — they never reach the register file. This guarantees precise state: the machine looks exactly as if instructions executed in order up to (but not including) I3. The OS can now handle the exception (e.g., signal SIGFPE) with correct register values."
+    },
+    {
+      "id": "m25",
+      "type": "multiple_choice",
+      "points": 5,
+      "question": "A processor has Amdahl's Law speedup characteristics. A program spends 80% of execution time in a parallelizable section. If we improve the parallel section to run 4x faster (through SIMD, better caching, or other optimization), what is the overall speedup?",
+      "options": [
+        "4.0x",
+        "3.2x",
+        "2.5x",
+        "1.0x (no improvement)"
+      ],
+      "correct": 2,
+      "explanation": "Amdahl's Law: $S = \\frac{1}{(1-p) + p/n}$ where $p = 0.80$ is the fraction improved and $n = 4$ is the speedup of that fraction. $S = \\frac{1}{0.20 + 0.80/4} = \\frac{1}{0.20 + 0.20} = \\frac{1}{0.40} = 2.5\\times$. Despite making 80% of the program 4x faster, overall speedup is only 2.5x. The remaining 20% serial fraction limits the maximum possible speedup to $1/0.20 = 5\\times$ even with infinite speedup on the parallel portion. This illustrates Amdahl's key insight: the serial fraction dominates. To achieve higher overall speedup, we must either reduce the serial fraction or speed up the serial portion itself."
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 9: Out-of-Order and Speculation",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Tomasulo's algorithm, what is the purpose of the Common Data Bus (CDB)?",
+      "options": [
+        "It transfers instructions from the instruction queue to the reservation stations",
+        "It broadcasts computed results (tag + value) to all reservation stations and the register file simultaneously, enabling data forwarding",
+        "It connects the ALU to the register file for writing results",
+        "It carries memory addresses from the load/store queue to the data cache"
+      ],
+      "correct": 1,
+      "explanation": "The Common Data Bus (CDB) is the forwarding mechanism in Tomasulo's algorithm. When a functional unit completes execution, it places the result (as a tag-value pair) on the CDB. Every reservation station simultaneously snoops the bus: if a station's Qj or Qk matches the broadcast tag, it captures the value into Vj or Vk and clears the Q field. The register file also snoops: if a register's status still points to the broadcasting tag, the register is updated. This broadcast-and-snoop mechanism is what enables out-of-order execution — results flow directly from producer to consumer without sequential register file writes."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which type(s) of data hazard does register renaming eliminate?",
+      "options": [
+        "RAW only",
+        "WAR and WAW (name dependencies), but not RAW (true dependencies)",
+        "RAW and WAR, but not WAW",
+        "All three: RAW, WAR, and WAW"
+      ],
+      "correct": 1,
+      "explanation": "Register renaming eliminates **name dependencies** — WAR (write-after-read) and WAW (write-after-write) — by assigning unique physical register names to each write. After renaming, instructions that previously conflicted on the same architectural register now write to different physical registers, so there is no conflict. However, RAW (read-after-write) dependencies are **true data dependencies**: the consumer genuinely needs the value produced by the producer. No amount of renaming can eliminate this — the consumer must wait for the producer's result. RAW dependencies are the fundamental limit on instruction-level parallelism."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Reorder Buffer (ROB) enables precise exceptions. What does 'precise exception' mean?",
+      "options": [
+        "Exceptions are detected at the exact instruction that caused them, but the register file may contain results from later instructions",
+        "When an exception occurs at instruction N, the architectural state reflects exactly instructions 1 through N-1 completed, and no effect of instruction N or later — as if execution were strictly sequential",
+        "Exceptions are handled by the operating system with microsecond precision",
+        "The processor saves all register values to memory before handling the exception"
+      ],
+      "correct": 1,
+      "explanation": "A precise exception means the architectural state at the point of the exception is exactly what a sequential, in-order processor would have produced. Instructions before the excepting instruction have completed and their results are visible. The excepting instruction and all subsequent instructions have had no effect on the architectural state. The ROB achieves this by holding results in a buffer and committing them to the register file in strict program order. When an exception occurs at the ROB head, younger entries (which may have already executed out of order) are flushed — their results never reach the register file. This is essential for virtual memory (page fault restart), debugging, and interrupt handling."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A VLIW processor has a 5-slot instruction word (2 ALU, 1 MUL, 1 MEM, 1 BR). For a loop body with 3 ALU ops, 1 multiply, and 1 branch, how many instruction words are needed per iteration if the compiler cannot software-pipeline?",
+      "options": [
+        "1 word (all 5 operations fit in one word)",
+        "2 words (3 ALU ops require 2 ALU slots, which overflow by 1, requiring a second word)",
+        "3 words (one operation per word)",
+        "5 words (one operation per slot per word)"
+      ],
+      "correct": 1,
+      "explanation": "The VLIW word has 2 ALU slots, but we need 3 ALU operations. The first word can contain: ALU op 1 (slot 1), ALU op 2 (slot 2), MUL op (MUL slot), and the branch (BR slot). The second word contains: ALU op 3 (slot 1), with slots 2, MUL, MEM, and BR filled with NOPs. So 2 instruction words per iteration. This illustrates VLIW's weakness: when the operation mix doesn't match the slot mix, NOPs waste bandwidth. An out-of-order processor would simply issue the 3 ALU ops across 2 cycles dynamically, without the NOP overhead in the instruction encoding."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following best describes Spectre v1 (Bounds Check Bypass)?",
+      "options": [
+        "An attacker uses a buffer overflow to overwrite the return address on the stack",
+        "An attacker mistrains the branch predictor so that a bounds check is speculatively predicted as 'in bounds', causing out-of-bounds memory access whose data leaks through a cache timing side-channel",
+        "An attacker exploits a race condition in multi-threaded code to read another thread's data",
+        "An attacker reads kernel memory directly by exploiting a bug in the page table implementation"
+      ],
+      "correct": 1,
+      "explanation": "Spectre v1 works by mistraining the branch predictor on a bounds check (e.g., `if (x < array_size)`). The attacker repeatedly calls the victim function with valid x values, training the predictor to predict 'taken' (in bounds). Then the attacker provides an out-of-bounds x value. The predictor speculatively predicts 'in bounds' and the processor speculatively executes the array access with the out-of-bounds index. Although the speculative access will eventually be squashed when the branch resolves, the accessed data has been loaded into the cache. The attacker then uses a cache timing attack (Flush+Reload) to determine which cache line was loaded, extracting the secret data byte by byte. The key insight is that speculative execution has observable side effects on the cache, even when the speculative instructions are squashed."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In SMT (Simultaneous Multithreading), what is shared between the two hardware threads?",
+      "options": [
+        "The architectural register file, program counter, and execution units",
+        "Functional units (ALUs, multipliers), cache hierarchy, and scheduler; but NOT the architectural register file or program counter",
+        "Nothing — each thread has its own complete processor pipeline",
+        "Only the L3 cache; everything else is duplicated"
+      ],
+      "correct": 1,
+      "explanation": "SMT threads share the execution engine — ALUs, multipliers, load/store units, caches, and scheduler entries. Each thread has its own architectural state: program counter, register file (or register mappings in the RAT), and TLB entries (or tagged TLB). The key insight is that one thread's stalls (cache misses, branch mispredictions) create idle functional unit cycles that the other thread can fill. Intel's Hyper-Threading duplicates only about 5% of the chip area (the architectural state) while sharing the remaining 95% (the execution engine). This is why SMT provides 10-30% throughput improvement rather than 100% — the threads compete for shared resources like cache capacity and scheduler entries."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Dennard scaling predicted that as transistors shrink, power density remains constant. Why did this break down around 2004-2006?",
+      "options": [
+        "Transistors could not be made smaller due to quantum tunneling effects",
+        "Voltage could not scale below ~0.7V because reducing the threshold voltage further caused exponential growth in subthreshold leakage current, making power density increase with each generation",
+        "Manufacturing costs became too high to continue shrinking transistors",
+        "Clock distribution networks could not operate at frequencies above 4 GHz"
+      ],
+      "correct": 1,
+      "explanation": "Dennard scaling requires voltage to scale proportionally with transistor dimensions. But voltage scaling hit a wall: the threshold voltage $V_{th}$ could not be reduced much below 0.3-0.4V because subthreshold leakage current $I_{sub} \\propto e^{-V_{th}/(nV_T)}$ grows exponentially as $V_{th}$ decreases. Without $V_{th}$ reduction, $V_{DD}$ could not scale below about 0.7-0.8V (maintaining sufficient overdrive $V_{DD} - V_{th}$ for speed). With voltage stuck, increasing frequency directly increases power ($P \\propto V^2 f$), and power density rises with each generation. Intel's Pentium 4 Prescott (2004) at 3.8 GHz and 115W demonstrated the practical limit. Intel canceled successor designs targeting 4+ GHz and pivoted to the multi-core, lower-frequency Core architecture."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A processor at 5 GHz / 1.3V consumes 120W of dynamic power. Using DVFS, it scales to 3 GHz / 0.9V. Approximately what is the new dynamic power? (Use $P \\propto V^2 f$)",
+      "options": [
+        "72 W",
+        "35 W",
+        "50 W",
+        "58 W"
+      ],
+      "correct": 1,
+      "explanation": "Using $P \\propto V^2 f$: $\\frac{P_{new}}{P_{old}} = \\frac{V_{new}^2 \\cdot f_{new}}{V_{old}^2 \\cdot f_{old}} = \\frac{(0.9)^2 \\times 3}{(1.3)^2 \\times 5} = \\frac{0.81 \\times 3}{1.69 \\times 5} = \\frac{2.43}{8.45} \\approx 0.288$. New power: $120 \\times 0.288 \\approx 34.5$ W, closest to 35 W. This demonstrates the power of DVFS: a 40% frequency reduction with an appropriate voltage reduction cuts dynamic power by over 70%. The $V^2$ term dominates — the voltage reduction from 1.3V to 0.9V (31% lower) alone would reduce power by 52%, and the frequency reduction adds further savings."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "AMD's EPYC Genoa processor uses a chiplet design with up to 12 CCDs (Core Complex Dies) plus an I/O Die. What is the primary manufacturing advantage of this approach over a monolithic die?",
+      "options": [
+        "Chiplets are faster because the interconnect between dies is shorter than on-die wires",
+        "The CCDs can be manufactured on a leading-edge node (TSMC 5nm) for high density while the I/O die uses a cheaper older node (6nm), and small dies have much higher yield than one large die",
+        "Chiplets allow mixing different ISAs (ARM and x86) on the same package",
+        "Chiplets eliminate the need for a memory controller, reducing complexity"
+      ],
+      "correct": 1,
+      "explanation": "Chiplet design provides two key manufacturing advantages. First, **yield**: semiconductor yield follows approximately $Y = e^{-D \\cdot A}$ where $D$ is defect density and $A$ is die area. A small ~75 mm$^2$ CCD yields over 92%, while a hypothetical monolithic 96-core die would be 600+ mm$^2$ with yield around 55%. Discarding a defective chiplet wastes far less silicon than discarding a massive monolithic die. Second, **cost optimization**: CPU cores benefit from leading-edge transistor density (5nm/4nm), but I/O circuits (PCIe, memory controllers) do not. Manufacturing the I/O die on a cheaper 6nm process significantly reduces total cost. AMD's Infinity Fabric connects the chiplets with high-bandwidth, low-latency coherent links."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Intel Golden Cove has a 512-entry ROB, 6-wide decode, and 12 execution ports. AMD Zen 5 has a 448-entry ROB, 8-wide dispatch (2x4 decode), and 16 integer execution ports. Which statement best characterizes the architectural trade-offs?",
+      "options": [
+        "Golden Cove is strictly superior because its ROB is larger",
+        "Zen 5 is strictly superior because it has more execution ports",
+        "Golden Cove prioritizes a larger instruction window (512 ROB) to hide memory latency, while Zen 5 prioritizes wider dispatch (8-wide) and more execution ports (16) for higher peak throughput — the designs reflect different optimization strategies for the same ILP extraction problem",
+        "Both architectures are essentially identical in capability despite different numbers"
+      ],
+      "correct": 2,
+      "explanation": "Modern processor design involves fundamental trade-offs in silicon area and power budget. Intel's Golden Cove allocates more resources to the ROB (512 vs 448 entries), giving it a larger instruction window to look ahead and find ILP even during long-latency stalls (cache misses). AMD's Zen 5 allocates more resources to execution bandwidth: 8-wide dispatch (vs 6), 6 integer ALUs (vs 5), 16 integer ports (vs 12), and a 2-ahead branch predictor. Both approaches extract ILP, but emphasize different bottlenecks. Golden Cove bets on instruction window size (critical for memory-bound workloads), while Zen 5 bets on execution throughput (critical for compute-bound workloads). In practice, both achieve similar IPC on diverse benchmarks."
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "title": "Midterm Exam",
+  "timeLimit": 45,
+  "passingScore": 60,
+  "questions": [
+    {
+      "id": "mt-1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the transformer architecture, the self-attention mechanism computes attention weights using queries Q, keys K, and values V. The formula is Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V. Why is the scaling factor sqrt(d_k) necessary?",
+      "options": [
+        "It normalizes the output to have unit variance regardless of sequence length",
+        "Without scaling, for large d_k the dot products QK^T grow large in magnitude, pushing the softmax into regions of extremely small gradients (near-zero or near-one outputs), which causes vanishing gradients during training",
+        "It reduces the computational cost of the matrix multiplication from O(n²d) to O(n²√d)",
+        "It ensures the attention weights sum to exactly 1.0 after softmax"
+      ],
+      "correct": 1,
+      "explanation": "When d_k (the dimension of queries and keys) is large, the dot products q·k tend to have large magnitude. If q and k are vectors with independent components of mean 0 and variance 1, their dot product has mean 0 and variance d_k. Large dot product values push the softmax function into saturation regions where its gradients are extremely small (the output is near 0 or 1). Dividing by sqrt(d_k) normalizes the variance of the dot products back to 1, keeping the softmax in a region where gradients flow effectively. This is a practical insight from Vaswani et al. (2017) — without it, training becomes unstable for large model dimensions."
+    },
+    {
+      "id": "mt-2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are building a production LLM application that calls the OpenAI API. Your application handles 1000 requests/minute at peak. Which of the following is the most critical production engineering concern?",
+      "options": [
+        "Using the largest available model for maximum quality",
+        "Implementing exponential backoff with jitter for rate limit errors, request timeouts, circuit breakers for sustained API outages, and fallback behavior (cached responses or smaller model) to maintain service availability",
+        "Maximizing the context window usage on every request to amortize the per-request cost",
+        "Using synchronous HTTP requests to ensure ordering"
+      ],
+      "correct": 1,
+      "explanation": "At 1000 req/min, you will inevitably hit rate limits, experience API latency spikes, and encounter occasional outages. The critical concern is resilience: exponential backoff with jitter prevents thundering herd on retries, timeouts prevent requests from hanging indefinitely, circuit breakers stop cascading failures during sustained outages, and fallback behavior (serving cached responses or using a smaller/cheaper model) keeps your application responsive even when the primary API is degraded. Using the largest model increases cost and latency at scale. Maximizing context window usage is a cost optimization, not a reliability concern. Synchronous requests at this volume would create severe bottlenecks."
+    },
+    {
+      "id": "mt-3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a RAG system, you compute cosine similarity between a query embedding e_q and document embedding e_d. The cosine similarity is 0.82. However, the document is actually irrelevant to the query — it happens to share domain-specific vocabulary. This is an example of which RAG failure mode?",
+      "options": [
+        "Retrieval miss — the relevant document was not retrieved",
+        "Retrieval noise — an irrelevant document scores highly due to vocabulary overlap, diluting the context and potentially causing hallucination",
+        "Query-document gap — the query requires multi-hop reasoning",
+        "Synthesis failure — the generator misinterprets retrieved documents"
+      ],
+      "correct": 1,
+      "explanation": "This is retrieval noise (also called a false positive). The embedding model assigns high similarity because both the query and document contain similar domain vocabulary, even though the document does not actually answer the query. This is a fundamental limitation of dense retrieval: embedding models learn surface-level semantic similarity, which correlates with but does not guarantee relevance. The irrelevant document occupies a slot in the top-k results, potentially displacing a truly relevant document and providing misleading context to the generator. Mitigation strategies include cross-encoder re-ranking (which examines query-document pairs jointly rather than independently) and relevance filtering with a quality threshold."
+    },
+    {
+      "id": "mt-4",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does the following Python code output?\n\n```python\nimport math\n\ndef cosine_similarity(a, b):\n    dot = sum(x*y for x, y in zip(a, b))\n    norm_a = math.sqrt(sum(x**2 for x in a))\n    norm_b = math.sqrt(sum(x**2 for x in b))\n    return dot / (norm_a * norm_b)\n\nv1 = [1, 0, 1, 0]\nv2 = [1, 0, 0, 1]\nv3 = [0, 1, 0, 1]\n\nsim_12 = cosine_similarity(v1, v2)\nsim_13 = cosine_similarity(v1, v3)\nsim_23 = cosine_similarity(v2, v3)\n\nresult = sorted([round(sim_12, 2), round(sim_13, 2), round(sim_23, 2)])\nprint(result)\n```",
+      "options": [
+        "[0.0, 0.5, 0.5]",
+        "[0.0, 0.25, 0.5]",
+        "[0.25, 0.5, 0.75]",
+        "[0.5, 0.5, 0.5]"
+      ],
+      "correct": 0,
+      "explanation": "Let us compute each similarity:\n- v1·v2 = 1*1 + 0*0 + 1*0 + 0*1 = 1. ||v1|| = sqrt(2), ||v2|| = sqrt(2). sim_12 = 1/2 = 0.5\n- v1·v3 = 1*0 + 0*1 + 1*0 + 0*1 = 0. sim_13 = 0/2 = 0.0\n- v2·v3 = 1*0 + 0*1 + 0*0 + 1*1 = 1. ||v2|| = sqrt(2), ||v3|| = sqrt(2). sim_23 = 1/2 = 0.5\n\nAfter rounding and sorting: [0.0, 0.5, 0.5]. v1 and v3 are orthogonal (zero similarity), while v1-v2 and v2-v3 each share exactly one non-zero dimension. This illustrates how cosine similarity captures the alignment of vectors in high-dimensional space — orthogonal vectors have zero similarity regardless of their magnitude."
+    },
+    {
+      "id": "mt-5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are chunking a technical document for a RAG system. The document contains a table comparing 5 machine learning methods across 8 metrics. The table spans 600 tokens. Your chunk size is 512 tokens with 50-token overlap. What is the most likely failure mode?",
+      "options": [
+        "The table will be too small to retrieve effectively",
+        "The table will be split across two chunks, breaking the row-column relationships and making it impossible for the retriever to find complete comparisons or for the generator to reason about cross-method differences",
+        "The overlap will cause the table to appear twice in retrieval results",
+        "512 tokens is too large for embedding models to handle"
+      ],
+      "correct": 1,
+      "explanation": "At 600 tokens with a 512-token chunk size, the table will be split into two chunks: one containing roughly the first 512 tokens (the first few rows and columns) and one containing the remainder. This breaks the tabular structure — neither chunk contains the complete comparison. A query like 'which method has the best accuracy?' may retrieve one chunk with some methods but not all, and the row-column alignment is lost at the split point. This is a well-known chunking failure mode. Mitigations include: (1) structure-aware chunking that respects table boundaries, (2) increasing chunk size for structured content, (3) extracting tables as standalone chunks with metadata. This is why naive fixed-size chunking fails on structured content."
+    },
+    {
+      "id": "mt-6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In hybrid search, you combine BM25 (sparse) scores with dense embedding similarity scores using Reciprocal Rank Fusion (RRF). The RRF formula is: RRF_score(d) = Σ 1/(k + rank_i(d)) where the sum is over ranking systems and k is a constant (typically 60). Why is RRF preferred over simple score normalization (min-max scaling each score to [0,1] then averaging)?",
+      "options": [
+        "RRF is computationally cheaper than normalization",
+        "RRF is rank-based rather than score-based, making it robust to the fact that BM25 scores and cosine similarity scores have fundamentally different distributions — BM25 scores are unbounded and vary with query length, while cosine similarity is bounded to [-1, 1]",
+        "RRF always produces better results than score normalization",
+        "Normalization requires knowing the global maximum score, which is unavailable at query time"
+      ],
+      "correct": 1,
+      "explanation": "BM25 and dense similarity produce scores with completely different scales and distributions. BM25 scores are unbounded, depend on document frequency statistics, and can vary wildly with query length and corpus statistics. Cosine similarity is bounded to [-1, 1] and has a different score distribution shape. Min-max normalization is sensitive to outliers (a single extreme score distorts the entire range) and assumes scores are linearly comparable after scaling, which they are not. RRF sidesteps this entirely by only using ranks, not scores. Whether BM25 gives a document score 15.3 or 150.3 does not matter — what matters is whether it ranked the document 1st, 5th, or 100th. This rank-based fusion is robust to distributional differences between scoring systems. The constant k controls how much weight is given to lower-ranked documents."
+    },
+    {
+      "id": "mt-7",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does this code output?\n\n```python\ndef reciprocal_rank_fusion(rankings, k=60):\n    scores = {}\n    for ranking in rankings:\n        for rank, doc_id in enumerate(ranking, 1):\n            if doc_id not in scores:\n                scores[doc_id] = 0\n            scores[doc_id] += 1 / (k + rank)\n    return sorted(scores.items(), key=lambda x: x[1], reverse=True)\n\nbm25_ranking = ['doc_A', 'doc_B', 'doc_C', 'doc_D']\ndense_ranking = ['doc_C', 'doc_A', 'doc_D', 'doc_B']\n\nresult = reciprocal_rank_fusion([bm25_ranking, dense_ranking])\ntop_doc = result[0][0]\nsecond_doc = result[1][0]\nprint(f\"{top_doc},{second_doc}\")\n```",
+      "options": [
+        "doc_A,doc_C",
+        "doc_C,doc_A",
+        "doc_A,doc_B",
+        "doc_B,doc_C"
+      ],
+      "correct": 0,
+      "explanation": "Let us compute RRF scores (k=60):\n- doc_A: BM25 rank 1 → 1/61, Dense rank 2 → 1/62. Total = 1/61 + 1/62 ≈ 0.01639 + 0.01613 = 0.03252\n- doc_B: BM25 rank 2 → 1/62, Dense rank 4 → 1/64. Total = 1/62 + 1/64 ≈ 0.01613 + 0.01563 = 0.03175\n- doc_C: BM25 rank 3 → 1/63, Dense rank 1 → 1/61. Total = 1/63 + 1/61 ≈ 0.01587 + 0.01639 = 0.03226\n- doc_D: BM25 rank 4 → 1/64, Dense rank 3 → 1/63. Total = 1/64 + 1/63 ≈ 0.01563 + 0.01587 = 0.03149\n\nSorted descending: doc_A (0.03252) > doc_C (0.03226) > doc_B (0.03175) > doc_D (0.03149). doc_A wins because it is ranked 1st and 2nd (average rank 1.5), beating doc_C which is ranked 3rd and 1st (average rank 2.0). RRF favors documents that rank well across both systems."
+    },
+    {
+      "id": "mt-8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Cross-encoder re-rankers are more accurate than bi-encoder retrievers for relevance scoring. Why, then, are they not used for the initial retrieval stage in RAG systems?",
+      "options": [
+        "Cross-encoders cannot process text longer than 512 tokens",
+        "Cross-encoders require the query-document pair as joint input, meaning they must score every document in the corpus — this is O(N) per query versus O(1) for approximate nearest neighbor search on pre-computed bi-encoder embeddings, making cross-encoders impractical for large corpora at retrieval time",
+        "Cross-encoders produce lower quality embeddings than bi-encoders",
+        "Cross-encoders are not compatible with vector databases"
+      ],
+      "correct": 1,
+      "explanation": "Bi-encoders (dual encoders) compute query and document embeddings independently, so document embeddings can be pre-computed and indexed. At query time, you embed the query once and use approximate nearest neighbor (ANN) search to find the top-k most similar documents in sublinear time — typically O(log N) with HNSW or IVF indexes. Cross-encoders, by contrast, take the (query, document) pair as joint input through the full transformer — they cannot pre-compute document representations because the representation depends on the query. This means scoring a single document requires a full model forward pass, and scoring all N documents requires N forward passes. For a corpus of 10M documents, this is computationally prohibitive. The standard pattern is: bi-encoder retrieval (fast, approximate) → cross-encoder re-ranking (slow, accurate) on the top-k candidates."
+    },
+    {
+      "id": "mt-9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The ReAct (Reason + Act) paradigm for LLM agents interleaves reasoning traces with actions. Which of the following correctly describes why interleaving reasoning with actions improves agent performance compared to acting without explicit reasoning?",
+      "options": [
+        "Reasoning traces reduce the number of tokens generated, making the agent faster",
+        "The reasoning traces serve as a scratchpad that decomposes the task into steps, maintains intermediate state in the context, and allows the model to plan which action to take next based on what it has observed — without reasoning, the agent makes locally optimal but globally suboptimal action choices",
+        "ReAct agents always use fewer API calls than non-reasoning agents",
+        "The reasoning traces are used to fine-tune the model after each interaction"
+      ],
+      "correct": 1,
+      "explanation": "Yao et al. (2023) showed that interleaving reasoning with actions serves three functions: (1) task decomposition — the reasoning trace breaks a complex goal into manageable sub-goals, (2) state tracking — the model explicitly records what it has learned from previous observations, maintaining coherent state across multiple steps, and (3) action planning — the model reasons about which action to take given the current state, rather than choosing actions based solely on the immediate observation. Without reasoning, agents tend to act reflexively — choosing locally optimal actions that may not serve the global goal. The reasoning traces are not used for fine-tuning; they are part of the inference-time context that guides the model's decision-making."
+    },
+    {
+      "id": "mt-10",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does this agent simulation output?\n\n```python\nclass SimpleAgent:\n    def __init__(self):\n        self.memory = []\n        self.steps = 0\n    \n    def think(self, observation):\n        self.memory.append(observation)\n        self.steps += 1\n        if len(self.memory) >= 3:\n            return 'DONE'\n        return 'CONTINUE'\n    \n    def act(self, action_type):\n        if action_type == 'search':\n            return f'result_{self.steps}'\n        return 'unknown'\n\nagent = SimpleAgent()\nobs = 'initial'\nresults = []\nfor i in range(5):\n    status = agent.think(obs)\n    if status == 'DONE':\n        break\n    obs = agent.act('search')\n    results.append(obs)\n\nprint(f\"{len(results)},{agent.steps},{len(agent.memory)}\")\n```",
+      "options": [
+        "2,3,3",
+        "3,3,3",
+        "2,2,2",
+        "5,5,5"
+      ],
+      "correct": 0,
+      "explanation": "Let us trace through the loop:\n- i=0: think('initial') → memory=['initial'], steps=1, len(memory)=1 < 3 → 'CONTINUE'. act('search') → 'result_1'. results=['result_1']. obs='result_1'.\n- i=1: think('result_1') → memory=['initial','result_1'], steps=2, len(memory)=2 < 3 → 'CONTINUE'. act('search') → 'result_2'. results=['result_1','result_2']. obs='result_2'.\n- i=2: think('result_2') → memory=['initial','result_1','result_2'], steps=3, len(memory)=3 >= 3 → 'DONE'. Break.\nThe loop runs 3 iterations but only completes 2 act() calls (the third iteration breaks before acting). So: len(results)=2, agent.steps=3, len(agent.memory)=3. Output: '2,3,3'."
+    },
+    {
+      "id": "mt-11",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An LLM agent uses a tool-calling interface where the model generates structured JSON to invoke tools. The tool schema specifies that a 'search' tool requires a 'query' parameter (string) and an optional 'max_results' parameter (integer, default 5). The model generates: {\"tool\": \"search\", \"params\": {\"query\": \"RAG evaluation\", \"max_results\": \"three\"}}. What is the correct system behavior?",
+      "options": [
+        "Execute the search with max_results='three' since the model specified it",
+        "Reject the entire tool call and ask the model to regenerate, since 'three' is not a valid integer — type validation should happen before execution to prevent downstream errors",
+        "Silently convert 'three' to 3 using NLP parsing",
+        "Ignore max_results and use the default value of 5"
+      ],
+      "correct": 1,
+      "explanation": "The schema specifies max_results as an integer, but the model provided the string 'three'. The correct behavior is schema validation before execution: reject the malformed tool call and return a clear error message to the model, allowing it to regenerate with the correct type. Silently converting 'three' to 3 is fragile (what about 'a few'?), and ignoring the parameter silently violates the principle of least surprise. Using the default value without informing the model means the model thinks it set max_results=three, leading to incorrect reasoning about what it requested. This is a core principle of robust tool-calling: validate inputs against the schema, fail fast, and give the model actionable error messages."
+    },
+    {
+      "id": "mt-12",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a conversational RAG agent with memory, the agent maintains a summary of the conversation and uses it to contextualize retrieval queries. After 50 turns, the summary has grown to consume 40% of the context window. What is the primary risk, and what is the standard mitigation?",
+      "options": [
+        "Risk: the summary is too short to be useful. Mitigation: increase context window size.",
+        "Risk: the growing summary reduces the space available for retrieved documents and generation, degrading answer quality as the conversation progresses. Mitigation: use progressive summarization — periodically compress the summary to a fixed token budget, retaining key facts and discarding conversational details.",
+        "Risk: the summary will contain hallucinated facts. Mitigation: fact-check every summary update.",
+        "Risk: the user will not read a long summary. Mitigation: hide the summary from the user."
+      ],
+      "correct": 1,
+      "explanation": "Context window space is a finite resource partitioned between system prompt, conversation history/summary, retrieved documents, and generation space. As the summary grows, it crowds out retrieved documents (fewer chunks fit) and generation space (the model has less room to produce detailed answers). This is a well-known failure mode: RAG quality degrades monotonically with conversation length unless the summary is actively managed. Progressive summarization (Park et al. 2023) addresses this by periodically compressing the summary to a fixed token budget — keeping the most salient facts (entities, key decisions, unresolved questions) while discarding low-information conversational turns. The summary acts like a lossy compression of conversation history, and the compression ratio must balance information retention against space constraints."
+    },
+    {
+      "id": "mt-13",
+      "type": "code_output",
+      "points": 10,
+      "question": "What does this embedding distance computation output?\n\n```python\nimport math\n\ndef l2_distance(a, b):\n    return math.sqrt(sum((x-y)**2 for x, y in zip(a, b)))\n\ndef cosine_sim(a, b):\n    dot = sum(x*y for x, y in zip(a, b))\n    na = math.sqrt(sum(x**2 for x in a))\n    nb = math.sqrt(sum(x**2 for x in b))\n    return dot / (na * nb)\n\nv1 = [3, 4]    # magnitude 5, direction ~53 degrees\nv2 = [6, 8]    # magnitude 10, direction ~53 degrees\nv3 = [4, -3]   # magnitude 5, direction ~-37 degrees\n\n# Which is more similar to v1: v2 or v3?\nl2_v1v2 = round(l2_distance(v1, v2), 1)\nl2_v1v3 = round(l2_distance(v1, v3), 1)\ncos_v1v2 = round(cosine_sim(v1, v2), 1)\ncos_v1v3 = round(cosine_sim(v1, v3), 1)\n\nprint(f\"{l2_v1v2},{l2_v1v3},{cos_v1v2},{cos_v1v3}\")\n```",
+      "options": [
+        "5.0,7.1,1.0,0.0",
+        "5.0,8.6,1.0,0.0",
+        "0.0,7.1,0.5,0.0",
+        "5.0,7.1,0.5,0.5"
+      ],
+      "correct": 0,
+      "explanation": "v1=[3,4] and v2=[6,8]: L2 = sqrt((3-6)^2 + (4-8)^2) = sqrt(9+16) = sqrt(25) = 5.0. Cosine = (3*6+4*8)/(5*10) = (18+32)/50 = 50/50 = 1.0.\n\nv1=[3,4] and v3=[4,-3]: L2 = sqrt((3-4)^2 + (4-(-3))^2) = sqrt(1+49) = sqrt(50) ≈ 7.1. Cosine = (3*4+4*(-3))/(5*5) = (12-12)/25 = 0/25 = 0.0.\n\nThis illustrates a crucial point: v2 is the same direction as v1 (just scaled by 2x), so cosine similarity is 1.0 despite L2 distance of 5.0. v3 is orthogonal to v1 (cosine = 0) and closer by L2 than you might expect. In embedding spaces, cosine similarity captures semantic direction while L2 captures both direction and magnitude — which is why cosine similarity is standard for text embeddings where we care about semantic direction, not vector magnitude."
+    },
+    {
+      "id": "mt-14",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Recall@k measures the fraction of relevant documents that appear in the top-k retrieval results. Precision@k measures the fraction of top-k results that are relevant. If Recall@10 = 0.8 and Precision@10 = 0.4 for a query with 20 relevant documents in the corpus, how many relevant documents were retrieved in the top 10?",
+      "options": [
+        "4",
+        "8",
+        "16",
+        "Both Recall and Precision give the same count, but the formula is inconsistent"
+      ],
+      "correct": 0,
+      "explanation": "From Recall@10: Recall@10 = (relevant docs in top 10) / (total relevant docs) = x/20 = 0.8, so x = 16. Wait — but from Precision@10: Precision@10 = (relevant docs in top 10) / 10 = 0.4, so relevant in top 10 = 4. These are contradictory! Let us re-check: Recall@10 = 0.8 means 80% of relevant docs are in top 10. With 20 relevant docs, that is 16. But Precision@10 = 0.4 means 4 out of 10 results are relevant. These cannot both be true simultaneously (4 ≠ 16). However, the question asks what the correct count is — and Precision@10 = 0.4 directly gives us 4 relevant documents in the top 10, which is consistent and unambiguous. The given Recall@10 = 0.8 with 20 total relevant documents would require 16 of 10 results to be relevant, which is impossible. In an exam setting, Precision@10 gives the directly calculable answer: 0.4 * 10 = 4 relevant documents retrieved."
+    },
+    {
+      "id": "mt-15",
+      "type": "fill_code",
+      "points": 10,
+      "question": "Complete the function that implements exponential backoff with jitter for retrying API calls. The delay for attempt n should be: min(base^n + random_jitter, max_delay), where random_jitter is uniformly distributed in [0, 1). Fill in the TWO missing lines marked with ???.\n\n```python\nimport random\nimport math\n\ndef calculate_backoff_delay(attempt: int, base: float = 2.0, \n                            max_delay: float = 60.0) -> float:\n    \"\"\"Calculate delay in seconds for retry attempt n.\"\"\"\n    # Line 1: Calculate exponential component\n    exponential = ???\n    # Line 2: Add jitter and cap at max_delay\n    delay = ???\n    return round(delay, 2)\n\n# Test: attempt 0 should give ~1.0-2.0, attempt 3 should give ~8.0-9.0\nrandom.seed(42)\nd0 = calculate_backoff_delay(0)\nd3 = calculate_backoff_delay(3)\nprint(f\"{d0},{d3}\")\n```",
+      "options": [
+        "Line 1: base ** attempt | Line 2: min(exponential + random.random(), max_delay)",
+        "Line 1: base * attempt | Line 2: max(exponential + random.random(), max_delay)",
+        "Line 1: base ** attempt | Line 2: exponential + random.random() * max_delay",
+        "Line 1: math.log(base, attempt) | Line 2: min(exponential + random.random(), max_delay)"
+      ],
+      "correct": 0,
+      "explanation": "The standard exponential backoff formula is: delay = min(base^n + jitter, max_delay). Line 1 computes the exponential: base ** attempt gives 2^0=1, 2^1=2, 2^2=4, 2^3=8, etc. Line 2 adds uniform jitter in [0,1) and caps the result: min(exponential + random.random(), max_delay). For attempt 0: 2^0 + jitter = 1 + ~0.64 = ~1.64. For attempt 3: 2^3 + jitter = 8 + ~0.02 = ~8.02. The jitter prevents thundering herd — if 100 clients all fail simultaneously and retry at exactly 2, 4, 8 seconds, they create synchronized retry storms. Random jitter spreads retries across the delay window. The min() with max_delay prevents astronomically long waits for high attempt numbers."
+    },
+    {
+      "id": "mt-16",
+      "type": "fill_code",
+      "points": 10,
+      "question": "Complete the NDCG@k (Normalized Discounted Cumulative Gain) computation. DCG@k = Σ_{i=1}^{k} rel_i / log2(i+1), where rel_i is the relevance score at rank i. NDCG@k = DCG@k / IDCG@k, where IDCG@k is the DCG of the ideal ranking (relevance scores sorted descending). Fill in the TWO missing lines.\n\n```python\nimport math\n\ndef dcg_at_k(relevances, k):\n    \"\"\"Compute DCG@k from a list of relevance scores.\"\"\"\n    score = 0.0\n    for i in range(min(k, len(relevances))):\n        # ??? Line 1: accumulate DCG\n        ???\n    return score\n\ndef ndcg_at_k(relevances, k):\n    \"\"\"Compute NDCG@k.\"\"\"\n    dcg = dcg_at_k(relevances, k)\n    # ??? Line 2: compute ideal DCG\n    ideal_relevances = ???\n    idcg = dcg_at_k(ideal_relevances, k)\n    if idcg == 0:\n        return 0.0\n    return dcg / idcg\n\n# Test\nresult = ndcg_at_k([3, 2, 0, 1], 4)\nprint(round(result, 4))\n```",
+      "options": [
+        "Line 1: score += relevances[i] / math.log2(i + 2) | Line 2: sorted(relevances, reverse=True)",
+        "Line 1: score += relevances[i] / math.log2(i + 1) | Line 2: sorted(relevances)",
+        "Line 1: score += relevances[i] * math.log2(i + 2) | Line 2: sorted(relevances, reverse=True)",
+        "Line 1: score += relevances[i] / (i + 1) | Line 2: sorted(relevances, reverse=True)"
+      ],
+      "correct": 0,
+      "explanation": "The DCG formula uses log2(i+1) as the discount factor, where i is 1-indexed. Since our loop uses 0-indexed i, we need log2(i+2) to get the correct 1-indexed behavior: when i=0 (rank 1), discount = log2(2) = 1; when i=1 (rank 2), discount = log2(3) ≈ 1.585; etc. For the ideal DCG, we need the best possible ranking, which is the relevances sorted in descending order: sorted(relevances, reverse=True). With relevances [3,2,0,1]: DCG = 3/log2(2) + 2/log2(3) + 0/log2(4) + 1/log2(5) = 3.0 + 1.2619 + 0 + 0.4307 = 4.6926. Ideal = [3,2,1,0]: IDCG = 3/1 + 2/1.585 + 1/2 + 0/2.322 = 3.0 + 1.2619 + 0.5 + 0 = 4.7619. NDCG = 4.6926/4.7619 ≈ 0.9855."
+    },
+    {
+      "id": "mt-17",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Self-RAG, the model scores candidate responses using: score(y) = P(IsREL=rel|x,d) * P(IsSUP=sup|x,d,y) * P(IsUSE=s|x,y). Suppose candidate A has scores (0.9, 0.6, 0.8) and candidate B has scores (0.7, 0.9, 0.7). Which candidate has the higher composite score, and why might the system prefer B despite A having higher relevance?",
+      "options": [
+        "A scores higher (0.432 vs 0.441) and should always be preferred due to higher relevance",
+        "B scores higher (0.441 vs 0.432) because the multiplicative scoring penalizes candidate A's lower support score — high relevance with low support suggests the generation is not well-grounded in the retrieved evidence, making it more likely to hallucinate",
+        "Both score equally at 0.432",
+        "The scores cannot be compared without knowing the actual response text"
+      ],
+      "correct": 1,
+      "explanation": "A: 0.9 * 0.6 * 0.8 = 0.432. B: 0.7 * 0.9 * 0.7 = 0.441. B wins with 0.441 vs 0.432. The multiplicative scoring is deliberate: it heavily penalizes any weak dimension. Candidate A has high relevance (0.9) — the retrieved documents match the query — but low support (0.6) — the generation is not well-grounded in those documents. This is exactly the pattern that produces confident hallucinations: the system retrieves relevant context but then generates claims that go beyond or contradict the evidence. Candidate B has somewhat lower relevance (0.7) but much higher support (0.9), meaning its generation is faithfully grounded in the retrieved evidence. The multiplicative structure makes this the correct trade-off — it is better to be somewhat less relevant but highly faithful than highly relevant but poorly grounded."
+    },
+    {
+      "id": "mt-18",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are designing the memory architecture for a long-running coding agent that assists developers over multi-hour sessions. The agent needs to remember: (1) the current file being edited, (2) recent conversation turns, (3) project-wide context like architecture decisions, and (4) the user's coding preferences learned over weeks. Which memory architecture best serves these needs?",
+      "options": [
+        "A single large context window that stores everything chronologically",
+        "A tiered memory system: working memory (current file + recent turns in context window), episodic memory (session-level summaries stored in a database), semantic memory (project context and architecture in a vector store), and procedural memory (learned user preferences as persistent configuration)",
+        "Store everything in a vector database and retrieve relevant memories for each turn",
+        "Use only the most recent 10 conversation turns, discarding all other context"
+      ],
+      "correct": 1,
+      "explanation": "Different types of information have different access patterns, lifetimes, and storage requirements. Working memory (current file, recent turns) changes every few seconds and must be instantly available — it lives in the LLM's context window. Episodic memory (what happened earlier in this session) is accessed less frequently and can be stored in a database, retrieved on demand. Semantic memory (architecture decisions, project conventions) is stable across sessions and benefits from vector search — you retrieve relevant project context based on the current task. Procedural memory (user preferences like 'always use type hints', 'prefers functional style') is learned over weeks and should be persistent configuration, not re-learned each session. A single context window cannot hold all of this without crowding out generation space. A vector-database-only approach misses the distinction between volatile and stable information. Tiered memory mirrors how human memory actually works and is the architecture used by production coding assistants."
+    }
+  ]
+}

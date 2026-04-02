@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A 4:1 multiplexer is built from three 2:1 multiplexers. How many 2:1 multiplexers are needed to build a 16:1 multiplexer using this tree approach?",
+      "options": [
+        "8 multiplexers",
+        "15 multiplexers",
+        "16 multiplexers",
+        "31 multiplexers"
+      ],
+      "correct": 1,
+      "explanation": "A $2^n$:1 MUX built as a tree of 2:1 MUXes requires $2^n - 1$ multiplexers. For a 16:1 MUX ($n = 4$): $2^4 - 1 = 15$ multiplexers. The tree has 4 levels: 8 MUXes at level 1 (selecting within pairs), 4 at level 2, 2 at level 3, and 1 at the final level. Total: $8 + 4 + 2 + 1 = 15$. This is the same structure as a single-elimination tournament bracket — each round halves the number of candidates. The depth (number of select lines needed) is $\\log_2 16 = 4$, giving 4 gate delays through the tree."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "When performing the subtraction $A - B$ in a two's complement ALU, the Binvert signal is set to 1 and the carry-in of bit 0 is set to 1. What happens if we set Binvert = 1 but leave carry-in = 0?",
+      "options": [
+        "The ALU computes $A + B$",
+        "The ALU computes $A - B - 1$ (i.e., $A + \\overline{B}$ without the +1)",
+        "The ALU computes $\\overline{A} + B$",
+        "The ALU produces an undefined result"
+      ],
+      "correct": 1,
+      "explanation": "Two's complement negation is $-B = \\overline{B} + 1$, so $A - B = A + \\overline{B} + 1$. The Binvert signal computes $\\overline{B}$ (one's complement of B), and the carry-in provides the +1. Without the carry-in, we compute $A + \\overline{B} = A + (-B - 1) = A - B - 1$. This is actually useful: the one's complement $\\overline{B}$ equals $-B - 1$ in two's complement, so $A + \\overline{B} = A - B - 1$. Some processors use this intermediate result for specific comparisons or as a step in more complex operations."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A 32-bit barrel shifter needs to shift by any amount from 0 to 31. How many stages does the logarithmic barrel shifter require, and what is the total number of 2:1 MUXes?",
+      "options": [
+        "5 stages, 160 MUXes",
+        "5 stages, 32 MUXes",
+        "32 stages, 32 MUXes",
+        "6 stages, 192 MUXes"
+      ],
+      "correct": 0,
+      "explanation": "The shift amount ranges from 0 to 31, requiring $\\lceil\\log_2 32\\rceil = 5$ bits to encode ($s_4 s_3 s_2 s_1 s_0$). Each bit controls one stage of the barrel shifter: stage $k$ conditionally shifts by $2^k$ positions. Each stage contains 32 MUXes (one per output bit), each selecting between the unshifted and shifted value. Total MUXes: $32 \\times 5 = 160$. The delay is 5 MUX delays (about 10-15 gate delays), compared to 31 MUX delays for a naive cascaded approach. This is the same $O(\\log n)$ vs $O(n)$ speedup we saw in the carry-lookahead adder."
+    }
+  ]
+}

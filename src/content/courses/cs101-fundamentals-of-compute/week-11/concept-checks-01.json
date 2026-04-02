@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In the MESI protocol, Core 0 has a cache line in Exclusive (E) state and performs a write to that line. What state does the line transition to, and is any bus traffic generated?",
+      "options": [
+        "Transitions to Modified (M), and an invalidation is broadcast on the bus",
+        "Transitions to Modified (M), with no bus traffic (silent transition)",
+        "Stays in Exclusive (E), with no bus traffic",
+        "Transitions to Shared (S), and the data is written back to memory"
+      ],
+      "correct": 1,
+      "explanation": "This is the key optimization of the Exclusive state. Because E means 'I am the only cached copy and it matches memory,' a write can transition silently to Modified without any bus traffic. No other cache has a copy to invalidate, and the data does not need to be written back yet. Without the E state (as in the simpler MSI protocol), a write to a Shared line would always require a bus invalidation, even if no other cache actually held the line. The E state eliminates this unnecessary traffic."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A snooping coherence protocol with write-invalidate is used on a 4-core system. Core 0 holds address X in Modified state. Core 2 issues a read to address X. What happens?",
+      "options": [
+        "Core 2 reads the value directly from main memory, which is up to date",
+        "Core 0 writes back the dirty data to memory, then Core 2 reads from memory; both caches go to Shared",
+        "Core 0 supplies the data directly to Core 2 via cache-to-cache transfer, and both go to Invalid",
+        "The read is rejected until Core 0 voluntarily writes back the data"
+      ],
+      "correct": 1,
+      "explanation": "When Core 0 holds the line in Modified state, its copy is the only valid one --- main memory is stale. When Core 2 snoops a read for that address, Core 0 must intervene: it writes back the dirty data to memory (or supplies it directly via cache-to-cache transfer, depending on the implementation). After the writeback, both Core 0 and Core 2 have clean copies that match memory, so both transition to Shared state. Core 0 cannot simply ignore the snoop because it has the only valid copy of the data."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Two threads on different cores each increment a private counter variable in a tight loop. The counters are declared consecutively in memory and both fit within the same 64-byte cache line. Performance is 50x slower than expected. What is this phenomenon called, and what is the fix?",
+      "options": [
+        "True sharing --- use a mutex to protect the counters",
+        "False sharing --- pad each counter to occupy its own 64-byte cache line",
+        "Cache thrashing --- increase the L1 cache size",
+        "Write amplification --- use write-through caching instead of write-back"
+      ],
+      "correct": 1,
+      "explanation": "This is false sharing. Although the two counters are logically independent (no true data sharing), they reside on the same cache line. Each write by one core invalidates the entire cache line in the other core's cache, causing constant M-to-I transitions and cache line bouncing. The fix is to ensure each counter occupies its own cache line by adding padding (e.g., using alignas(64) in C++ or inserting dummy bytes). After padding, writes to one counter do not affect the other core's cache line."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A 2-socket server has local DRAM latency of 80 ns and remote DRAM latency of 130 ns. A database workload accesses a 256 GB dataset uniformly at random across both sockets' memory. Approximately what percentage of memory accesses incur the remote penalty?",
+      "options": [
+        "25% --- only cross-socket accesses from one direction",
+        "50% --- half of all memory is on the remote socket",
+        "100% --- all accesses go through the interconnect",
+        "0% --- the OS transparently migrates pages to avoid remote access"
+      ],
+      "correct": 1,
+      "explanation": "In a 2-socket system with uniform random access across all memory, each core accesses its local memory ~50% of the time and remote memory ~50% of the time (assuming memory is evenly distributed across sockets). The average latency is approximately $0.5 \\times 80 + 0.5 \\times 130 = 105$ ns --- a 31% penalty compared to all-local access. This is why NUMA-aware data placement is critical: binding threads and their data to the same NUMA node can eliminate the 50% remote penalty. The OS does not automatically migrate pages in most configurations --- it uses a first-touch policy, placing pages where they are first accessed."
+    }
+  ]
+}

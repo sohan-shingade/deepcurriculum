@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A RAG pipeline passes all unit tests and integration tests, but users report frequent irrelevant answers. Which additional testing layer would most directly catch this issue before production?",
+      "options": [
+        "Load testing with higher concurrency",
+        "An evaluation suite with (query, expected_answer) pairs measuring relevance and faithfulness",
+        "More unit tests covering edge cases in the chunking logic",
+        "Adversarial testing for prompt injection"
+      ],
+      "correct": 1,
+      "explanation": "Evaluation suites (Layer 3 in the testing pyramid) test AI quality — relevance, faithfulness, correctness — using curated datasets. Unit tests verify deterministic logic (chunking, formatting), integration tests verify components connect properly, and load tests verify performance under concurrency. But none of those test whether the system produces *good answers*. An eval suite with representative queries and expected behaviors is the testing layer designed specifically to catch quality issues like irrelevant answers."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Your AI system has a P99 latency SLO of 3 seconds and an AI quality SLO requiring faithfulness scores above 0.85 on a rolling 24-hour window. Both SLOs are breached simultaneously. What is the correct triage priority?",
+      "options": [
+        "Fix latency first because it affects all users immediately",
+        "Fix faithfulness first because AI quality is more important than speed",
+        "Investigate whether they share a root cause (e.g., a model change or infrastructure issue) before fixing either in isolation",
+        "Roll back the most recent deployment and investigate later"
+      ],
+      "correct": 2,
+      "explanation": "When two SLOs breach simultaneously, the most likely explanation is a shared root cause — a model update that is both slower and less accurate, a retrieval infrastructure issue degrading both latency and context quality, or a misconfigured deployment. Fixing them in isolation wastes time and may not resolve either. The correct incident response is to investigate correlation first. That said, if there is an obvious recent deployment, rolling it back (option D) is a reasonable immediate mitigation while you investigate — but 'investigate later' is dangerous. You must understand root cause to prevent recurrence."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "You are reviewing an AI engineering portfolio on GitHub. Which of the following is the strongest signal of production readiness?",
+      "options": [
+        "A beautiful React frontend with smooth animations",
+        "An architecture diagram with evaluation results showing precision, recall, and latency benchmarks",
+        "Integration with five different LLM providers",
+        "A 20-page research paper explaining the theoretical foundations"
+      ],
+      "correct": 1,
+      "explanation": "An architecture diagram demonstrates systems thinking — the ability to design and communicate complex systems. Evaluation results demonstrate the measurement mindset — the discipline to define what 'good' means and prove you achieved it. Together, they signal that the candidate thinks like a production engineer, not just a prototyper. A nice frontend (option A) is the least important signal. Supporting multiple LLMs (option C) shows breadth but not depth. A research paper (option D) suggests academic focus rather than engineering judgment."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Your CI/CD pipeline includes an eval gate that blocks deployment if evaluation scores drop below thresholds. A developer pushes a prompt change that improves performance on 80% of test cases but degrades performance on 20%, keeping the overall average above the threshold. What is the best practice?",
+      "options": [
+        "Allow the deployment since the average score exceeds the threshold",
+        "Block all deployments that degrade any individual test case",
+        "Segment the eval suite and set per-segment thresholds so that degradation in any category blocks deployment",
+        "Remove the eval gate and rely on post-deployment monitoring instead"
+      ],
+      "correct": 2,
+      "explanation": "Average scores can mask category-level regressions — a phenomenon sometimes called 'Simpson's paradox in evals.' If a prompt change improves general knowledge questions but degrades safety-critical or domain-specific questions, the average might look fine while a specific user population suffers. The best practice is to segment your eval suite (by category, difficulty, domain, or risk level) and set thresholds per segment. This catches targeted regressions that aggregate metrics hide. Option B is too strict and would block most improvements. Option D removes a critical safety net."
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 6: Datapath and Control",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a single-cycle RISC-V processor, which instruction determines the clock period (i.e., has the longest critical path)?",
+      "options": [
+        "ADD (R-type arithmetic)",
+        "BEQ (branch)",
+        "LW (load word)",
+        "JAL (jump and link)"
+      ],
+      "correct": 2,
+      "explanation": "The Load Word instruction has the longest critical path because it passes through every major component: Instruction Memory -> Register File Read -> ALU (address calculation) -> Data Memory -> MemToReg MUX -> Register File Write. No other instruction uses both the ALU and data memory in sequence. ADD skips data memory entirely. BEQ skips both data memory and register writeback. JAL skips ALU computation and data memory. Since the single-cycle clock must accommodate the worst case, LW sets the clock period."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the role of the ALUSrc control signal in the single-cycle datapath?",
+      "options": [
+        "It selects between signed and unsigned ALU operations",
+        "It determines whether the second ALU input comes from register rs2 (ALUSrc=0) or from the sign-extended immediate (ALUSrc=1)",
+        "It controls the clock speed of the ALU",
+        "It selects between the ALU output and memory data for the register writeback"
+      ],
+      "correct": 1,
+      "explanation": "ALUSrc is a multiplexer control signal that selects the second ALU input (the 'B' input). When ALUSrc=0 (R-type instructions), the B input comes from the register file's second read port (rs2 data). When ALUSrc=1 (I-type arithmetic, loads, stores), the B input comes from the immediate generator's sign-extended output. This single bit determines whether the instruction operates on two registers or on a register and a constant. Option D describes the MemToReg signal, which is a different multiplexer."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "For a Store Word (SW) instruction, which control signals are set to 1?",
+      "options": [
+        "RegWrite=1, MemWrite=1, ALUSrc=1",
+        "ALUSrc=1, MemWrite=1, RegWrite=0",
+        "MemRead=1, MemWrite=1, ALUSrc=1",
+        "RegWrite=1, MemRead=1, MemToReg=1"
+      ],
+      "correct": 1,
+      "explanation": "Store Word writes to memory (MemWrite=1) at an address computed as rs1 + immediate, so ALUSrc=1 (use immediate for address calculation). Critically, RegWrite=0 because stores modify memory, not registers. MemRead=0 because we are writing to memory, not reading from it. The key insight is that SW is one of the few instructions that does not write to the register file — the data flows from a register (rs2) into memory, with no register destination."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a multi-cycle processor with component delays: Memory=200ps, ALU=200ps, Register Read=100ps, Register Write=100ps, MUX=25ps. What is the multi-cycle clock period?",
+      "options": [
+        "850 ps (same as single-cycle)",
+        "200 ps (the slowest single step: memory or ALU)",
+        "225 ps (register read + write + mux)",
+        "625 ps (average of all component delays)"
+      ],
+      "correct": 2,
+      "explanation": "In the multi-cycle design, each clock cycle performs exactly one step. The clock period must accommodate the slowest step. The candidates are: (1) Memory access = 200 ps, (2) ALU operation = 200 ps, (3) Register read + write + mux = 100 + 100 + 25 = 225 ps. The maximum is 225 ps (register step). Note that this is much shorter than the single-cycle period of 850 ps because we only need to fit one stage per cycle, not the entire instruction path. The trade-off is that instructions now take 3-5 cycles."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a multi-cycle processor, the branch target (PC + immediate) is computed during the Decode step, before the branch condition is evaluated. What is the benefit of this?",
+      "options": [
+        "It eliminates branch misprediction penalties",
+        "It saves a cycle if the branch is taken, because the target is already in ALUOut and doesn't need a separate computation step",
+        "It allows the processor to speculatively execute the branch target instructions",
+        "It enables the compiler to remove unnecessary branch instructions"
+      ],
+      "correct": 1,
+      "explanation": "During the Decode step, the ALU would otherwise be idle (register reads are happening independently). By computing PC + immediate in parallel, the branch target is stored in ALUOut. When the branch condition is evaluated in the next step (Execute), if the branch is taken, the pre-computed target is immediately available to load into the PC — no extra cycle needed. If the branch is not taken, the ALUOut value is simply overwritten in a subsequent instruction's execution. This is a form of speculative computation that costs zero extra time because the ALU was idle."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "How many clock cycles does a Load Word (LW) instruction take in a multi-cycle processor?",
+      "options": [
+        "3 cycles (Fetch, Decode, Execute)",
+        "4 cycles (Fetch, Decode, Execute, Writeback)",
+        "5 cycles (Fetch, Decode, Execute/Address, Memory Read, Writeback)",
+        "1 cycle (same as single-cycle)"
+      ],
+      "correct": 2,
+      "explanation": "LW requires 5 steps: (1) Instruction Fetch — read instruction from memory. (2) Decode/Register Read — read rs1, compute branch target speculatively. (3) Execute/Address Calculation — ALU computes rs1 + offset. (4) Memory Read — data memory reads the word at the computed address. (5) Writeback — write the loaded data from MDR to register rd. This is the most expensive instruction in terms of cycle count. For comparison: R-type takes 4 cycles (no memory step), Store takes 4 cycles (no writeback), and Branch takes 3 cycles (no memory or writeback)."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the primary advantage of microprogrammed control over hardwired control?",
+      "options": [
+        "Microprogrammed control is always faster",
+        "Microprogrammed control uses less power",
+        "Microprogrammed control stores control sequences in ROM, making it feasible to support complex ISAs with hundreds of instructions and allowing post-fabrication bug fixes via microcode updates",
+        "Microprogrammed control eliminates the need for a register file"
+      ],
+      "correct": 2,
+      "explanation": "For a complex ISA like x86 with 1500+ instructions, hardwired control would require an enormous combinational logic network that is impractical to design and verify. Microprogrammed control instead stores each instruction's control sequence as microinstructions in a ROM. This scales linearly with instruction count (just add more ROM entries). A crucial bonus: microcode can be updated after the chip ships. Intel regularly deploys microcode patches through OS updates to fix bugs — as demonstrated by the Spectre/Meltdown patches in 2018. The trade-off is speed: ROM lookup adds latency, so RISC architectures with simple ISAs prefer hardwired control."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a single-cycle processor, for a BEQ instruction, the PCSrc signal is computed as Branch AND Zero. What does this accomplish?",
+      "options": [
+        "It prevents the PC from being updated during branch instructions",
+        "It selects PC + 4 when the branch is not taken (Branch=1 but Zero=0), and PC + offset when taken (Branch=1 and Zero=1), by ANDing the Branch control with the ALU's Zero flag",
+        "It resets the PC to zero when a branch fails",
+        "It doubles the PC value for branch targets"
+      ],
+      "correct": 1,
+      "explanation": "PCSrc determines whether the next PC comes from PC+4 (normal) or the branch target (PC + offset). For BEQ, we want to branch only when the two registers are equal. The ALU subtracts rs1 - rs2, and the Zero flag is 1 when the result is 0 (meaning they are equal). The Branch control signal is 1 for branch instructions, 0 for all others. AND-ing them: (1) For non-branch instructions: Branch=0, so PCSrc=0 regardless of Zero — always use PC+4. (2) For BEQ with equal operands: Branch=1, Zero=1, PCSrc=1 — take the branch. (3) For BEQ with unequal operands: Branch=1, Zero=0, PCSrc=0 — fall through to PC+4."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A single-cycle processor runs at 1 GHz (1000 ps clock). A multi-cycle processor runs at 4 GHz (250 ps clock) with an average CPI of 4.0. Which is faster for a 10-billion instruction program?",
+      "options": [
+        "Single-cycle: 10 seconds vs multi-cycle: 10 seconds — they are equal",
+        "Single-cycle: 10 seconds vs multi-cycle: 10 seconds — they are equal but for different reasons",
+        "Multi-cycle is faster because it has a faster clock",
+        "Single-cycle is faster because CPI=1 always beats CPI=4"
+      ],
+      "correct": 0,
+      "explanation": "Using the Iron Law: Single-cycle time = 10^10 x 1 x 10^-9 = 10 seconds. Multi-cycle time = 10^10 x 4 x 2.5 x 10^-10 = 10 seconds. They are identical! The multi-cycle design has a 4x faster clock but 4x higher CPI, and the two factors exactly cancel out. This example illustrates that clock speed alone is meaningless — what matters is the product of all three Iron Law terms. The real benefit of multi-cycle is that it enables variable execution times per instruction type, which becomes the foundation for pipelining."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Modern Intel x86 processors decode complex CISC instructions into simpler micro-operations (uops). This is most similar to which concept from this lecture?",
+      "options": [
+        "Single-cycle execution — each x86 instruction completes in one cycle",
+        "Microprogrammed control — complex instructions are decomposed into sequences of simpler operations stored in a microcode ROM",
+        "Hardwired control — all instructions are implemented directly in gates",
+        "The multi-cycle FSM — each instruction goes through exactly the same states"
+      ],
+      "correct": 1,
+      "explanation": "Modern x86 processors are essentially microprogrammed machines. The frontend decoder cracks complex variable-length CISC instructions into fixed-width micro-operations (uops) that the backend executes. Simple instructions (like ADD) decode to 1-2 uops directly in hardware (similar to hardwired control), but complex instructions (like REP MOVSB or CPUID) are handled by the Micro-Sequencer ROM (MSROM), which stores the microcode sequences. Intel's Golden Cove core (2021) has a 4K-entry micro-op cache to bypass decoding entirely for hot code, and supports microcode updates for post-fabrication bug fixes."
+    }
+  ]
+}

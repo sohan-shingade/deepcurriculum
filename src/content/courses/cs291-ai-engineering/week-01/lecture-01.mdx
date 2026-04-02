@@ -1,0 +1,473 @@
+---
+title: "The LLM Landscape: Architecture, Capabilities, and Limitations"
+week: 1
+lecture: 1
+estimatedMinutes: 55
+---
+
+# The LLM Landscape: Architecture, Capabilities, and Limitations
+
+Welcome to CS 291. Over the next ten weeks, you will learn to build production AI systems — systems that serve real users, handle failure gracefully, and cost a predictable amount of money. But before we write a single line of production code, we need to understand what we are building on top of. This lecture is about the machine: what a large language model actually is, how it works, where it excels, and — critically — where it fails.
+
+If you have taken a deep learning course, some of this will be review. Good. Review it anyway. The gap between "I've seen the attention formula" and "I understand why my API call returned nonsense" is enormous, and this lecture bridges it.
+
+---
+
+## 1. The Transformer Architecture
+
+Every modern LLM — GPT-4, Claude, Gemini, Llama, Mistral — is built on the transformer architecture introduced by Vaswani et al. (2017) in *Attention Is All You Need*. Before transformers, the dominant sequence models were RNNs and LSTMs, which processed tokens sequentially. The transformer's key innovation was **parallel processing of all positions** via self-attention, which made it possible to train on vastly more data in less time.
+
+### 1.1 Input Representation
+
+A transformer receives a sequence of token embeddings. Each token $x_i$ is mapped to a dense vector $\mathbf{e}_i \in \mathbb{R}^{d_{\text{model}}}$ via a learned embedding matrix $\mathbf{E} \in \mathbb{R}^{|V| \times d_{\text{model}}}$, where $|V|$ is vocabulary size and $d_{\text{model}}$ is the model dimension (e.g., 4096 for a 7B parameter model).
+
+Since the transformer has no recurrence, positional information must be injected explicitly. The original paper used sinusoidal positional encodings:
+
+$$PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right)$$
+
+$$PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right)$$
+
+Modern models use **Rotary Position Embeddings (RoPE)** (Su et al., 2021), which encode relative position directly into the attention computation. The key insight is that RoPE makes the dot product between query and key vectors depend only on their *relative* position, not absolute — enabling better length generalization.
+
+### 1.2 Scaled Dot-Product Attention
+
+The core mechanism. Given an input sequence of $n$ token representations packed into a matrix $\mathbf{X} \in \mathbb{R}^{n \times d_{\text{model}}}$, we project into three spaces:
+
+$$\mathbf{Q} = \mathbf{X}\mathbf{W}^Q, \quad \mathbf{K} = \mathbf{X}\mathbf{W}^K, \quad \mathbf{V} = \mathbf{X}\mathbf{W}^V$$
+
+where $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$ and $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$. The attention output is:
+
+$$\text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left(\frac{\mathbf{Q}\mathbf{K}^T}{\sqrt{d_k}}\right)\mathbf{V}$$
+
+Let's unpack each component:
+
+**Why $\mathbf{Q}\mathbf{K}^T$?** This computes pairwise similarity between every query position and every key position. The result is an $n \times n$ attention matrix where entry $(i, j)$ indicates how much position $i$ should attend to position $j$.
+
+**Why divide by $\sqrt{d_k}$?** Without scaling, the dot products grow in magnitude with $d_k$. If $q$ and $k$ are vectors with components drawn independently from a distribution with mean 0 and variance 1, then $\mathbf{q} \cdot \mathbf{k} = \sum_{i=1}^{d_k} q_i k_i$ has mean 0 and variance $d_k$. Large magnitudes push the softmax into regions with vanishingly small gradients (the saturation problem). Dividing by $\sqrt{d_k}$ normalizes the variance back to 1.
+
+**Why softmax?** It converts raw scores into a probability distribution over positions. Each row of the attention matrix sums to 1, so the output is a weighted average of value vectors.
+
+Here is a complete implementation:
+
+```python
+import numpy as np
+from typing import Tuple
+
+def scaled_dot_product_attention(
+    Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+    mask: np.ndarray | None = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute scaled dot-product attention.
+
+    Args:
+        Q: Query matrix of shape (seq_len, d_k)
+        K: Key matrix of shape (seq_len, d_k)
+        V: Value matrix of shape (seq_len, d_v)
+        mask: Optional boolean mask of shape (seq_len, seq_len).
+              True values are masked (set to -inf before softmax).
+
+    Returns:
+        output: Attention output of shape (seq_len, d_v)
+        weights: Attention weights of shape (seq_len, seq_len)
+    """
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)  # (seq_len, seq_len)
+
+    if mask is not None:
+        scores = np.where(mask, -1e9, scores)
+
+    # Numerically stable softmax
+    scores_max = scores.max(axis=-1, keepdims=True)
+    exp_scores = np.exp(scores - scores_max)
+    weights = exp_scores / exp_scores.sum(axis=-1, keepdims=True)
+
+    output = weights @ V  # (seq_len, d_v)
+    return output, weights
+
+
+# Demo: 4-token sequence, d_k = d_v = 8
+np.random.seed(42)
+seq_len, d_k = 4, 8
+Q = np.random.randn(seq_len, d_k)
+K = np.random.randn(seq_len, d_k)
+V = np.random.randn(seq_len, d_k)
+
+output, weights = scaled_dot_product_attention(Q, K, V)
+print(f"Attention weights (each row sums to 1):")
+for i, row in enumerate(weights):
+    print(f"  Token {i}: [{', '.join(f'{w:.3f}' for w in row)}] sum={row.sum():.4f}")
+print(f"\nOutput shape: {output.shape}")
+```
+
+### 1.3 Multi-Head Attention
+
+A single attention head can only learn one type of relationship. Multi-head attention runs $h$ independent attention operations in parallel, then concatenates and projects the results:
+
+$$\text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\mathbf{W}^O$$
+
+where $\text{head}_i = \text{Attention}(\mathbf{X}\mathbf{W}_i^Q, \mathbf{X}\mathbf{W}_i^K, \mathbf{X}\mathbf{W}_i^V)$ and $\mathbf{W}^O \in \mathbb{R}^{hd_v \times d_{\text{model}}}$.
+
+Typically $d_k = d_v = d_{\text{model}} / h$. For a model with $d_{\text{model}} = 4096$ and $h = 32$, each head operates on 128-dimensional subspaces. Different heads learn to attend to different things: some track syntactic structure, others semantic similarity, others positional proximity.
+
+<ConceptCheck id="cc-1" />
+
+### 1.4 The Full Transformer Block
+
+Each transformer layer consists of:
+
+1. **Multi-head self-attention** with residual connection and layer normalization
+2. **Feed-forward network (FFN)** with residual connection and layer normalization
+
+The FFN is a simple two-layer MLP applied position-wise:
+
+$$\text{FFN}(\mathbf{x}) = \text{GELU}(\mathbf{x}\mathbf{W}_1 + \mathbf{b}_1)\mathbf{W}_2 + \mathbf{b}_2$$
+
+where $\mathbf{W}_1 \in \mathbb{R}^{d_{\text{model}} \times d_{\text{ff}}}$ and $\mathbf{W}_2 \in \mathbb{R}^{d_{\text{ff}} \times d_{\text{model}}}$. The intermediate dimension $d_{\text{ff}}$ is typically $4 \times d_{\text{model}}$. Modern architectures like Llama use the SwiGLU variant (Shazeer, 2020) with a gated linear unit instead of vanilla GELU.
+
+A GPT-style decoder stacks $L$ such layers (e.g., $L = 32$ for a 7B model, $L = 80$ for a 70B model). The total parameter count is dominated by the attention projections and FFN weights, roughly:
+
+$$\text{Params} \approx L \times (4 \cdot d_{\text{model}}^2 + 2 \cdot d_{\text{model}} \cdot d_{\text{ff}}) + |V| \cdot d_{\text{model}}$$
+
+---
+
+## 2. Pre-Training: Next-Token Prediction
+
+The training objective for autoregressive LLMs is deceptively simple: given a sequence of tokens $(x_1, x_2, \ldots, x_{T-1})$, predict the next token $x_T$. The model parameterizes a conditional distribution:
+
+$$p_\theta(x_t \mid x_1, \ldots, x_{t-1})$$
+
+The training loss is the cross-entropy between this predicted distribution and the one-hot target:
+
+$$\mathcal{L}(\theta) = -\frac{1}{T}\sum_{t=1}^{T} \log p_\theta(x_t \mid x_{<t})$$
+
+This is equivalent to minimizing the negative log-likelihood of the training corpus under the model. The final layer of the transformer produces logits $\mathbf{z} \in \mathbb{R}^{|V|}$, which are converted to probabilities via softmax:
+
+$$p(x_t = w_i \mid x_{<t}) = \frac{\exp(z_i)}{\sum_{j=1}^{|V|} \exp(z_j)}$$
+
+```python
+import numpy as np
+
+def cross_entropy_loss(logits: np.ndarray, target_indices: np.ndarray) -> float:
+    """
+    Compute cross-entropy loss for next-token prediction.
+
+    Args:
+        logits: Model output logits of shape (seq_len, vocab_size)
+        target_indices: Ground truth token indices of shape (seq_len,)
+
+    Returns:
+        Average cross-entropy loss
+    """
+    # Numerically stable log-softmax
+    max_logits = logits.max(axis=-1, keepdims=True)
+    log_probs = logits - max_logits - np.log(
+        np.exp(logits - max_logits).sum(axis=-1, keepdims=True)
+    )
+
+    # Gather log probabilities at target indices
+    seq_len = logits.shape[0]
+    target_log_probs = log_probs[np.arange(seq_len), target_indices]
+
+    return -target_log_probs.mean()
+
+# Example: vocab of 10 tokens, sequence of length 5
+np.random.seed(42)
+vocab_size = 10
+seq_len = 5
+logits = np.random.randn(seq_len, vocab_size)
+targets = np.array([3, 7, 1, 0, 5])
+
+loss = cross_entropy_loss(logits, targets)
+print(f"Cross-entropy loss: {loss:.4f}")
+print(f"Random baseline loss (should be ~ln(10) = {np.log(vocab_size):.4f}): {np.log(vocab_size):.4f}")
+```
+
+**Why does this produce intelligence?** Next-token prediction on internet-scale text forces the model to develop internal representations of grammar, facts, reasoning patterns, code structure, and more. To predict the next word in a math proof, you need to understand the math. To predict the next line of code, you need to understand the program. The representations are a byproduct of compression — the model is a lossy compressor of the training distribution.
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 3. Scaling Laws
+
+One of the most important empirical results in modern ML is that LLM performance follows **predictable power laws** as you scale compute, data, and parameters.
+
+### 3.1 Kaplan et al. (2020)
+
+OpenAI's scaling laws paper showed that cross-entropy loss on held-out text decreases as a power law in three variables:
+
+$$L(N) \approx \left(\frac{N_c}{N}\right)^{\alpha_N}, \quad L(D) \approx \left(\frac{D_c}{D}\right)^{\alpha_D}, \quad L(C) \approx \left(\frac{C_c}{C}\right)^{\alpha_C}$$
+
+where $N$ = parameters, $D$ = data tokens, $C$ = compute (FLOPs). They found $\alpha_N \approx 0.076$, $\alpha_D \approx 0.095$, and $\alpha_C \approx 0.050$. The key takeaway: **performance improves smoothly and predictably** — you can forecast the loss of a 100B model from experiments at 1B.
+
+Kaplan et al. argued that parameters should be scaled faster than data: make models large but train them on relatively less data.
+
+### 3.2 Chinchilla Optimal (Hoffmann et al., 2022)
+
+DeepMind's Chinchilla paper challenged this. They showed the **compute-optimal** allocation is roughly:
+
+$$N_{\text{opt}} \propto C^{0.5}, \quad D_{\text{opt}} \propto C^{0.5}$$
+
+In plain English: for a given compute budget, you should scale parameters and training tokens **equally**. Their 70B Chinchilla model, trained on 1.4T tokens, outperformed the 280B Gopher model trained on only 300B tokens. The lesson: most models before 2022 were **undertrained** — too many parameters, not enough data.
+
+```python
+import math
+
+def chinchilla_optimal(compute_flops: float) -> dict:
+    """
+    Estimate Chinchilla-optimal model size and training tokens.
+    Uses the approximate relationship: C ≈ 6 * N * D
+    where C = compute in FLOPs, N = parameters, D = training tokens.
+    Chinchilla optimal: N ≈ D/20 (approximately 20 tokens per parameter).
+
+    Args:
+        compute_flops: Total compute budget in FLOPs.
+
+    Returns:
+        Dictionary with optimal N and D.
+    """
+    # C ≈ 6ND and D ≈ 20N => C ≈ 120 N^2
+    n_optimal = math.sqrt(compute_flops / 120)
+    d_optimal = 20 * n_optimal
+
+    return {
+        "parameters": n_optimal,
+        "parameters_billions": n_optimal / 1e9,
+        "training_tokens": d_optimal,
+        "training_tokens_trillions": d_optimal / 1e12,
+        "compute_flops": compute_flops,
+    }
+
+# Example: What's optimal for GPT-4 scale compute (~2e25 FLOPs)?
+for flops, label in [
+    (1e21, "7B-class"),
+    (1e23, "70B-class"),
+    (2e25, "GPT-4 class"),
+]:
+    result = chinchilla_optimal(flops)
+    print(f"{label} compute ({flops:.0e} FLOPs):")
+    print(f"  Optimal params: {result['parameters_billions']:.1f}B")
+    print(f"  Optimal tokens: {result['training_tokens_trillions']:.2f}T")
+    print()
+```
+
+Modern open-source models (Llama 3, Mistral) train on **far more tokens** than Chinchilla recommends — Llama 3 8B was trained on 15T tokens (almost 2000 tokens per parameter). This "over-training" strategy makes smaller models more capable at inference time, trading extra training compute for reduced serving cost.
+
+---
+
+## 4. Tokenization
+
+LLMs don't process text character by character. They operate on **tokens** — subword units that balance vocabulary size against sequence length.
+
+### 4.1 Byte Pair Encoding (BPE)
+
+BPE (Sennrich et al., 2016) is the dominant tokenization algorithm. It works bottom-up:
+
+1. Start with each byte (or character) as its own token. Initialize the vocabulary with all 256 bytes.
+2. Count all adjacent token pairs in the corpus.
+3. Merge the most frequent pair into a new token. Add it to the vocabulary.
+4. Repeat steps 2-3 for a fixed number of merges (typically 32K-100K merges).
+
+```python
+from collections import Counter
+from typing import List, Tuple
+
+def learn_bpe(corpus: str, num_merges: int) -> List[Tuple[str, str]]:
+    """
+    Learn BPE merge rules from a corpus.
+
+    Args:
+        corpus: Training text.
+        num_merges: Number of merge operations to learn.
+
+    Returns:
+        List of merge rules as (token_a, token_b) pairs.
+    """
+    # Tokenize into characters with end-of-word markers
+    words = corpus.split()
+    # Represent each word as a tuple of characters
+    word_freqs: dict[tuple, int] = Counter()
+    for word in words:
+        chars = tuple(list(word) + ["</w>"])
+        word_freqs[chars] += 1
+
+    merges = []
+
+    for step in range(num_merges):
+        # Count adjacent pairs
+        pair_counts: Counter = Counter()
+        for word, freq in word_freqs.items():
+            for i in range(len(word) - 1):
+                pair_counts[(word[i], word[i + 1])] += freq
+
+        if not pair_counts:
+            break
+
+        # Find most frequent pair
+        best_pair = pair_counts.most_common(1)[0][0]
+        merges.append(best_pair)
+
+        # Merge the best pair in all words
+        new_word_freqs: dict[tuple, int] = {}
+        for word, freq in word_freqs.items():
+            new_word = []
+            i = 0
+            while i < len(word):
+                if (i < len(word) - 1 and
+                    word[i] == best_pair[0] and
+                    word[i + 1] == best_pair[1]):
+                    new_word.append(best_pair[0] + best_pair[1])
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            new_word_freqs[tuple(new_word)] = freq
+        word_freqs = new_word_freqs
+
+        print(f"Merge {step + 1}: '{best_pair[0]}' + '{best_pair[1]}' "
+              f"-> '{best_pair[0] + best_pair[1]}' "
+              f"(count: {pair_counts[best_pair]})")
+
+    return merges
+
+
+# Demo
+corpus = "low lower lowest low lower low"
+merges = learn_bpe(corpus, num_merges=5)
+print(f"\nLearned {len(merges)} merge rules")
+```
+
+**Why BPE?** It adapts to the data: frequent words become single tokens (reducing sequence length), while rare words are broken into subwords (ensuring every possible input can be encoded). Common English words like "the" are single tokens. Rare words like "defenestration" are split into "def", "en", "est", "ration" or similar subwords.
+
+**SentencePiece** (Kudo & Richardson, 2018) extends this approach by operating directly on raw Unicode text (no pre-tokenization step), treating whitespace as a regular character. It uses the "metaspace" character (▁) to mark word boundaries. Most modern models (Llama, Mistral, Gemma) use SentencePiece with a BPE or Unigram model underneath.
+
+### 4.2 Token Counts Matter
+
+A typical vocabulary size is 32K-128K tokens. The mapping from text to tokens is **not** one-to-one with words:
+
+- "Hello, world!" might be 4 tokens: ["Hello", ",", " world", "!"]
+- A line of Python code like `def calculate_total(items):` might be 7 tokens
+- Non-English text and code often use more tokens per character
+
+This matters enormously for cost (you pay per token), context limits, and latency.
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 5. Context Windows and the KV-Cache
+
+### 5.1 Context Length
+
+The context window is the maximum number of tokens a model can process in a single forward pass. GPT-4 Turbo supports 128K tokens. Claude supports 200K tokens. Gemini 1.5 Pro supports up to 2M tokens.
+
+Why is there a limit? Self-attention computes an $n \times n$ matrix, giving $O(n^2)$ time and memory complexity in the sequence length $n$. For $n = 128{,}000$ with $d_k = 128$, a single attention layer stores a matrix of $128{,}000 \times 128{,}000 = 16.4$ billion entries. Various techniques address this: FlashAttention (Dao et al., 2022) makes the computation IO-aware without changing the math, while architectural changes like sliding window attention (Mistral) reduce the effective context for some layers.
+
+### 5.2 The KV-Cache
+
+During autoregressive generation, the model generates one token at a time. Without caching, generating the $t$-th token would require recomputing attention over all $t-1$ previous tokens — an $O(T^2)$ operation overall for a sequence of length $T$.
+
+The **KV-cache** stores the key and value projections for all previous tokens. When generating token $t$, only the new token's query, key, and value vectors need to be computed. The attention for the new token is:
+
+$$\text{attention}_t = \text{softmax}\left(\frac{\mathbf{q}_t \mathbf{K}_{1:t}^T}{\sqrt{d_k}}\right)\mathbf{V}_{1:t}$$
+
+where $\mathbf{K}_{1:t}$ and $\mathbf{V}_{1:t}$ are the cached keys and values.
+
+KV-cache memory per layer: $2 \times n \times d_k \times \text{sizeof(dtype)}$ (factor of 2 for K and V). For a 70B model with 80 layers, 8 KV-heads of dimension 128 each, at FP16, the KV-cache for a 128K context is:
+
+$$80 \times 2 \times 128{,}000 \times 8 \times 128 \times 2\text{ bytes} = 41.9\text{ GB}$$
+
+This is why long-context inference is expensive. Techniques like **Grouped Query Attention (GQA)** — used in Llama 2/3 — reduce KV-cache size by sharing key/value heads across multiple query heads.
+
+---
+
+## 6. Fundamental Limitations
+
+Understanding what LLMs **cannot** do reliably is arguably more important for a production engineer than understanding what they can do. You must design systems that account for these failure modes.
+
+### 6.1 Hallucination
+
+LLMs confidently generate false information. This is not a bug — it is an inherent property of the architecture. The model generates text by sampling from a learned probability distribution:
+
+$$x_t \sim p_\theta(\cdot \mid x_{<t})$$
+
+This distribution was trained to approximate the statistical patterns of the training data. It has no mechanism for:
+- Verifying whether a generated fact is true
+- Distinguishing between plausible-sounding and factually correct completions
+- Indicating uncertainty calibrated to factual accuracy
+
+When the model generates "The capital of Australia is Sydney," it is producing a statistically plausible completion. The training data contains many references to Sydney as Australia's most prominent city, making it a high-probability continuation in certain contexts.
+
+**Mitigation strategies**: Retrieval-Augmented Generation (RAG), constrained decoding, citation requirements, multi-step verification chains. We'll cover these in Weeks 3 and 5.
+
+### 6.2 Knowledge Cutoff
+
+Models have a fixed training data cutoff date. They cannot know about events, papers, APIs, or library versions released after training. This creates a specific failure mode: the model will answer questions about post-cutoff topics using pre-cutoff patterns, often generating plausible but outdated or fabricated information.
+
+### 6.3 Reasoning Failures
+
+Despite impressive performance on many benchmarks, LLMs fail at:
+
+- **Multi-step arithmetic**: Errors compound because each token is generated independently. The model cannot "go back and check."
+- **Constraint satisfaction**: Problems like Sudoku or scheduling where multiple constraints must be satisfied simultaneously.
+- **Negation and adversarial phrasing**: "What is NOT true about X?" trips up models because attention patterns are biased toward positive associations.
+- **Novel logical puzzles**: Problems that require genuine deduction rather than pattern matching against training data.
+
+```python
+# Demonstrating why multi-step reasoning is hard for autoregressive models.
+# Each step introduces error probability that compounds.
+import numpy as np
+
+def reasoning_chain_accuracy(
+    step_accuracy: float, num_steps: int
+) -> float:
+    """
+    If each reasoning step has independent accuracy p,
+    the probability of getting ALL steps correct is p^n.
+    """
+    return step_accuracy ** num_steps
+
+
+# Even with 95% per-step accuracy, long chains fail
+for steps in [1, 3, 5, 10, 20]:
+    acc = reasoning_chain_accuracy(0.95, steps)
+    print(f"  {steps:2d} steps @ 95% each: {acc:.1%} overall accuracy")
+
+print()
+for acc in [0.90, 0.95, 0.99]:
+    ten_step = reasoning_chain_accuracy(acc, 10)
+    print(f"  10 steps @ {acc:.0%} each: {ten_step:.1%} overall")
+```
+
+### 6.4 Stochastic Nature
+
+LLMs are fundamentally **non-deterministic** (unless you fix the random seed, and even then, results can vary across hardware due to floating-point non-associativity). The same prompt can produce different outputs on different calls. This has profound implications for production systems:
+
+- You cannot unit-test LLM outputs like deterministic code.
+- You need evaluation frameworks, not assert statements.
+- Caching and idempotency become design considerations.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 7. The Landscape Today
+
+As of early 2026, the LLM landscape has consolidated around several key players and open-source families:
+
+**Frontier models** (Claude 3.5/4, GPT-4/4.5, Gemini 2.0) offer the highest capability but at the highest cost ($3-75 per million output tokens) and with vendor lock-in.
+
+**Open-weight models** (Llama 3.x, Mistral/Mixtral, Qwen 2.5, DeepSeek, Gemma 2) can be self-hosted, fine-tuned, and inspected. They lag frontier models on some benchmarks but are sufficient for many production tasks, especially with fine-tuning.
+
+**Small models** (1B-8B parameters) run on edge devices and offer sub-100ms latency. They are the right choice for classification, extraction, and other well-scoped tasks.
+
+The production engineer's job is not to chase benchmarks but to select the right model for each task based on capability, cost, latency, and data privacy requirements. We'll spend Week 2 on prompt engineering and Week 4 on model selection and evaluation.
+
+---
+
+## Summary
+
+You now have the mathematical and architectural foundations to understand what happens when you call an LLM API. The transformer converts tokens to embeddings, applies multi-head self-attention with the scaled dot-product formula, passes through feed-forward layers, and outputs a probability distribution over the vocabulary. Training minimizes cross-entropy loss via next-token prediction. Scaling laws predict performance as a function of compute, data, and parameters. Tokenization via BPE determines the granularity of the model's "atoms." And the fundamental limitations — hallucination, knowledge cutoff, reasoning failures, stochastic outputs — are not bugs to be fixed but properties to be engineered around.
+
+In the next lecture, we'll turn these foundations into practical engineering: API design patterns, token economics, error handling, and the operational concerns of running LLMs in production.

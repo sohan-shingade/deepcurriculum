@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In an SR latch built from NOR gates, what happens when both S=1 and R=1 are applied simultaneously, and then both return to 0 at the same instant?",
+      "options": [
+        "Q is set to 1 and Q-bar is set to 0",
+        "Q is set to 0 and Q-bar is set to 1",
+        "Both Q and Q-bar go to 0, then the circuit deterministically settles to Q=1",
+        "Both Q and Q-bar go to 0, and the circuit may enter a metastable state with unpredictable resolution"
+      ],
+      "correct": 3,
+      "explanation": "When S=R=1 in a NOR-based SR latch, both outputs are forced to 0 (since NOR(1, anything) = 0). When both inputs return to 0 simultaneously, both NOR gates see (0, 0) as inputs and try to output 1, but each gate's output feeds back to the other. The circuit is in an unstable equilibrium — a metastable state — where it is equally attracted to both stable states (Q=1, Q-bar=0) and (Q=0, Q-bar=1). Thermal noise and tiny asymmetries in the transistors eventually cause it to resolve to one side, but which side is unpredictable. This is why S=R=1 is called the 'forbidden' state in SR latch design."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A synchronous circuit runs at 2 GHz (500 ps clock period). The flip-flops have t_cq = 30 ps and t_su = 25 ps. What is the maximum combinational logic delay allowed between pipeline stages?",
+      "options": [
+        "500 ps",
+        "475 ps",
+        "445 ps",
+        "470 ps"
+      ],
+      "correct": 2,
+      "explanation": "The setup constraint requires: t_cq + t_comb + t_su <= T_clk. Solving for t_comb: t_comb <= T_clk - t_cq - t_su = 500 - 30 - 25 = 445 ps. This is the maximum delay the combinational logic can have while still meeting timing at 2 GHz. If the combinational logic exceeds 445 ps, the signal will not be stable at the input of the next flip-flop for the required 25 ps setup time before the next clock edge, causing a setup violation."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A 16-bit LFSR uses the primitive polynomial x^16 + x^14 + x^13 + x^11 + 1. How many unique states does it cycle through before repeating, and what state is excluded?",
+      "options": [
+        "65536 states; no state is excluded",
+        "65535 states; the all-ones state (0xFFFF) is excluded",
+        "65535 states; the all-zeros state (0x0000) is excluded",
+        "32768 states; even-valued states are excluded"
+      ],
+      "correct": 2,
+      "explanation": "A maximal-length LFSR with a primitive polynomial of degree n cycles through 2^n - 1 states before repeating. For n=16, this is 2^16 - 1 = 65535 states. The all-zeros state is excluded because the feedback function is XOR (a linear function over GF(2)): XOR of all zeros is always zero, so the all-zeros state is a fixed point — the LFSR would be stuck forever. The all-ones state IS included in the sequence. This is why LFSRs must be initialized (seeded) with a non-zero value."
+    }
+  ]
+}

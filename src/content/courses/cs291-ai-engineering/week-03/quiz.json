@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 3: Retrieval & Context Engineering",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which chunking strategy requires an embedding model pass over the entire document before splitting?",
+      "options": [
+        "Fixed-size chunking",
+        "Recursive character splitting",
+        "Semantic chunking",
+        "Structure-aware (markdown/HTML) chunking"
+      ],
+      "correct": 2,
+      "explanation": "Semantic chunking works by embedding individual sentences, computing cosine similarity between consecutive sentence embeddings, and splitting at points where similarity drops below a threshold. This requires running the full document through an embedding model to generate sentence embeddings before any splitting can occur. Fixed-size and recursive splitting operate on character/string patterns only. Structure-aware splitting uses explicit document markup (headers, tags) and requires no embedding computation."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the BM25 formula, what happens when the parameter k1 is set to 0?",
+      "options": [
+        "All documents receive the same score",
+        "Term frequency is completely ignored — only IDF matters",
+        "Document length normalization is disabled",
+        "The formula becomes equivalent to TF-IDF"
+      ],
+      "correct": 1,
+      "explanation": "When k1 = 0, the BM25 term frequency component becomes tf * (0 + 1) / (tf + 0 * (...)) = tf * 1 / tf = 1 for any document containing the term, regardless of how many times the term appears. This means only the IDF component matters — the score depends on which query terms appear in the document, not how frequently. This is a pure binary (present/absent) model weighted by IDF. The parameter k1 controls term frequency saturation; at k1 = 0, there is zero sensitivity to term frequency. Setting b = 0 (not k1 = 0) disables document length normalization."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You run a hybrid search combining BM25 and dense retrieval using Reciprocal Rank Fusion (k=60). A document is ranked #1 by BM25 but does not appear in the dense retrieval results at all. What is its RRF score?",
+      "options": [
+        "1/61 ≈ 0.0164",
+        "2/61 ≈ 0.0328",
+        "1/60 ≈ 0.0167",
+        "0 — it must appear in all lists to receive a score"
+      ],
+      "correct": 0,
+      "explanation": "In RRF, each ranked list contributes independently. A document that appears at rank 1 in the BM25 list contributes 1/(60 + 1) = 1/61 ≈ 0.0164. Since it does not appear in the dense retrieval list, its contribution from that list is 0 (documents not in a list contribute nothing — they are effectively at rank infinity). The total RRF score is 1/61 + 0 = 1/61 ≈ 0.0164. Documents do NOT need to appear in all lists to receive a score, which is one of RRF's strengths — it gracefully handles the union of results from different retrieval systems."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The 'lost-in-the-middle' phenomenon (Liu et al., 2023) refers to:",
+      "options": [
+        "Tokens in the middle of long sequences losing their embedding quality",
+        "Language models performing worse when relevant information is placed in the middle of the context window compared to the beginning or end",
+        "Chunks in the middle of a document being less relevant than those at boundaries",
+        "The degradation of BM25 scoring for mid-frequency terms"
+      ],
+      "correct": 1,
+      "explanation": "Liu et al. (2023) demonstrated that when relevant information is positioned in the middle of a long context (e.g., positions 8-12 out of 20 documents), LLM performance on tasks using that information drops significantly compared to when the same information is at position 1 (beginning) or position 20 (end). This follows a U-shaped curve — high performance at both ends, low in the middle. The implication for RAG systems is that chunk ordering matters: the most relevant chunks should be placed at the beginning and end of the context (sandwich ordering), not simply concatenated in retrieval-score order."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the key architectural difference between ColBERT and a standard bi-encoder?",
+      "options": [
+        "ColBERT uses a larger transformer model",
+        "ColBERT produces per-token embeddings and scores via MaxSim, while bi-encoders produce a single embedding per text",
+        "ColBERT can only encode queries, not documents",
+        "ColBERT uses sparse representations instead of dense vectors"
+      ],
+      "correct": 1,
+      "explanation": "A standard bi-encoder compresses an entire text (query or document) into a single dense vector and computes relevance via cosine similarity between these single vectors. ColBERT instead produces a separate embedding for each token in the query and document. Relevance is scored using the MaxSim operation: for each query token, find the maximum similarity to any document token, then sum these maxima across all query tokens. This 'late interaction' architecture captures fine-grained token-level matching while still allowing document token embeddings to be pre-computed and indexed, making it much faster than cross-encoders while being more accurate than single-vector bi-encoders."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In chain-of-thought prompting (Wei et al., 2022), why does generating intermediate reasoning steps improve accuracy on multi-step problems?",
+      "options": [
+        "It gives the model more time to process the input",
+        "The generated steps become part of the autoregressive context, providing a working memory that conditions subsequent token generation",
+        "It activates unused parameters in the model's middle layers",
+        "It reduces the effective context length, improving attention efficiency"
+      ],
+      "correct": 1,
+      "explanation": "Language models are autoregressive — each token is generated conditioned on all previous tokens. When the model generates intermediate reasoning steps (like 'Step 1: Calculate X = 5 * 3 = 15'), those tokens become part of the context for generating subsequent tokens. This effectively gives the model an external working memory or scratchpad. Without chain-of-thought, the model must perform all reasoning within a single forward pass, which limits its ability to decompose complex multi-step problems. Chain-of-thought prompting converts serial reasoning into a sequence of simpler steps, each informed by the previous ones."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You are designing a RAG pipeline with a latency budget of 3 seconds. BM25 takes 15ms, dense retrieval takes 40ms, RRF fusion takes 1ms, and cross-encoder re-ranking of 50 documents takes 400ms. How much latency budget remains for LLM generation?",
+      "options": [
+        "2,544ms",
+        "2,460ms",
+        "3,000ms — retrieval and re-ranking run in parallel with generation",
+        "2,956ms"
+      ],
+      "correct": 0,
+      "explanation": "The retrieval pipeline is sequential: BM25 and dense retrieval can run in parallel (taking max(15, 40) = 40ms), followed by RRF fusion (1ms), followed by cross-encoder re-ranking (400ms), followed by LLM generation. However, the standard sequential accounting is: BM25 (15ms) + dense (40ms in parallel, but typically sequential in simple implementations = 40ms total for retrieval) + fusion (1ms) + re-ranking (400ms) = 456ms. Remaining: 3000 - 456 = 2,544ms. In an optimized pipeline where BM25 and dense run in parallel, it would be 3000 - (40 + 1 + 400) = 2,559ms. The answer 2,544ms assumes the standard sequential pipeline: 15 + 40 + 1 + 400 = 456ms consumed, leaving 2,544ms."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Self-consistency (Wang et al., 2022) improves upon chain-of-thought prompting by:",
+      "options": [
+        "Using a longer chain of reasoning steps",
+        "Generating multiple reasoning chains with sampling and taking a majority vote on the final answer",
+        "Training the model on its own outputs to improve consistency",
+        "Ensuring all reasoning steps are grammatically correct"
+      ],
+      "correct": 1,
+      "explanation": "Self-consistency generates k reasoning chains by sampling from the model with temperature > 0 (not greedy decoding). Different samples may follow different reasoning paths but converge on the same answer. The final answer is determined by majority vote across all k sampled answers. This works because correct reasoning paths tend to converge on the correct answer, while incorrect paths produce varied wrong answers. The tradeoff is clear: you pay k times the latency and cost of a single chain-of-thought call, but you get more robust answers. This is most valuable for high-stakes applications where accuracy matters more than speed."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Anthropic's contextual embedding approach prepends document context to chunks before embedding. What problem does this solve?",
+      "options": [
+        "It makes embeddings smaller and faster to compute",
+        "It disambiguates chunks whose meaning depends on their surrounding document context",
+        "It eliminates the need for re-ranking",
+        "It allows embeddings to capture the full document structure"
+      ],
+      "correct": 1,
+      "explanation": "Small chunks often lack sufficient context to be unambiguously interpreted. The phrase 'the learning rate was set to 3e-4' means something different in a machine learning paper versus a cognitive psychology study. By prepending a context summary (e.g., document title, section header, or an LLM-generated summary of the document's topic), the embedding model receives the disambiguation signal and produces a more precise vector. This is particularly valuable when the corpus contains documents on diverse topics where identical terminology has different meanings. The context is added at indexing time (a development cost, not a runtime cost), so it does not affect query latency."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why should prompts be treated as versioned software artifacts in production systems?",
+      "options": [
+        "Version control makes prompts longer and more detailed",
+        "It enables A/B testing, rollback on quality regression, and reproducible evaluation against fixed test sets",
+        "It prevents the LLM from caching old prompt responses",
+        "Versioning is required by most LLM API providers"
+      ],
+      "correct": 1,
+      "explanation": "In production, a prompt change can silently degrade answer quality. Without versioning, you cannot determine what changed, when it changed, or revert to the previous version. Prompt versioning enables: (1) A/B testing — serve different prompt versions to different user segments and compare metrics; (2) rollback — if quality drops after a change, instantly revert to the known-good version; (3) reproducible evaluation — run each prompt version against a fixed eval suite before deploying, establishing minimum quality thresholds. This is the same discipline applied to any production code change: test, deploy, monitor, and rollback if necessary. The prompt IS the algorithm in an LLM application."
+    }
+  ]
+}

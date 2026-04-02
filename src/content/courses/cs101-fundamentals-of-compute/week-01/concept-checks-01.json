@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A MOSFET has $\\mu_n C_{ox} = 200\\;\\mu\\text{A/V}^2$, $W/L = 5$, $V_{th} = 0.5$ V, and is biased with $V_{GS} = 1.2$ V, $V_{DS} = 2.0$ V (ignore channel-length modulation). What is the drain current?",
+      "options": [
+        "$I_D = 245\\;\\mu\\text{A}$ (saturation)",
+        "$I_D = 490\\;\\mu\\text{A}$ (saturation)",
+        "$I_D = 122.5\\;\\mu\\text{A}$ (saturation)",
+        "$I_D = 490\\;\\mu\\text{A}$ (linear)"
+      ],
+      "correct": 0,
+      "explanation": "First check the region: $V_{DS} = 2.0$ V and $V_{GS} - V_{th} = 1.2 - 0.5 = 0.7$ V. Since $V_{DS} > V_{GS} - V_{th}$, the transistor is in saturation. Using the saturation equation: $I_D = \\frac{1}{2} \\mu_n C_{ox} \\frac{W}{L} (V_{GS} - V_{th})^2 = \\frac{1}{2}(200)(5)(0.7)^2 = \\frac{1}{2}(200)(5)(0.49) = 245\\;\\mu\\text{A}$. Note that it cannot be in the linear region because $V_{DS} > V_{GS} - V_{th}$."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "What is the primary advantage of Gate-All-Around (GAA) transistors over FinFETs?",
+      "options": [
+        "GAA transistors are cheaper to manufacture",
+        "GAA provides superior electrostatic control by wrapping the gate around all sides of the channel, reducing leakage",
+        "GAA transistors use less silicon area due to a simpler structure",
+        "GAA eliminates the need for high-k gate dielectrics"
+      ],
+      "correct": 1,
+      "explanation": "In a FinFET, the gate wraps around three sides of a vertical fin. As fins shrink, this 3-sided control weakens, and leakage increases. GAA transistors wrap the gate around all four sides of horizontal nanosheets, providing full electrostatic control of the channel. This is why Samsung moved to GAA at 3nm (SF3E) and TSMC transitions at 2nm (N2) — to recover gate control and reduce leakage that had grown to 30-40% of total power at 3nm FinFET. GAA is actually more expensive to manufacture due to the complex nanosheet fabrication process."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "A chip running at 5 GHz has a switching activity factor $\\alpha = 0.2$, total load capacitance $C_L = 8$ nF, and supply voltage $V_{DD} = 0.75$ V. What is its dynamic power consumption?",
+      "options": [
+        "2.25 W",
+        "4.50 W",
+        "6.75 W",
+        "9.00 W"
+      ],
+      "correct": 1,
+      "explanation": "Using $P_{dyn} = \\alpha C_L V_{DD}^2 f$: $P_{dyn} = 0.2 \\times 8 \\times 10^{-9} \\times (0.75)^2 \\times 5 \\times 10^9 = 0.2 \\times 8 \\times 10^{-9} \\times 0.5625 \\times 5 \\times 10^9 = 0.2 \\times 8 \\times 0.5625 \\times 5 = 4.50$ W. Note how $V_{DD}$ appears squared — if we reduced voltage from 0.75 V to 0.65 V (a 13% reduction), dynamic power would drop by 25% to about 3.38 W. This quadratic dependence on voltage is why voltage scaling is the most powerful lever for reducing dynamic power."
+    }
+  ]
+}

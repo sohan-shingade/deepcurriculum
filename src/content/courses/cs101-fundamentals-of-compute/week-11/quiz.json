@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 10: Multicore Processors and Coherence",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the primary reason the semiconductor industry shifted from increasing clock frequency to increasing core count around 2005?",
+      "options": [
+        "Manufacturing costs became too high for faster transistors",
+        "Software could not take advantage of higher frequencies",
+        "Power density became unmanageable because Dennard Scaling broke down --- voltage could not be reduced further without exponentially increasing leakage current",
+        "Memory bandwidth could not keep up with faster clock speeds"
+      ],
+      "correct": 2,
+      "explanation": "Dennard Scaling predicted that as transistors shrank, voltage would drop proportionally, keeping power density constant. By ~2004, threshold voltage ($V_{th}$) could not be reduced further because subthreshold leakage current scales exponentially as $I_{leak} \\propto e^{-V_{th}/nV_T}$. With voltage stuck near 0.7-1.0V and leakage consuming 30-40% of total power, further frequency increases would have pushed chips past the limits of air cooling (~150 W/cm$^2$). The industry instead added more cores running at moderate frequencies."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the MESI protocol, a cache line is in the Shared (S) state in Core 0's cache. Core 0 performs a write to that line. What is the resulting state in Core 0's cache, and what bus traffic is generated?",
+      "options": [
+        "State becomes Modified; no bus traffic (silent transition)",
+        "State becomes Modified; invalidation messages are sent to all other caches holding the line",
+        "State becomes Exclusive; the line is written back to memory",
+        "State stays Shared; the new value is broadcast to all caches (write-update)"
+      ],
+      "correct": 1,
+      "explanation": "When a core writes to a line in Shared state, it must ensure no other cache has a valid copy. The MESI protocol sends invalidation messages to all other caches that hold the line (identified via snooping or directory lookup). Those caches transition to Invalid. The writing core's line transitions to Modified, meaning it holds the only valid, dirty copy. This is the write-invalidate approach used by MESI. The silent E->M transition only applies when the line is already in Exclusive state (no other copies exist)."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why does directory-based coherence scale better than snooping for systems with 64+ cores?",
+      "options": [
+        "Directory protocols use less memory for tracking cache states",
+        "Directory protocols send point-to-point messages instead of broadcasting to all caches, reducing traffic from O(N) to O(1) per transaction",
+        "Directory protocols eliminate the need for cache line invalidation",
+        "Directory protocols run at higher clock speeds than snooping buses"
+      ],
+      "correct": 1,
+      "explanation": "Snooping requires every cache to observe every bus transaction --- O(N) snoops per memory operation. With 64 cores, this saturates the interconnect. Directory-based protocols maintain a central directory that tracks which caches hold copies of each line. When a coherence action is needed, the directory sends messages only to the affected caches (point-to-point), not to all cores. If Core 0 reads an address that only Core 47 has cached, only those two cores and the home node are involved. The trade-off is the directory storage overhead (1 presence bit per core per cache line)."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What distinguishes Compare-and-Swap (CAS) from Test-and-Set (TAS)?",
+      "options": [
+        "CAS is faster because it uses fewer bus transactions",
+        "CAS only modifies the memory location if its current value matches an expected value; TAS unconditionally writes a new value",
+        "TAS can operate on floating-point values while CAS cannot",
+        "CAS requires the cache line in Shared state while TAS requires Modified"
+      ],
+      "correct": 1,
+      "explanation": "Test-and-Set (atomic exchange) unconditionally writes a new value and returns the old value. CAS is conditional: it reads the current value, compares it to an expected value, and only writes the new value if they match. This conditional nature makes CAS the foundation of lock-free programming --- a thread can speculatively prepare an update and only commit it if no other thread has modified the data in the meantime. If the CAS fails (current != expected), the thread retries with the updated value."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What is the ABA problem in lock-free programming?",
+      "options": [
+        "A deadlock that occurs when three threads try to acquire locks in circular order",
+        "A CAS succeeds because the value returned to its original state (A -> B -> A), even though the data structure changed in the meantime",
+        "A race condition where two threads read the same value simultaneously",
+        "A priority inversion where thread A blocks thread B which blocks thread A"
+      ],
+      "correct": 1,
+      "explanation": "In the ABA problem, a CAS operation succeeds despite intervening modifications. For example, in a Treiber stack: Thread 1 reads head=X with X.next=Y, then gets preempted. Thread 2 pops X, pops Y, pushes X back (head=X again). Thread 1 resumes and CAS(head, X, Y) succeeds because head is still X --- but Y is no longer the correct next pointer (it was popped and may be freed). The CAS cannot distinguish 'unchanged' from 'changed and changed back.' Solutions include tagged pointers (version counters paired with pointers) and hazard pointers (preventing premature memory reclamation)."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a NUMA system with 2 sockets, local DRAM latency is 80 ns and remote DRAM latency is 130 ns. What is the latency ratio, and what Linux mechanism determines which NUMA node a page is allocated on?",
+      "options": [
+        "1.6x ratio; round-robin allocation across nodes",
+        "1.6x ratio; first-touch policy (page allocated on the node of the core that first accesses it)",
+        "2.0x ratio; the OS kernel decides based on load balancing",
+        "1.6x ratio; pages are always allocated on node 0 first"
+      ],
+      "correct": 1,
+      "explanation": "The remote/local latency ratio is $130/80 = 1.625\\times$. Linux uses a first-touch policy by default: when a virtual page is first accessed (causing a page fault), the physical page is allocated on the NUMA node of the core that triggered the fault. This means the thread that initializes data determines its placement. A common mistake is initializing all data from the main thread (placing everything on node 0), then having worker threads on other nodes suffer remote access penalties. The fix is parallel initialization where each thread initializes its own data partition."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which spinlock implementation guarantees FIFO (first-come, first-served) lock acquisition?",
+      "options": [
+        "Test-and-Set (TAS) lock",
+        "Test-and-Test-and-Set (TTAS) lock",
+        "Ticket lock",
+        "All spinlocks guarantee FIFO ordering"
+      ],
+      "correct": 2,
+      "explanation": "The Ticket lock uses Fetch-and-Add to assign each thread a sequentially increasing ticket number. Threads acquire the lock in ticket order by spinning until now_serving matches their ticket. This guarantees FIFO fairness --- no thread can starve. TAS and TTAS provide no fairness guarantee: a thread that just released the lock can immediately re-acquire it, potentially starving other waiters indefinitely. The MCS lock also provides FIFO ordering through its queue structure."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "What memory reordering is allowed by x86's Total Store Order (TSO) model?",
+      "options": [
+        "Stores can be reordered with other stores",
+        "Loads can be reordered with other loads",
+        "A load can be reordered before a preceding store to a different address (store-to-load reordering)",
+        "No reordering is allowed; x86 is sequentially consistent"
+      ],
+      "correct": 2,
+      "explanation": "TSO allows exactly one type of reordering: store-to-load reordering. A load can read from cache before a preceding store (to a different address) has drained from the store buffer to cache and become visible to other cores. This is because each core has a store buffer that holds completed stores temporarily. A subsequent load to a different address can bypass the store buffer and read from cache. Stores are never reordered with other stores, and loads are never reordered with other loads. This makes x86 a relatively strong memory model compared to ARM and RISC-V, which allow all four types of reordering."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "CXL (Compute Express Link) Type 3 devices are used for:",
+      "options": [
+        "GPU acceleration with device-side caching of host memory",
+        "SmartNIC processing with cache-coherent access to host memory",
+        "Memory expansion --- adding capacity beyond DIMM slot limits, accessed via CXL.mem protocol",
+        "CPU-to-CPU interconnect replacing UPI"
+      ],
+      "correct": 2,
+      "explanation": "CXL defines three device types. Type 1 (CXL.io + CXL.cache) is for accelerators like SmartNICs that cache host memory. Type 2 (CXL.io + CXL.cache + CXL.mem) is for GPUs/FPGAs with their own memory. Type 3 (CXL.io + CXL.mem) is for pure memory expansion --- devices that add DRAM capacity beyond what DIMM slots provide. Type 3 memory has ~150-200 ns latency (vs ~80 ns for local DDR5), making it suitable for capacity expansion (warm/cold data) rather than performance-critical hot data. CXL 3.0 enables memory pooling where multiple servers can share CXL-attached memory dynamically."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The MCS lock solves the 'thundering herd' problem of simpler spinlocks. How?",
+      "options": [
+        "By using exponential backoff to reduce contention",
+        "By having each waiting thread spin on its own local queue node instead of a shared variable, so only one cache line invalidation occurs per lock transfer",
+        "By limiting the number of threads that can wait for the lock",
+        "By using hardware transactional memory to avoid spinning entirely"
+      ],
+      "correct": 1,
+      "explanation": "In TAS, TTAS, and Ticket locks, all waiting threads spin on the same shared variable. When it changes, all copies are invalidated, causing O(N) cache misses --- the thundering herd. The MCS lock (Mellor-Crummey and Scott, 1991) organizes waiters into a linked list. Each thread spins on its own node's 'locked' field, which resides in its local cache. When the lock is released, the holder writes only to the next waiter's node --- exactly one cache line invalidation. This makes MCS ideal for NUMA systems and large core counts, and variants are used in the Linux kernel (qspinlock)."
+    }
+  ]
+}

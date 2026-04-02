@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In the RAG formulation P(a | q, D), the practical approximation replaces the intractable marginalization over all subsets of D with what?",
+      "options": [
+        "A random sample of documents from D",
+        "The top-k documents returned by a retrieval function R(q, D)",
+        "The full document corpus D concatenated into the prompt",
+        "A fine-tuned model that has memorized D"
+      ],
+      "correct": 1,
+      "explanation": "The key approximation in RAG is replacing the sum over all possible context subsets with a single conditioning on the top-k retrieved documents: P(a | q, D) ≈ P(a | q, C_k) where C_k = top-k(R(q, D)). This makes the problem tractable — we run retrieval once to select the most relevant documents, then condition the language model on just those documents. This is the 'retrieve-then-read' paradigm from Lewis et al. (2020)."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Why does mean pooling generally outperform CLS pooling for producing sentence embeddings from BERT-family models?",
+      "options": [
+        "Mean pooling produces higher-dimensional vectors",
+        "The [CLS] token was trained for next sentence prediction, not semantic similarity, and mean pooling aggregates information from all positions",
+        "CLS pooling requires more computation at inference time",
+        "Mean pooling applies learned weights to each token position"
+      ],
+      "correct": 1,
+      "explanation": "As shown by Reimers and Gurevych (2019) in the Sentence-BERT paper, the [CLS] token in the original BERT was trained for next sentence prediction — a binary classification task that does not optimize for semantic similarity. Raw BERT [CLS] embeddings are anisotropic (clustered in a narrow cone) and actually produce worse similarity scores than simple GloVe averages. Mean pooling aggregates information from all token positions, producing a more representative sentence embedding that better captures semantic content."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "For unit-normalized vectors, which statement about the relationship between cosine similarity and L2 distance is correct?",
+      "options": [
+        "They are unrelated metrics that can produce different rankings",
+        "L2 distance is always larger than cosine similarity",
+        "||a - b||² = 2(1 - cos(a, b)), so minimizing L2 distance is equivalent to maximizing cosine similarity",
+        "Cosine similarity equals L2 distance divided by the product of norms"
+      ],
+      "correct": 2,
+      "explanation": "For unit vectors (||a|| = ||b|| = 1), expanding ||a - b||² gives: ||a||² + ||b||² - 2(a·b) = 1 + 1 - 2·cos(a,b) = 2(1 - cos(a,b)). This means L2 distance is a monotonically decreasing function of cosine similarity. Rankings produced by 'minimize L2' and 'maximize cosine similarity' are identical for normalized vectors. This is why many vector databases normalize embeddings and use either metric interchangeably."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In HNSW, what is the purpose of the hierarchical layer structure?",
+      "options": [
+        "To compress vectors at each layer for memory efficiency",
+        "To enable parallel search across multiple CPU cores",
+        "To allow greedy search to start with coarse long-range navigation and progressively refine to local neighborhoods, avoiding local minima",
+        "To separate different types of documents into different layers"
+      ],
+      "correct": 2,
+      "explanation": "The hierarchical structure in HNSW solves the local minimum problem of flat navigable small world graphs. The top layers are sparse with long-range connections, allowing the search to quickly navigate to the right 'neighborhood' of the vector space. Each descending layer adds more nodes with shorter-range connections, progressively refining the search. This is analogous to a skip list in traditional data structures — coarse navigation at the top, fine-grained search at the bottom. The result is O(log N) query time instead of getting trapped in local minima."
+    }
+  ]
+}

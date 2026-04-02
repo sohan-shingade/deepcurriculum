@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "A Monte Carlo option pricer uses $N = 100{,}000$ paths and produces an estimate with standard error $\\epsilon$. How many paths are needed to reduce the standard error to $\\epsilon / 3$?",
+      "options": [
+        "300,000 paths",
+        "900,000 paths",
+        "1,000,000 paths",
+        "10,000,000 paths"
+      ],
+      "correct": 1,
+      "explanation": "The Monte Carlo standard error scales as $O(1/\\sqrt{N})$. To reduce the error by a factor of 3, we need to increase $N$ by a factor of $3^2 = 9$. So we need $100{,}000 \\times 9 = 900{,}000$ paths. This slow $O(1/\\sqrt{N})$ convergence is the fundamental weakness of Monte Carlo methods -- it is why variance reduction techniques (antithetic variates, control variates) are so valuable, as they effectively multiply the number of 'useful' paths without actually simulating more."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Why is the Philox counter-based random number generator preferred over Mersenne Twister for GPU Monte Carlo simulation?",
+      "options": [
+        "Philox has a longer period than Mersenne Twister",
+        "Philox produces higher quality random numbers",
+        "Philox has minimal per-thread state (just a counter and key), eliminating global memory loads for state management, while Mersenne Twister requires ~20 KB of state per thread",
+        "Philox generates random numbers faster than Mersenne Twister on CPU"
+      ],
+      "correct": 2,
+      "explanation": "On a GPU, thousands of threads run simultaneously. Mersenne Twister (MT19937) requires 624 words (~2.5 KB) of state per generator instance, and MTGP32 requires ~20 KB. With thousands of threads, this state must be stored in global memory, and each random number generation requires loading and storing state -- creating global memory traffic that limits performance. Philox is counter-based: each thread's state is just its thread ID (used as the key) and a counter that increments for each number generated. No global memory reads or writes for state management. This is critical when GPU performance depends on minimizing global memory traffic. Philox's period ($2^{128}$) is shorter than MT19937 ($2^{19937}$), but still astronomically larger than needed for any practical simulation."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "An FPGA Black-Scholes pricing pipeline has an initial latency of 208 clock cycles and runs at 179 MHz. It achieves II=1 (initiation interval of 1 cycle). What is the throughput in prices per second, and what is the latency for a single price computation?",
+      "options": [
+        "Throughput: 860,000 prices/sec; Latency: 1.16 microseconds",
+        "Throughput: 179 million prices/sec; Latency: 1.16 microseconds",
+        "Throughput: 179 million prices/sec; Latency: 208 microseconds",
+        "Throughput: 208 million prices/sec; Latency: 179 nanoseconds"
+      ],
+      "correct": 1,
+      "explanation": "With II=1, a new input can enter the pipeline every clock cycle. At 179 MHz, that is 179 million inputs per second = 179 million prices per second throughput. The latency for a single price is 208 clock cycles $\\times$ (1/179 MHz) = 208 / 179,000,000 $\\approx$ 1.16 microseconds. This is the critical distinction between latency and throughput in a pipelined design: latency is 208 cycles (how long one price takes), but throughput is 1 price per cycle (because 208 prices are simultaneously in different pipeline stages). This is exactly the same concept as the 5-stage CPU pipeline from Week 6, where each instruction takes 5 cycles but one instruction completes per cycle."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "The EWMA covariance estimator uses $\\Sigma_t = \\lambda \\Sigma_{t-1} + (1-\\lambda) \\mathbf{r}_t \\mathbf{r}_t^T$ with $\\lambda = 0.94$. For a portfolio of $n = 500$ assets, how many unique entries in $\\Sigma$ must be updated per observation, and why is this feasible in real time?",
+      "options": [
+        "500 entries; the matrix is diagonal",
+        "250,000 entries; but only rank-1 update needed ($O(n^2)$ multiply-adds)",
+        "125,250 entries; symmetric matrix has $n(n+1)/2$ unique entries, each updated with one multiply-add",
+        "62,500 entries; we only update one quadrant of the matrix"
+      ],
+      "correct": 2,
+      "explanation": "The covariance matrix $\\Sigma$ is symmetric, so it has $n(n+1)/2 = 500(501)/2 = 125{,}250$ unique entries. The EWMA update is a rank-1 operation: multiply each existing entry by $\\lambda$, then add $(1-\\lambda) \\cdot r_i \\cdot r_j$. This is 125,250 multiply-add operations per new observation. At 1-second update intervals, this is 125,250 operations per second -- trivially fast for any modern processor (a single core at 4 GHz can do billions of operations per second). Even at 1-millisecond update intervals, the 125 million operations per second are well within a single CPU core's capability. The computation only becomes challenging when combined with Monte Carlo simulation that requires the full covariance structure for thousands of scenario paths."
+    }
+  ]
+}

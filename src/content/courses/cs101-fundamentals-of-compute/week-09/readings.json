@@ -1,0 +1,52 @@
+{
+  "readings": [
+    {
+      "title": "An Efficient Algorithm for Exploiting Multiple Arithmetic Units",
+      "authors": "Robert M. Tomasulo",
+      "url": "https://www.cs.virginia.edu/~evans/greatworks/tomasulo.pdf",
+      "note": "The 1967 paper that introduced reservation stations, register renaming via tags, and the Common Data Bus. Read the original — it is only 9 pages and remarkably clear for a 60-year-old paper. Published in the IBM Journal of Research and Development."
+    },
+    {
+      "title": "Spectre Attacks: Exploiting Speculative Execution",
+      "authors": "Paul Kocher, Jann Horn, Anders Fogh, Daniel Genkin, Daniel Gruss, Werner Haas, Mike Hamburg, Moritz Lipp, Stefan Mangard, Thomas Prescher, Michael Schwarz, Yuval Yarom",
+      "url": "https://spectreattack.com/spectre.pdf",
+      "note": "The 2018 paper that revealed how speculative execution creates exploitable side channels. Sections 1-4 are essential reading for understanding how branch predictor mistraining leads to data exfiltration through cache timing."
+    },
+    {
+      "title": "A Case for (Partially) TAgged GEometric History Length Branch Prediction",
+      "authors": "Andre Seznec",
+      "url": "https://jilp.org/vol8/v8paper1.pdf",
+      "note": "The seminal TAGE predictor paper. Seznec's geometric history length insight — indexing predictor tables with histories that form a geometric series — became the basis for all modern high-performance branch predictors. Won CBP-2 and descendants dominated CBP-3 through CBP-5."
+    },
+    {
+      "title": "Dynamic Branch Prediction with Perceptrons",
+      "authors": "Daniel A. Jimenez and Calvin Lin",
+      "url": "https://www.cs.utexas.edu/~lin/papers/hpca01.pdf",
+      "note": "Introduced the perceptron branch predictor at HPCA 2001. The key insight is that a single-layer neural network (perceptron) scales linearly with history length — $n+1$ weights vs. $2^n$ table entries for traditional predictors. AMD's Zen processors use perceptron-based predictors."
+    },
+    {
+      "title": "Intel Golden Cove Deep Dive — AnandTech",
+      "authors": "Ian Cutress and Andrei Frumusanu",
+      "url": "https://www.anandtech.com/show/16881/a-deep-dive-into-intels-alder-lake-microarchitectures/3",
+      "note": "Detailed analysis of Intel's Golden Cove microarchitecture used in 12th Gen Alder Lake. Covers the 6-wide decode, 512-entry ROB, 12 execution ports, and the micro-op cache. Essential for understanding modern x86 out-of-order design."
+    },
+    {
+      "title": "AMD's Zen 4 Part 1: Frontend and Execution Engine — Chips and Cheese",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/amds-zen-4-part-1-frontend-and-execution-engine",
+      "note": "Microarchitectural analysis of AMD Zen 4. Covers the 4-wide decode, 6.75K op cache, 320-entry ROB, and Zen 4's integer and floating-point execution engine. Good companion to the Intel Golden Cove deep dive for cross-vendor comparison."
+    },
+    {
+      "title": "Zen 5's 2-Ahead Branch Predictor Unit — Chips and Cheese",
+      "authors": "Chips and Cheese",
+      "url": "https://chipsandcheese.com/p/zen-5s-2-ahead-branch-predictor-unit-how-30-year-old-idea-allows-for-new-tricks",
+      "note": "Analysis of AMD Zen 5's innovative 2-ahead branch predictor, which predicts two taken branches per cycle by feeding one prediction into the next within the same cycle. A 30-year-old idea finally realized in silicon."
+    },
+    {
+      "title": "Branch Prediction Is Not A Solved Problem: Measurements from Industrial Applications",
+      "authors": "Baris Kasikci et al.",
+      "url": "https://arxiv.org/pdf/1906.08170",
+      "note": "Measures branch prediction behavior in real server workloads. Key finding: modern server applications waste an average of 9.2% of cycles on branch mispredictions, with some workloads losing over 20% of cycles. Demonstrates that branch prediction remains a significant bottleneck."
+    }
+  ]
+}

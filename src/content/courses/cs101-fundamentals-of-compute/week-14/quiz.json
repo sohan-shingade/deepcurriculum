@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 13: CUDA and GPU Optimization",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A CUDA kernel is launched with `kernel<<<ceil(N/256), 256>>>(data, N)` where N = 1000. How many total threads are launched, and what must the kernel do to handle the mismatch between threads and data elements?",
+      "options": [
+        "1000 threads; the runtime automatically skips extra threads",
+        "1024 threads (ceil(1000/256) = 4 blocks x 256 threads); threads with global_id >= 1000 must check `if (global_id < N)` and skip their computation to avoid out-of-bounds memory access",
+        "256 threads; CUDA reuses threads across multiple data elements",
+        "1000 threads; the block size automatically adjusts to fit exactly N elements"
+      ],
+      "correct": 1,
+      "explanation": "ceil(1000/256) = 4 blocks. Total threads = 4 x 256 = 1024. The last block has 24 threads (threads 1000-1023) that have no corresponding data element. Without a boundary check, these threads would access data[1000] through data[1023] -- undefined memory, potentially causing `cudaErrorIllegalAddress`. The pattern `int idx = blockIdx.x * blockDim.x + threadIdx.x; if (idx < N) { /* compute */ }` is essential in virtually every CUDA kernel because N is rarely a perfect multiple of the block size."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In CUDA, `__syncthreads()` is a barrier within a thread block. Which of the following is a correct statement about its usage?",
+      "options": [
+        "__syncthreads() synchronizes all threads across the entire grid",
+        "It is safe to place __syncthreads() inside an `if` statement that only some threads enter, as long as the `else` branch also has __syncthreads()",
+        "ALL threads in a block must reach the SAME __syncthreads() call, or the program has undefined behavior (typically deadlock). It must never be inside a conditional that not all threads enter.",
+        "__syncthreads() only applies to threads within the same warp, not the entire block"
+      ],
+      "correct": 2,
+      "explanation": "__syncthreads() is a block-level barrier. Every thread in the block must reach the same call. If thread A reaches __syncthreads() but thread B skips it (because B took a different branch), thread A waits forever for B, causing deadlock. Placing __syncthreads() in both the `if` and `else` branches does NOT help -- the hardware requires all threads to reach the SAME syntactic barrier point. For conditional synchronization within subgroups, use Cooperative Groups (cg::thread_block_tile). The warp-level equivalent is __syncwarp(mask), which synchronizes only specified lanes within a single warp."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Parallel reduction Version 1 uses interleaved addressing where thread i is active if `i % (2*stride) == 0`. In a warp of 32 threads at stride = 1, threads 0,2,4,...,30 are active while 1,3,5,...,31 are idle. Why is this bad for GPU performance?",
+      "options": [
+        "The idle threads consume extra registers",
+        "The idle threads cause cache thrashing in shared memory",
+        "Within each warp, active and idle threads take different branches, causing warp divergence that serializes execution and halves throughput",
+        "The interleaved pattern causes bank conflicts in shared memory"
+      ],
+      "correct": 2,
+      "explanation": "In warp 0, thread 0 enters the `if` body (active) while thread 1 does not (idle). Since these threads are in the same warp, the hardware must execute both paths: first the active path with threads 0,2,4,...,30 masked on, then skip the idle path. This is warp divergence -- the warp takes twice as long as a fully active warp. Version 2 fixes this by making threads 0,1,2,...,stride-1 active (contiguous), so within each warp, either all threads are active or all are inactive -- no divergence within any warp."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Blelloch scan algorithm computes a prefix sum in two phases: up-sweep and down-sweep. For an array of n = 1024 elements, how many parallel steps does it take, and how does this compare to the Hillis-Steele scan?",
+      "options": [
+        "Blelloch: 10 steps (log2(1024)), same as Hillis-Steele",
+        "Blelloch: 20 steps (2 * log2(1024)); Hillis-Steele: 10 steps. Blelloch has more steps but does O(n) total work vs O(n log n) for Hillis-Steele",
+        "Blelloch: 1024 steps (sequential); Hillis-Steele: 10 steps (fully parallel)",
+        "Both algorithms take exactly the same number of steps and do the same work"
+      ],
+      "correct": 1,
+      "explanation": "Blelloch has two phases, each with $\\log_2(n)$ levels: up-sweep (10 steps) + down-sweep (10 steps) = 20 total parallel steps. Hillis-Steele takes only 10 steps. However, Blelloch performs $O(n) = O(1024)$ total work (additions), while Hillis-Steele performs $O(n \\log n) = O(10{,}240)$ work. For large arrays on a GPU (where processors << elements), Blelloch is preferred because the extra work in Hillis-Steele wastes compute resources. For small arrays where the GPU has excess parallelism, Hillis-Steele's lower step count may win."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In tiled matrix multiplication with TILE_SIZE = 32, how does shared memory tiling reduce global memory traffic compared to the naive implementation?",
+      "options": [
+        "It doesn't reduce traffic; it only changes the access pattern to be more coalesced",
+        "Each element loaded from global memory into shared memory is reused by TILE_SIZE threads computing different output elements, reducing global reads by a factor of approximately TILE_SIZE (32x)",
+        "Tiling reduces traffic by compressing the data using lower precision in shared memory",
+        "Tiling reduces traffic by 2x because each thread loads one element instead of two"
+      ],
+      "correct": 1,
+      "explanation": "In the naive implementation, computing C[i][j] requires reading all K elements of row i from A and all K elements of column j from B from global memory. If M*N threads each do this independently, total global reads = 2*M*N*K. With tiling, a block of 32x32 threads cooperatively loads a 32x32 tile of A and a 32x32 tile of B into shared memory (2 x 32 x 32 = 2048 global reads). Then all 1024 threads compute 32 multiply-adds each from shared memory. The same 2048 global memory values serve 1024 threads instead of just 1. Over the K dimension, global reads = 2 * M * N * K / 32. The 32x reduction directly corresponds to the tile size."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In Ring-AllReduce with N = 8 GPUs, each holding K = 800 elements, what is the total data each GPU sends across both phases?",
+      "options": [
+        "800 elements (each GPU sends its full array once)",
+        "1,400 elements: 2 x (8-1)/8 x 800 = 1,400",
+        "5,600 elements (each GPU sends to all 7 others)",
+        "1,600 elements (each GPU sends 2K)"
+      ],
+      "correct": 1,
+      "explanation": "Ring-AllReduce has 2(N-1) = 14 steps. In each step, each GPU sends K/N = 100 elements. Total per GPU: 14 x 100 = 1,400 elements. This matches the formula: $2 \\times (N-1)/N \\times K = 2 \\times 7/8 \\times 800 = 1{,}400$. This is bandwidth-optimal: no AllReduce algorithm can do better. For comparison, a naive all-to-all approach would require each GPU to send K elements to each of the other N-1 GPUs = (N-1) x K = 5,600 elements -- 4x more than ring AllReduce."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The H100 has NVLink 4.0 with 900 GB/s total bidirectional bandwidth per GPU. The B200 has NVLink 5.0 with 1,800 GB/s. In a DGX H100 (8 GPUs, full-mesh NVLink via NVSwitch), what bandwidth does any single GPU have to any other single GPU?",
+      "options": [
+        "112.5 GB/s (900 / 8 GPUs)",
+        "900 GB/s (each GPU has 900 GB/s total NVLink bandwidth, accessible to any peer)",
+        "450 GB/s (half the bidirectional bandwidth)",
+        "128.6 GB/s (900 / 7 other GPUs)"
+      ],
+      "correct": 1,
+      "explanation": "In the DGX H100, all 8 GPUs are connected via 4 NVSwitch 3.0 chips in a full-mesh topology. Each GPU has 18 NVLink 4.0 links totaling 900 GB/s bidirectional. The NVSwitch allows any GPU to communicate with any other GPU using all of its NVLink bandwidth -- unlike a direct point-to-point connection where links would be divided among peers. So GPU 0 can send to GPU 5 at the full 900 GB/s. This is the power of NVSwitch: it acts as a non-blocking crossbar, so the full per-GPU bandwidth is available to any single peer connection. Of course, if GPU 0 tries to communicate with multiple peers simultaneously, the 900 GB/s is shared."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "CUDA Unified Memory (cudaMallocManaged) allows both CPU and GPU to access the same pointer. What happens when a GPU kernel first accesses a page that was last modified by the CPU?",
+      "options": [
+        "The access fails with cudaErrorIllegalAddress because the page is in CPU memory",
+        "A page fault occurs on the GPU, and the CUDA runtime migrates the page from CPU memory to GPU memory (HBM) transparently, then the kernel access proceeds",
+        "The GPU reads directly from CPU memory over PCIe, with no page migration",
+        "The programmer must call cudaMemPrefetchAsync() before any kernel access; otherwise the behavior is undefined"
+      ],
+      "correct": 1,
+      "explanation": "Unified Memory uses hardware page faulting (available since Pascal/compute capability 6.0) to manage data movement transparently. When the GPU accesses a page that resides in CPU memory, a page fault is triggered on the GPU. The CUDA runtime's page migration engine copies the page from CPU to GPU memory, updates the page table, and replays the faulting instruction. This is transparent to the programmer but has performance implications: the first access to each page incurs migration latency. cudaMemPrefetchAsync() can be used to pre-migrate pages before they are needed, avoiding fault latency. On NVLink systems, the runtime may choose remote access (reading from CPU memory over NVLink) instead of migration for pages that are accessed infrequently."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which NCCL collective operation is primarily used for gradient synchronization in data-parallel distributed training?",
+      "options": [
+        "ncclBroadcast -- sending the master GPU's gradients to all workers",
+        "ncclAllReduce -- computing the sum (or average) of gradients across all GPUs and distributing the result to all",
+        "ncclReduce -- summing gradients to a single designated GPU",
+        "ncclAllGather -- collecting all gradients on every GPU without reduction"
+      ],
+      "correct": 1,
+      "explanation": "In data-parallel training, each GPU computes gradients on its own mini-batch. These gradients must be summed (or averaged) across all GPUs so that every GPU applies the same parameter update (maintaining model consistency). ncclAllReduce performs exactly this: it computes the element-wise sum across all GPUs and distributes the result to every GPU. ncclReduce would only send the sum to one GPU (not useful for data parallelism). ncclBroadcast sends from one to all (used for initializing parameters, not gradient sync). ncclAllGather collects without reducing (used in ZeRO Stage 3 for parameter reconstruction). Ring-AllReduce is the most common algorithm NCCL uses internally for AllReduce on NVLink-connected systems."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A GPU kernel performs one multiply-add (2 FLOPs) per 4-byte element loaded from global memory. The arithmetic intensity is 2/4 = 0.5 FLOPS/byte. On the H100 SXM5 (60 TFLOPS FP32, 3.35 TB/s bandwidth, ridge point ~17.9 FLOPS/byte), this kernel is:",
+      "options": [
+        "Compute-bound: the kernel is limited by the 60 TFLOPS peak",
+        "Memory-bound: at 0.5 FLOPS/byte, attainable performance is 0.5 x 3.35 = 1.675 TFLOPS, which is only 2.8% of peak compute -- optimizing arithmetic is pointless, only memory optimization matters",
+        "Balanced: arithmetic intensity is close to the ridge point",
+        "Latency-bound: the kernel is too small to saturate either compute or memory"
+      ],
+      "correct": 1,
+      "explanation": "The roofline model gives attainable performance as $\\min(\\text{peak compute}, \\text{AI} \\times \\text{peak BW}) = \\min(60, 0.5 \\times 3350) = \\min(60, 1.675) = 1.675$ TFLOPS. This is deeply memory-bound at only 2.8% of peak compute. The CUDA cores and Tensor Cores are almost entirely idle, waiting for data from HBM. Optimization strategy: (1) improve memory coalescing to get closer to 3.35 TB/s actual bandwidth, (2) fuse with other operations to increase arithmetic intensity, (3) reduce memory traffic by using shared memory tiling. Do NOT try to optimize the arithmetic -- the bottleneck is purely memory bandwidth."
+    }
+  ]
+}

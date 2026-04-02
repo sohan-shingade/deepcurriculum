@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 8: Observability & Evaluation",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which of the following BEST describes why AI systems need observability beyond traditional APM (Application Performance Monitoring)?",
+      "options": [
+        "AI systems have higher latency than traditional web applications",
+        "AI systems can fail semantically — returning HTTP 200 with a confidently wrong, harmful, or irrelevant response — which traditional operational metrics cannot detect",
+        "AI systems use more cloud resources and therefore need more monitoring",
+        "Traditional APM tools cannot handle the volume of requests AI systems receive"
+      ],
+      "correct": 1,
+      "explanation": "The fundamental challenge with AI observability is semantic failure. A traditional system either works (correct response) or fails (error code, exception). An AI system can execute flawlessly at the operational level — low latency, no errors, tokens within budget — while producing a response that is factually wrong, hallucinated, or harmful. This requires quality metrics, content logging, and evaluation infrastructure that goes far beyond monitoring HTTP status codes and latency percentiles."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the tiered logging approach for AI systems, which tier captures full prompt-response pairs for requests that trigger anomalies (unusual token count, low quality score, user complaint)?",
+      "options": [
+        "Tier 1 — always captured for every request",
+        "Tier 2 — sampled at a configurable percentage of traffic",
+        "Tier 3 — triggered by anomaly detection or explicit signals",
+        "Tier 0 — stored only in ephemeral memory, never persisted"
+      ],
+      "correct": 2,
+      "explanation": "The tiered logging model balances cost and debuggability: Tier 1 (always) captures compact metadata — model, tokens, latency, cost, request ID — for every request. Tier 2 (sampled) captures full prompt-response content for a configurable percentage (e.g., 10%) of traffic for routine analysis. Tier 3 (triggered) captures full content for any request flagged by anomaly detection, guardrail triggers, or user complaints. This ensures you always have the data you need for debugging failures without the prohibitive cost of storing full prompts for every request."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A multi-step AI agent makes 4 LLM calls with input/output tokens of (2000, 300), (2500, 400), (3000, 350), and (3200, 500). Using GPT-4o pricing (input: $2.50/M, output: $10.00/M), what is the total cost of this agent request?",
+      "options": [
+        "$0.0268",
+        "$0.0423",
+        "$0.1522",
+        "$0.4235"
+      ],
+      "correct": 1,
+      "explanation": "Total input tokens: 2000 + 2500 + 3000 + 3200 = 10,700. Total output tokens: 300 + 400 + 350 + 500 = 1,550. Cost = (10,700 * $2.50 + 1,550 * $10.00) / 1,000,000 = ($26,750 + $15,500) / 1,000,000 = $42,250 / 1,000,000 = $0.042250, which rounds to approximately $0.0423. This illustrates how agent costs compound across steps — each step's input includes the growing conversation history, making later steps progressively more expensive."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Why do BLEU and ROUGE metrics have fundamental limitations for evaluating LLM outputs?",
+      "options": [
+        "They are too computationally expensive to run at scale",
+        "They require GPU resources that are not always available",
+        "They measure surface-level lexical overlap rather than semantic correctness, so a factually wrong response that shares vocabulary with the reference can outscore a correct paraphrase",
+        "They can only evaluate English text and do not work with other languages"
+      ],
+      "correct": 2,
+      "explanation": "BLEU measures n-gram precision and ROUGE measures recall/F1 of n-grams or longest common subsequences. Both are purely lexical — they count word overlaps. The critical failure: 'The return window is 90 days' scores higher against reference 'The return window is 30 days' than 'You have a month to return items' does, despite the first being factually wrong and the second being correct. LLM outputs often use different phrasing to express the same meaning, making lexical metrics unreliable. This motivated the development of LLM-as-judge and embedding-based semantic similarity metrics."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In the RAGAS framework, you observe: Faithfulness = 0.92, Answer Relevancy = 0.88, Context Relevancy = 0.35, Context Recall = 0.40. Which component of your RAG pipeline is the primary source of quality issues?",
+      "options": [
+        "The generation model — it is hallucinating and ignoring context",
+        "The retrieval system — it is returning too many irrelevant documents and missing relevant ones",
+        "The prompt template — the system prompt is poorly designed",
+        "The user queries — they are too ambiguous for the system to handle"
+      ],
+      "correct": 1,
+      "explanation": "High faithfulness (0.92) means the model is faithful to the context it receives — it is not hallucinating. High answer relevancy (0.88) means the responses are on-topic for the user's query. But low context relevancy (0.35) means only 35% of retrieved content is relevant to the query — the retrieval is too noisy, pulling in irrelevant documents. Low context recall (0.40) means only 40% of the information needed (per the reference) exists in the retrieved context — the retrieval is missing relevant documents. The system is generating well from bad context. Fix retrieval: better embeddings, re-ranking, or more focused chunking."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In LLM-as-Judge evaluation, which approach is MOST resistant to verbosity bias and position bias?",
+      "options": [
+        "Pointwise scoring on a 1-5 scale with a simple prompt",
+        "Pairwise comparison where the judge picks the better of two responses, with position randomization",
+        "Asking the LLM to rate on a single 'quality' dimension without a rubric",
+        "Using the same model as both the system and the judge"
+      ],
+      "correct": 1,
+      "explanation": "Pairwise comparison is more robust than pointwise scoring because it forces a relative judgment (which is better) rather than an absolute one (how good on a scale). Position randomization (showing A/B in both orders and checking consistency) mitigates the known position bias where judges tend to prefer the first response. Verbosity bias (preferring longer responses) is also reduced in pairwise settings because both responses are visible simultaneously. Pointwise scoring is more susceptible to both biases. Using the same model as system and judge creates self-preference bias. Rating without a rubric introduces inconsistency across evaluations."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A circuit breaker for AI agent systems should terminate a request when:",
+      "options": [
+        "The user has been waiting for more than 1 second",
+        "Accumulated cost or step count exceeds a per-request threshold, indicating the agent may be stuck in a loop",
+        "The model returns a response shorter than 50 tokens",
+        "The system is receiving more than 100 requests per second"
+      ],
+      "correct": 1,
+      "explanation": "Agent loops are the primary cost risk in AI systems. An agent that fails to make progress will keep calling the LLM, with each call consuming tokens and money, potentially running dozens of steps before timing out. A circuit breaker monitors accumulated cost and step count after each agent step, terminating the request with a graceful error if either threshold is exceeded. This prevents a single runaway request from consuming the entire daily budget. The threshold should be set based on the expected cost distribution — typically 3-5x the p95 cost — balancing between allowing complex legitimate requests and catching loops."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "You deploy a new prompt variant in shadow mode. After analyzing 10,000 shadow requests, you find quality scores are 3% higher than production. What is the PRIMARY limitation of this evaluation approach?",
+      "options": [
+        "10,000 requests is too small a sample size for any conclusion",
+        "Shadow mode cannot measure how users would react to the new responses — behavioral metrics like follow-up questions, escalations, and task completion are unavailable",
+        "Shadow mode introduces too much latency to be practical",
+        "The 3% improvement is not statistically significant by definition"
+      ],
+      "correct": 1,
+      "explanation": "Shadow mode (dark launch) runs the new variant in parallel with production, logging its responses without serving them to users. This means you can evaluate output quality using automated metrics, but you CANNOT measure user behavior — you do not know if users would have been more satisfied, whether they would have asked fewer follow-up questions, or whether task completion rates would improve. For those behavioral signals, you need an actual A/B test where real users interact with the new variant. Shadow mode de-risks deployment by catching quality regressions, but confirming user-facing improvement requires live experimentation."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "The Page-Hinkley drift detection test is particularly well-suited for detecting which type of quality degradation in AI systems?",
+      "options": [
+        "Sudden, catastrophic failures where quality drops to zero instantly",
+        "Gradual, monotonic shifts in a metric — like slowly declining quality scores from data drift or model updates",
+        "Random outliers in an otherwise stable metric",
+        "Seasonal patterns in query volume"
+      ],
+      "correct": 1,
+      "explanation": "The Page-Hinkley test accumulates the deviation of observations from the running mean, detecting when a gradual, consistent shift has occurred. It tracks m_T = sum(x_t - mean - delta) and triggers when the difference between the current cumulative sum and its historical minimum exceeds a threshold. This makes it ideal for detecting the slow quality degradation that occurs when retrieved documents become stale, user query distributions drift, or a model provider silently updates their model. Sudden failures are better caught by simple threshold alerts. Random outliers are filtered out by the cumulative nature of the test."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Your CI pipeline runs an eval suite on every PR that modifies prompts. The baseline has avg_scores: {faithfulness: 0.85, relevancy: 0.82}. A PR candidate scores {faithfulness: 0.83, relevancy: 0.88}. With a regression tolerance of 0.05, what should the quality gate decide?",
+      "options": [
+        "BLOCK — faithfulness decreased from 0.85 to 0.83",
+        "PASS — no metric dropped by more than 0.05; the faithfulness drop of 0.02 is within tolerance",
+        "BLOCK — any decrease in any metric should block deployment",
+        "PASS — the overall average improved, so individual metric decreases do not matter"
+      ],
+      "correct": 1,
+      "explanation": "The regression tolerance (0.05) defines the threshold for meaningful regression. Faithfulness dropped by 0.02 (0.85 -> 0.83), which is within the 0.05 tolerance — this is normal noise, not a regression. Relevancy improved by 0.06 (0.82 -> 0.88). Since no metric regressed beyond tolerance, the quality gate should pass. A zero-tolerance policy (option C) would create excessive false alarms from measurement noise and block beneficial changes. Judging only by overall average (option D) could hide a serious regression in one metric masked by improvement in another. Per-metric comparison with tolerance is the right balance."
+    }
+  ]
+}

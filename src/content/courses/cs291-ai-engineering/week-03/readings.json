@@ -1,0 +1,54 @@
+{
+  "readings": [
+    {
+      "id": "r1",
+      "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "authors": "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc V. Le, Denny Zhou",
+      "year": 2022,
+      "venue": "NeurIPS 2022",
+      "url": "https://arxiv.org/abs/2201.11903",
+      "description": "The foundational paper on chain-of-thought prompting. Demonstrates that including step-by-step reasoning examples in few-shot prompts dramatically improves performance on arithmetic, commonsense, and symbolic reasoning tasks. Introduced the concept of 'chain-of-thought' as an emergent capability of large language models that can be elicited through prompting alone, without any fine-tuning.",
+      "relevance": "Core reading for Lecture 2. Understand how and why generating intermediate reasoning steps improves LLM output quality on multi-step problems."
+    },
+    {
+      "id": "r2",
+      "title": "Lost in the Middle: How Language Models Use Long Contexts",
+      "authors": "Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, Percy Liang",
+      "year": 2023,
+      "venue": "TACL 2024 (arXiv 2023)",
+      "url": "https://arxiv.org/abs/2307.03172",
+      "description": "Demonstrates that language model performance degrades significantly when relevant information is placed in the middle of a long context, following a U-shaped curve where performance is highest at the beginning and end of the input. This has major implications for how retrieved documents should be ordered in RAG systems.",
+      "relevance": "Core reading for Lecture 2. Directly informs context engineering decisions: chunk ordering, sandwich ordering strategy, and why position in the context window matters."
+    },
+    {
+      "id": "r3",
+      "title": "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT",
+      "authors": "Omar Khattab, Matei Zaharia",
+      "year": 2020,
+      "venue": "SIGIR 2020",
+      "url": "https://arxiv.org/abs/2004.12832",
+      "description": "Introduces the late interaction architecture for dense retrieval. ColBERT produces per-token embeddings for queries and documents and scores relevance using the MaxSim operation. This achieves near cross-encoder accuracy with much lower latency by allowing document token embeddings to be pre-computed and indexed.",
+      "relevance": "Core reading for Lecture 1. Understand the spectrum from bi-encoders to cross-encoders and how late interaction provides a practical middle ground for production retrieval."
+    },
+    {
+      "id": "r4",
+      "title": "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines",
+      "authors": "Omar Khattab, Arnav Singhvi, Paridhi Maheshwari, Zhiyuan Zhang, Keshav Santhanam, Sri Vardhamanan, Saiful Haq, Ashutosh Sharma, Thomas T. Joshi, Hanna Moazam, Heather Miller, Matei Zaharia, Christopher Potts",
+      "year": 2023,
+      "venue": "arXiv 2023",
+      "url": "https://arxiv.org/abs/2310.03714",
+      "description": "Presents a programming model for LLM pipelines that replaces hand-crafted prompts with declarative modules. DSPy optimizers automatically search for effective prompts, few-shot examples, and pipeline configurations by treating prompt engineering as an optimization problem over a defined metric.",
+      "relevance": "Supplementary reading for Lecture 2. Represents the cutting edge of prompt management — moving from manual prompt engineering to programmatic prompt optimization."
+    },
+    {
+      "id": "r5",
+      "title": "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods",
+      "authors": "Gordon V. Cormack, Charles L. A. Clarke, Stefan Buettcher",
+      "year": 2009,
+      "venue": "SIGIR 2009",
+      "url": "https://dl.acm.org/doi/10.1145/1571941.1572114",
+      "description": "The original paper introducing Reciprocal Rank Fusion (RRF), a simple yet highly effective method for combining multiple ranked lists. Shows that RRF outperforms more complex fusion methods including Condorcet voting and supervised rank learning, while requiring no training data or parameter tuning beyond the constant k.",
+      "relevance": "Core reading for Lecture 1. RRF is the standard fusion method used in production hybrid search systems. Understanding why it works helps in designing and debugging retrieval pipelines."
+    }
+  ]
+}

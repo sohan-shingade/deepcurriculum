@@ -1,0 +1,34 @@
+{
+  "readings": [
+    {
+      "title": "The Elements of Computing Systems: Building a Modern Computer from First Principles (Chapters 1-3)",
+      "authors": "Noam Nisan, Shimon Schocken",
+      "url": "https://www.nand2tetris.org/",
+      "note": "Chapters 1-3 cover Boolean logic, Boolean arithmetic, and sequential logic. The Nand2Tetris approach builds registers, RAM, and a program counter from flip-flops -- exactly the progression in this week's lectures. Project 3 (Sequential Logic) is particularly relevant."
+    },
+    {
+      "title": "MIT 6.004 Computation Structures: Sequential Logic and Finite State Machines (Lectures 5-6)",
+      "authors": "MIT OpenCourseWare",
+      "url": "https://ocw.mit.edu/courses/6-004-computation-structures-spring-2017/",
+      "note": "Lecture 5 covers latches, flip-flops, timing constraints (setup, hold, contamination delay), and the dynamic discipline. Lecture 6 covers FSMs, Moore vs. Mealy, and metastability. The treatment of timing constraints is particularly rigorous."
+    },
+    {
+      "title": "Metastability in FPGA Design: Causes, Effects, and Mitigation",
+      "authors": "Intel (Altera) Application Note AN-42500",
+      "url": "https://www.intel.com/content/www/us/en/docs/programmable/683082/current/metastability-in-fpgas.html",
+      "note": "An excellent practical guide to metastability in real FPGA designs. Covers MTBF calculation, synchronizer design, and multi-clock domain crossing. The MTBF formula and synchronizer chain analysis in this week's lecture are based on this model."
+    },
+    {
+      "title": "Linear Feedback Shift Registers: Theory and Applications",
+      "authors": "Philip Koopman, Tridib Chakravarty",
+      "url": "https://users.ece.cmu.edu/~koopman/lfsr/",
+      "note": "Comprehensive reference on LFSR theory, including tables of primitive polynomials for all register widths up to 64 bits. Also covers applications in CRC computation and built-in self-test (BIST). The polynomial tables are invaluable for Problem Set 3."
+    },
+    {
+      "title": "Digital Design and Computer Architecture: RISC-V Edition (Chapters 3-4)",
+      "authors": "Sarah Harris, David Harris",
+      "url": "https://www.elsevier.com/books/digital-design-and-computer-architecture/harris/978-0-12-820064-3",
+      "note": "Chapter 3 covers sequential logic (latches, flip-flops, synchronizers, FSMs) and Chapter 4 covers hardware description languages. The treatment of timing analysis and FSM design methodology aligns closely with this week's lectures."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "readings": [
+    {
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "authors": "Lewis et al.",
+      "year": 2020,
+      "url": "https://arxiv.org/abs/2005.11401",
+      "type": "paper",
+      "description": "The foundational RAG paper. Introduces the retrieve-then-generate framework that combines a dense passage retriever (DPR) with a seq2seq generator. Establishes the probabilistic formulation of RAG and demonstrates its effectiveness on open-domain QA, fact verification, and knowledge-intensive generation tasks.",
+      "required": true
+    },
+    {
+      "title": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+      "authors": "Gao et al.",
+      "year": 2024,
+      "url": "https://arxiv.org/abs/2312.10997",
+      "type": "paper",
+      "description": "Comprehensive survey categorizing RAG into Naive, Advanced, and Modular paradigms. Covers the full taxonomy of RAG techniques including query transformation, hybrid retrieval, reranking, and iterative retrieval. Essential reference for understanding the current state of the field.",
+      "required": true
+    },
+    {
+      "title": "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs",
+      "authors": "Malkov and Yashunin",
+      "year": 2018,
+      "url": "https://arxiv.org/abs/1603.09320",
+      "type": "paper",
+      "description": "The HNSW paper — the algorithm that powers virtually every production vector database. Explains the hierarchical navigable small world graph construction and search procedure with theoretical analysis. Worth reading Sections 1-4 even if you skip the proofs.",
+      "required": false
+    },
+    {
+      "title": "RAGAS: Automated Evaluation of Retrieval Augmented Generation",
+      "authors": "Es et al.",
+      "year": 2024,
+      "url": "https://arxiv.org/abs/2309.15217",
+      "type": "paper",
+      "description": "Introduces the RAGAS evaluation framework with four complementary metrics: faithfulness, answer relevancy, context relevancy, and context recall. Provides a practical, automated approach to RAG evaluation that does not require human annotation. The metrics directly map to different RAG failure modes.",
+      "required": true
+    },
+    {
+      "title": "Text Embeddings by Weakly-Supervised Contrastive Pre-training (E5)",
+      "authors": "Wang et al.",
+      "year": 2022,
+      "url": "https://arxiv.org/abs/2212.03533",
+      "type": "paper",
+      "description": "Describes the E5 family of embedding models and the critical importance of training data curation and hard negative mining. Key insight: the quality of contrastive training pairs matters more than model architecture. Read for understanding how modern embedding models are trained.",
+      "required": false
+    }
+  ]
+}

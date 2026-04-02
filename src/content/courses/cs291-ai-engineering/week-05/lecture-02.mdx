@@ -1,0 +1,553 @@
+---
+title: "Deep Research Agents"
+week: 5
+lecture: 2
+estimatedMinutes: 45
+---
+
+# Deep Research Agents
+
+The previous lecture gave you the building blocks: self-assessment, corrective retrieval, query decomposition, iterative reasoning. Now we assemble those components into something far more ambitious — a **deep research agent** that can take a complex, open-ended question and produce a sourced, structured report by autonomously planning a research strategy, executing multiple rounds of search and analysis, cross-referencing facts, and synthesizing findings.
+
+This is the architecture behind systems like Perplexity's research mode, OpenAI's deep research feature, and the growing class of "report generation" agents. The underlying engineering is less magical than it appears: it is a carefully orchestrated pipeline of decomposition, retrieval, extraction, verification, and synthesis. But getting each stage right — and getting them to compose reliably — is where the real craft lies.
+
+## Architecture of a Deep Research Agent
+
+A deep research agent consists of four primary components, each with a distinct role:
+
+### 1. The Planner
+
+The planner receives the user's research question and produces a **research plan**: a structured set of sub-questions, search strategies, and an outline for the final report.
+
+The planning step is crucial because it determines the agent's search strategy before any retrieval occurs. A poor plan leads to irrelevant searches, wasted tokens, and an incoherent final output. Formally, the planner is a function:
+
+$$\text{Plan}(q) \rightarrow \{(q_1, s_1), (q_2, s_2), \ldots, (q_m, s_m), O\}$$
+
+where each $(q_i, s_i)$ is a sub-question paired with a search strategy (semantic search, keyword search, specific source targeting), and $O$ is a report outline.
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+from enum import Enum
+import json
+
+class SearchStrategy(Enum):
+    SEMANTIC = "semantic"
+    KEYWORD = "keyword"
+    TARGETED = "targeted"
+    HYBRID = "hybrid"
+
+@dataclass
+class ResearchSubQuestion:
+    id: str
+    question: str
+    strategy: SearchStrategy
+    priority: int  # 1 = highest
+    depends_on: List[str] = field(default_factory=list)
+    status: str = "pending"
+    findings: List[str] = field(default_factory=list)
+
+@dataclass
+class ReportOutline:
+    title: str
+    sections: List[Dict[str, str]]  # {"heading": ..., "description": ...}
+
+@dataclass
+class ResearchPlan:
+    original_query: str
+    sub_questions: List[ResearchSubQuestion]
+    outline: ReportOutline
+    max_iterations: int = 10
+    current_iteration: int = 0
+
+def create_research_plan(query: str) -> ResearchPlan:
+    """
+    Generate a research plan from a query.
+    In production, this is an LLM call. Here we demonstrate the structure.
+    """
+    # Analyze query complexity
+    words = query.lower().split()
+    is_comparison = any(w in words for w in ["compare", "versus", "vs", "difference"])
+    is_how = query.lower().startswith("how")
+    is_what = query.lower().startswith("what")
+
+    sub_questions = []
+
+    # Always start with a definitional/background question
+    sub_questions.append(ResearchSubQuestion(
+        id="sq-1",
+        question=f"Background and definitions for: {query}",
+        strategy=SearchStrategy.SEMANTIC,
+        priority=1
+    ))
+
+    if is_comparison:
+        sub_questions.append(ResearchSubQuestion(
+            id="sq-2",
+            question="What are the key dimensions of comparison?",
+            strategy=SearchStrategy.HYBRID,
+            priority=1,
+            depends_on=["sq-1"]
+        ))
+        sub_questions.append(ResearchSubQuestion(
+            id="sq-3",
+            question="What do empirical benchmarks show?",
+            strategy=SearchStrategy.TARGETED,
+            priority=2,
+            depends_on=["sq-2"]
+        ))
+    else:
+        sub_questions.append(ResearchSubQuestion(
+            id="sq-2",
+            question=f"Current state of the art for: {query}",
+            strategy=SearchStrategy.HYBRID,
+            priority=1
+        ))
+        sub_questions.append(ResearchSubQuestion(
+            id="sq-3",
+            question=f"Practical considerations and trade-offs",
+            strategy=SearchStrategy.SEMANTIC,
+            priority=2,
+            depends_on=["sq-2"]
+        ))
+
+    # Always end with synthesis
+    sub_questions.append(ResearchSubQuestion(
+        id="sq-4",
+        question="What are the open questions and future directions?",
+        strategy=SearchStrategy.SEMANTIC,
+        priority=3,
+        depends_on=["sq-2", "sq-3"]
+    ))
+
+    outline = ReportOutline(
+        title=f"Research Report: {query}",
+        sections=[
+            {"heading": "Background", "description": "Definitions and context"},
+            {"heading": "Analysis", "description": "Key findings and evidence"},
+            {"heading": "Discussion", "description": "Trade-offs and practical implications"},
+            {"heading": "Conclusion", "description": "Summary and open questions"}
+        ]
+    )
+
+    return ResearchPlan(
+        original_query=query,
+        sub_questions=sub_questions,
+        outline=outline,
+        max_iterations=8
+    )
+
+# Demo
+plan = create_research_plan("Compare retrieval-augmented generation with fine-tuning for domain adaptation")
+print(f"Plan for: {plan.original_query}")
+print(f"Sub-questions: {len(plan.sub_questions)}")
+for sq in plan.sub_questions:
+    deps = f" (depends on: {sq.depends_on})" if sq.depends_on else ""
+    print(f"  [{sq.priority}] {sq.id}: {sq.question} [{sq.strategy.value}]{deps}")
+print(f"Report sections: {len(plan.outline.sections)}")
+```
+
+Notice the `depends_on` field. Sub-questions form a **dependency graph** — a DAG. Questions with no dependencies can be executed in parallel, while dependent questions must wait. This is precisely the same scheduling problem as task DAGs in distributed computing. The optimal execution order minimizes total latency by maximizing parallelism subject to dependency constraints.
+
+### 2. The Searcher
+
+The searcher executes the plan's sub-questions against one or more knowledge sources. In a production system, these sources might include:
+
+- A vector database of internal documents
+- Web search APIs (Google, Bing, Brave)
+- Academic paper databases (Semantic Scholar, arXiv)
+- Structured databases (SQL, knowledge graphs)
+- Cached results from previous research sessions
+
+The searcher must handle **source selection** — choosing which sources to query for each sub-question. A question about recent benchmarks should target academic papers, while a question about API documentation should target official docs.
+
+```python
+@dataclass
+class Source:
+    name: str
+    source_type: str  # "vector_db", "web", "academic", "structured"
+    credibility: float  # 0.0 - 1.0
+    latency_ms: int  # expected latency
+
+@dataclass
+class SearchResult:
+    source: str
+    content: str
+    url: Optional[str] = None
+    credibility: float = 0.5
+    relevance: float = 0.0
+
+class Searcher:
+    def __init__(self, sources: List[Source]):
+        self.sources = {s.name: s for s in sources}
+
+    def select_sources(self, question: str, strategy: SearchStrategy) -> List[str]:
+        """Select appropriate sources based on question and strategy."""
+        if strategy == SearchStrategy.TARGETED:
+            # Use highest-credibility sources
+            ranked = sorted(self.sources.values(),
+                          key=lambda s: s.credibility, reverse=True)
+            return [s.name for s in ranked[:2]]
+        elif strategy == SearchStrategy.KEYWORD:
+            # Prefer structured sources
+            return [s.name for s in self.sources.values()
+                    if s.source_type in ("structured", "web")]
+        else:
+            # Use all available sources
+            return list(self.sources.keys())
+
+    def search(self, question: str, strategy: SearchStrategy,
+               top_k: int = 5) -> List[SearchResult]:
+        """Execute search across selected sources."""
+        selected = self.select_sources(question, strategy)
+        results = []
+
+        for source_name in selected:
+            source = self.sources[source_name]
+            # Simulated search results
+            result = SearchResult(
+                source=source_name,
+                content=f"Result from {source_name} for: {question[:50]}",
+                credibility=source.credibility,
+                relevance=0.7  # In production: computed by retriever
+            )
+            results.append(result)
+
+        # Rank by composite of relevance and credibility
+        results.sort(
+            key=lambda r: 0.6 * r.relevance + 0.4 * r.credibility,
+            reverse=True
+        )
+        return results[:top_k]
+
+# Setup sources
+sources = [
+    Source("internal_docs", "vector_db", credibility=0.9, latency_ms=50),
+    Source("web_search", "web", credibility=0.6, latency_ms=200),
+    Source("arxiv", "academic", credibility=0.95, latency_ms=300),
+    Source("wikipedia", "web", credibility=0.7, latency_ms=100),
+]
+
+searcher = Searcher(sources)
+results = searcher.search(
+    "What are recent benchmarks for RAG vs fine-tuning?",
+    SearchStrategy.TARGETED
+)
+print(f"Found {len(results)} results:")
+for r in results:
+    print(f"  [{r.source}] credibility={r.credibility} relevance={r.relevance}")
+```
+
+### 3. The Reader (Extraction and Verification)
+
+Raw search results are noisy. The reader component extracts structured information from retrieved documents and verifies it through cross-referencing. This is where the deep research agent diverges most sharply from basic RAG.
+
+**Fact extraction** turns unstructured text into structured claims:
+
+```python
+@dataclass
+class Claim:
+    text: str
+    source: str
+    confidence: float
+    supporting_sources: List[str] = field(default_factory=list)
+    contradicting_sources: List[str] = field(default_factory=list)
+    verified: bool = False
+
+class Reader:
+    def __init__(self):
+        self.claims: List[Claim] = []
+
+    def extract_claims(self, search_results: List[SearchResult]) -> List[Claim]:
+        """Extract factual claims from search results."""
+        claims = []
+        for result in search_results:
+            # In production: LLM extracts structured claims
+            # Here we simulate
+            claim = Claim(
+                text=f"Claim derived from {result.source}: {result.content[:60]}",
+                source=result.source,
+                confidence=result.credibility * result.relevance
+            )
+            claims.append(claim)
+        return claims
+
+    def cross_reference(self, claims: List[Claim]) -> List[Claim]:
+        """
+        Cross-reference claims across sources.
+        Claims supported by multiple high-credibility sources
+        get higher confidence. Contradictions are flagged.
+        """
+        for i, claim in enumerate(claims):
+            for j, other in enumerate(claims):
+                if i == j:
+                    continue
+                # Simple similarity check (in production: semantic similarity)
+                shared_words = (set(claim.text.lower().split()) &
+                              set(other.text.lower().split()))
+                overlap = len(shared_words) / max(
+                    len(claim.text.split()), 1
+                )
+
+                if overlap > 0.3:  # Similar enough to be about same topic
+                    claim.supporting_sources.append(other.source)
+
+            # Update confidence based on corroboration
+            corroboration_bonus = min(
+                len(claim.supporting_sources) * 0.1, 0.3
+            )
+            claim.confidence = min(claim.confidence + corroboration_bonus, 1.0)
+            claim.verified = claim.confidence > 0.6 and len(claim.supporting_sources) > 0
+
+        return claims
+
+reader = Reader()
+claims = reader.extract_claims(results)
+verified_claims = reader.cross_reference(claims)
+print(f"Extracted {len(verified_claims)} claims:")
+for c in verified_claims:
+    status = "VERIFIED" if c.verified else "UNVERIFIED"
+    print(f"  [{status}] confidence={c.confidence:.2f} "
+          f"supporters={len(c.supporting_sources)} - {c.text[:60]}")
+```
+
+### Credibility Assessment
+
+Not all sources are created equal. A deep research agent must reason about source credibility. This is not just about provenance (academic paper vs. blog post) but about **epistemic status** — is this a primary source, a meta-analysis, an opinion piece?
+
+A practical credibility scoring function considers:
+
+$$\text{credibility}(s) = w_1 \cdot \text{source\_type}(s) + w_2 \cdot \text{recency}(s) + w_3 \cdot \text{corroboration}(s) + w_4 \cdot \text{expertise}(s)$$
+
+where each factor is normalized to $[0, 1]$. Source type assigns higher scores to peer-reviewed papers and official documentation. Recency penalizes stale information. Corroboration rewards claims that appear across independent sources. Expertise measures whether the source is authoritative for the specific domain.
+
+<ConceptCheck id="cc-1" />
+
+### 4. The Synthesizer
+
+The synthesizer takes verified claims, the research plan's outline, and the original query to produce a coherent, structured report. This is the most LLM-intensive step and the one most prone to hallucination — the model must weave together disparate facts into a narrative without inventing connections.
+
+**Citation tracking** is essential. Every claim in the final report must trace back to a source. The synthesizer maintains a citation map:
+
+```python
+@dataclass
+class Citation:
+    id: str
+    source: str
+    url: Optional[str]
+    excerpt: str
+
+@dataclass
+class ReportSection:
+    heading: str
+    content: str
+    citations: List[str]  # citation IDs
+
+@dataclass
+class ResearchReport:
+    title: str
+    query: str
+    sections: List[ReportSection]
+    citations: Dict[str, Citation]
+    confidence_score: float
+
+class Synthesizer:
+    def __init__(self):
+        self.citation_counter = 0
+
+    def create_citation(self, claim: Claim) -> Citation:
+        self.citation_counter += 1
+        cid = f"cite-{self.citation_counter}"
+        return Citation(
+            id=cid,
+            source=claim.source,
+            url=None,
+            excerpt=claim.text[:100]
+        )
+
+    def synthesize(self, query: str, claims: List[Claim],
+                   outline: ReportOutline) -> ResearchReport:
+        """Synthesize verified claims into a structured report."""
+        all_citations: Dict[str, Citation] = {}
+        sections = []
+
+        # Group claims by relevance to each section
+        # In production: LLM assigns claims to sections
+        claims_per_section = max(1, len(claims) // len(outline.sections))
+
+        for i, section_spec in enumerate(outline.sections):
+            start_idx = i * claims_per_section
+            end_idx = min(start_idx + claims_per_section, len(claims))
+            section_claims = claims[start_idx:end_idx]
+
+            section_citations = []
+            content_parts = [f"## {section_spec['heading']}\n"]
+            content_parts.append(f"{section_spec['description']}.\n")
+
+            for claim in section_claims:
+                citation = self.create_citation(claim)
+                all_citations[citation.id] = citation
+                section_citations.append(citation.id)
+                content_parts.append(
+                    f"{claim.text} [{citation.id}]\n"
+                )
+
+            sections.append(ReportSection(
+                heading=section_spec["heading"],
+                content="\n".join(content_parts),
+                citations=section_citations
+            ))
+
+        # Compute overall confidence
+        if claims:
+            avg_confidence = sum(c.confidence for c in claims) / len(claims)
+            verified_ratio = sum(1 for c in claims if c.verified) / len(claims)
+            overall_confidence = 0.5 * avg_confidence + 0.5 * verified_ratio
+        else:
+            overall_confidence = 0.0
+
+        return ResearchReport(
+            title=outline.title,
+            query=query,
+            sections=sections,
+            citations=all_citations,
+            confidence_score=round(overall_confidence, 3)
+        )
+
+synthesizer = Synthesizer()
+report = synthesizer.synthesize(
+    plan.original_query, verified_claims, plan.outline
+)
+print(f"Report: {report.title}")
+print(f"Confidence: {report.confidence_score}")
+print(f"Sections: {len(report.sections)}")
+print(f"Citations: {len(report.citations)}")
+```
+
+<ConceptCheck id="cc-2" />
+
+## Comparison with Production Systems
+
+How does this architecture compare with what Perplexity, OpenAI, and others actually ship?
+
+**Perplexity** operates primarily as a search-centric system. Its architecture emphasizes fast retrieval from web search with aggressive answer extraction. The research mode adds iterative refinement but still prioritizes speed over depth. Perplexity's distinctive feature is its citation UI — inline source links with hover previews that make verification trivial for the user.
+
+**OpenAI's deep research** (launched in early 2025) operates more autonomously. It takes minutes, not seconds, because it executes dozens of search and reasoning steps. The architecture more closely resembles what we have built here: plan, search, extract, verify, synthesize. The key differentiator is the reasoning model backbone — o3-class models that can maintain coherent multi-step reasoning over large context windows.
+
+**Google's Gemini Deep Research** follows a similar agentic pattern but leverages Google's search infrastructure for retrieval, giving it access to more diverse and current information. The planning step generates an explicit research plan visible to the user, who can modify it before execution begins.
+
+Common patterns across all production systems:
+
+1. **Explicit planning**: All systems generate a research plan before searching.
+2. **Iterative refinement**: None stops after a single search round.
+3. **Citation tracking**: All maintain provenance from source to claim to output.
+4. **Quality gates**: All include some form of self-assessment.
+5. **Transparency**: Users can see the research process, not just the output.
+
+## Advanced HITL: Active Learning and Preference Learning
+
+The previous lecture introduced basic approval gates and feedback loops. Deep research agents benefit from more sophisticated human-in-the-loop patterns.
+
+### Active Learning for Source Selection
+
+When the agent is uncertain about which sources to trust, it can actively query the human for guidance. Formally, the agent maintains a belief distribution $P(\theta)$ over source credibility parameters $\theta$. It selects the question that maximizes expected information gain:
+
+$$q^* = \arg\max_q \mathbb{E}_{P(\theta)} \bigl[ H(\theta) - H(\theta \mid q, a) \bigr]$$
+
+where $H$ is entropy and $a$ is the human's answer. In practice, this means the agent asks questions like "I found conflicting information from Source A and Source B. Which do you consider more authoritative for this topic?" rather than randomly requesting approval.
+
+### Preference Learning from Feedback
+
+Over multiple research sessions, the agent accumulates preference data: which reports the user rated highly, which sections they edited, which citations they removed. This data can train a **reward model** specific to the user:
+
+$$r_\phi(q, R) = \text{MLP}_\phi\bigl(\text{embed}(q) \oplus \text{features}(R)\bigr)$$
+
+where $R$ is the report and features include section count, citation density, average source credibility, and verified claim ratio. The reward model is trained on pairwise preferences: "the user preferred Report A over Report B for this query type."
+
+This is identical in structure to RLHF for language models, but applied at the report level rather than the token level. The key difference is data efficiency — you get one preference signal per research session (minutes of work), not one per token, so you need much more informative features.
+
+<ConceptCheck id="cc-3" />
+
+## The Complete Pipeline
+
+Let us trace through a full research query to solidify the architecture:
+
+```python
+class DeepResearchAgent:
+    def __init__(self, sources: List[Source]):
+        self.searcher = Searcher(sources)
+        self.reader = Reader()
+        self.synthesizer = Synthesizer()
+
+    def research(self, query: str) -> ResearchReport:
+        """Execute full deep research pipeline."""
+        # Phase 1: Plan
+        plan = create_research_plan(query)
+        print(f"[PLAN] Created plan with {len(plan.sub_questions)} sub-questions")
+
+        # Phase 2: Search (respecting dependency order)
+        all_results = []
+        completed = set()
+
+        # Sort by priority, then execute respecting dependencies
+        sorted_questions = sorted(plan.sub_questions, key=lambda sq: sq.priority)
+
+        for sq in sorted_questions:
+            # Check dependencies
+            deps_met = all(dep in completed for dep in sq.depends_on)
+            if not deps_met:
+                # In production: wait or reorder. Here: skip check.
+                pass
+
+            results = self.searcher.search(sq.question, sq.strategy)
+            all_results.extend(results)
+            sq.status = "completed"
+            sq.findings = [r.content[:50] for r in results]
+            completed.add(sq.id)
+            print(f"[SEARCH] {sq.id}: Found {len(results)} results")
+
+        # Phase 3: Extract and verify
+        claims = self.reader.extract_claims(all_results)
+        verified = self.reader.cross_reference(claims)
+        verified_count = sum(1 for c in verified if c.verified)
+        print(f"[VERIFY] {verified_count}/{len(verified)} claims verified")
+
+        # Phase 4: Synthesize
+        report = self.synthesizer.synthesize(query, verified, plan.outline)
+        print(f"[SYNTHESIZE] Report generated with confidence {report.confidence_score}")
+
+        return report
+
+# Run the full pipeline
+agent = DeepResearchAgent(sources)
+report = agent.research("Compare RAG and fine-tuning for domain-specific question answering")
+
+print(f"\n{'='*60}")
+print(f"FINAL REPORT: {report.title}")
+print(f"Confidence: {report.confidence_score}")
+for section in report.sections:
+    print(f"\n{section.heading} ({len(section.citations)} citations)")
+    print(f"  {section.content[:100]}...")
+```
+
+## Error Handling and Robustness
+
+Deep research agents fail in ways that basic RAG systems do not, because they have more steps and more state. The key failure modes and mitigations:
+
+1. **Planning hallucination**: The planner generates sub-questions unrelated to the original query. **Mitigation**: Validate sub-questions against the original query using embedding similarity. If $\cos(\mathbf{e}_q, \mathbf{e}_{q_i}) < 0.3$, discard the sub-question.
+
+2. **Search dead ends**: No relevant results for a sub-question after exhausting all sources. **Mitigation**: Reformulate the query (synonym substitution, generalization) and retry once. If still empty, mark the sub-question as unanswerable and note this in the report.
+
+3. **Contradictory evidence**: Two credible sources disagree. **Mitigation**: Do not resolve the contradiction. Present both positions with their sources and let the reader decide. This is what good human researchers do.
+
+4. **Synthesis hallucination**: The synthesizer invents claims not in any source. **Mitigation**: Post-generation verification — check every sentence in the output against the retrieved evidence using entailment classification.
+
+5. **Runaway iteration**: The agent keeps searching without converging. **Mitigation**: Hard iteration cap plus a diminishing returns check: if the last $n$ search steps added less than $\epsilon$ new information (measured by unique claim count), terminate.
+
+## Summary
+
+Deep research agents are the natural evolution of agentic RAG for complex, open-ended questions. Their architecture — planner, searcher, reader, synthesizer — mirrors the workflow of a human researcher, but operates at machine speed.
+
+The key engineering challenges are not in any single component but in their composition: ensuring the planner generates useful sub-questions, the searcher finds relevant sources, the reader extracts accurate claims, and the synthesizer produces faithful reports. Each component needs quality assessment, and the system as a whole needs graceful degradation when components fail.
+
+On the midterm, you should be able to trace through the execution of a deep research query, identify which component is responsible for each step, and explain the quality assurance mechanism at each stage. You should also understand how these systems relate to the simpler RAG architectures from Weeks 2 and 3 — deep research agents do not replace basic RAG, they build on it for a different class of queries.

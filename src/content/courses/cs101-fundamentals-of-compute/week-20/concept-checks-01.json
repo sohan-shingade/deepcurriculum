@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "AMD EPYC Genoa uses 12 Core Complex Dies (CCDs) at TSMC 5nm and one I/O Die (IOD) at TSMC 6nm. What is the primary yield advantage of this chiplet approach over a monolithic 96-core die?",
+      "options": [
+        "The chiplets run at a higher clock frequency because they are smaller",
+        "Smaller dies have exponentially higher yield (fewer defects per die), and defective CCDs can be disabled to create lower-core-count SKUs with zero waste",
+        "The chiplets use less total silicon area than a monolithic die",
+        "The 6nm IOD is cheaper because it uses an older process node"
+      ],
+      "correct": 1,
+      "explanation": "Yield follows a negative binomial model: $Y = (1 + AD/\\alpha)^{-\\alpha}$ where $A$ is die area and $D$ is defect density. Because yield decreases super-linearly with area, a small ~70 mm$^2$ CCD has much higher yield than a hypothetical ~700 mm$^2$ monolithic die. AMD states that four smaller dies cost less than 60% of one equivalent large die. Additionally, defective CCDs are not wasted -- they become lower-core-count SKUs (e.g., a processor with 4 working CCDs ships as a 32-core part). The different process nodes for CCD (5nm for logic density) and IOD (6nm for analog/I/O) is a secondary advantage -- each can be optimized independently. The chiplets do NOT necessarily use less total silicon; the total area may be similar, but the yield advantage makes the total cost much lower."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Processing-in-Memory (PIM) places simple compute units inside DRAM banks. For which of these workloads would PIM provide the LEAST benefit?",
+      "options": [
+        "Scanning a database table to count rows matching a filter condition",
+        "Dense matrix multiplication (GEMM) with high arithmetic intensity",
+        "Searching genomic data for pattern matches across a large dataset",
+        "Element-wise addition of two large arrays that do not fit in cache"
+      ],
+      "correct": 1,
+      "explanation": "PIM excels at memory-bandwidth-bound workloads where the processor spends most of its time waiting for data from DRAM. Database scans, genomic pattern matching, and element-wise array operations are all memory-bound: they perform very few operations per byte of data loaded. Dense matrix multiplication (GEMM), by contrast, is compute-bound with high arithmetic intensity -- a well-tiled GEMM achieves $O(n)$ operations per byte of data transferred from main memory. For GEMM, the bottleneck is ALU throughput, not memory bandwidth. GPUs and TPUs with their massive ALU arrays are the right hardware for GEMM. PIM's simple compute units (element-wise add/multiply) cannot match the throughput of a GPU's thousands of CUDA cores for compute-intensive operations."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Google Sycamore demonstrated 'quantum supremacy' with 53 qubits in 2019. To run Shor's algorithm for breaking a 2048-bit RSA key, approximately how many physical qubits are needed, and why?",
+      "options": [
+        "About 2,048 qubits -- one per bit of the RSA key",
+        "About 4,000 qubits -- the algorithm needs ~2n logical qubits for an n-bit key",
+        "About 4 million to 40 million qubits -- Shor's needs ~4,000 logical qubits, and each logical qubit requires 1,000-10,000 physical qubits for error correction",
+        "About 53 qubits -- the same as Sycamore, since quantum computers scale exponentially"
+      ],
+      "correct": 2,
+      "explanation": "Shor's algorithm for a 2048-bit RSA key requires approximately 4,000 logical qubits (roughly 2n qubits for an n-bit key, with ancilla qubits for modular arithmetic). The critical issue is that current qubits are noisy -- they decohere and accumulate errors. To build reliable logical qubits from noisy physical qubits, quantum error correction codes (like the surface code) are needed, and these require 1,000-10,000 physical qubits per logical qubit (depending on the error rate of the physical qubits). So 4,000 logical qubits $\\times$ 1,000-10,000 physical per logical = 4 million to 40 million physical qubits. Current state-of-the-art is ~1,000 physical qubits (IBM Condor), a gap of 3-4 orders of magnitude. This is why honest assessments place fault-tolerant quantum computing at 10-20 years out."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "NIST has standardized CRYSTALS-Kyber (ML-KEM) as a post-quantum key exchange algorithm. Why must trading firms begin planning migration to post-quantum cryptography now, even though fault-tolerant quantum computers are 10-20 years away?",
+      "options": [
+        "Post-quantum algorithms are faster than RSA, so firms should switch for performance",
+        "Regulations require immediate migration to post-quantum cryptography",
+        "The 'harvest now, decrypt later' threat: adversaries can intercept encrypted data today and decrypt it when quantum computers exist, compromising long-lived secrets",
+        "Quantum computers already exist that can break RSA-2048"
+      ],
+      "correct": 2,
+      "explanation": "The 'harvest now, decrypt later' (HNDL) attack model is the practical concern. An adversary (state-sponsored or otherwise) can intercept encrypted communications today -- trading algorithms, M&A negotiations, customer data -- and store them. When fault-tolerant quantum computers become available in 10-20 years, Shor's algorithm can break the RSA/ECDH encryption used to protect that data. For information with long-term sensitivity (strategic trading algorithms, proprietary financial data, personally identifiable information), this is a real risk. Post-quantum algorithms are actually slower than RSA (2-10x for key exchange, 5-50x for signatures), so performance is NOT a reason to switch. No regulations currently mandate migration, though NIST guidance recommends planning. And no existing quantum computer can break RSA-2048 -- that requires millions of physical qubits, not thousands."
+    }
+  ]
+}

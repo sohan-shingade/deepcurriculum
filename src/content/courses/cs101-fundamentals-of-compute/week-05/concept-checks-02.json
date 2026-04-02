@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "In RISC-V, register x0 (zero) is hardwired to always read as 0. Which of the following pseudo-instructions does NOT correctly use x0 to synthesize its operation?",
+      "options": [
+        "NOP -> ADDI x0, x0, 0 (write zero to the zero register, effectively doing nothing)",
+        "MV rd, rs -> ADDI rd, rs, 0 (copy rs by adding 0)",
+        "NEG rd, rs -> SUB rd, x0, rs (compute 0 - rs = -rs)",
+        "NOT rd, rs -> AND rd, rs, x0 (AND with zero to invert bits)"
+      ],
+      "correct": 3,
+      "explanation": "AND with zero produces zero, not the bitwise complement. The correct expansion for NOT is XORI rd, rs, -1, which XORs every bit with 1 (since -1 in two's complement is all ones). All other options are correct: NOP writes 0+0 to x0 (discarded), MV copies by adding 0, and NEG subtracts from zero. The zero register makes these expansions possible, eliminating the need for dedicated NOP, MOV, and NEG instructions."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "When translating the C statement 'if (a == b) { x = 1; }' to RISC-V assembly, the branch instruction tests the OPPOSITE condition. Why?",
+      "options": [
+        "RISC-V does not have a BEQ instruction, so we must use BNE",
+        "The branch instruction skips past the then-block when the condition is false, so we branch on 'not equal' to jump over the code that executes when they ARE equal",
+        "It is a compiler convention to improve branch prediction accuracy",
+        "The hardware can only evaluate inequality, not equality"
+      ],
+      "correct": 1,
+      "explanation": "In assembly, control flow works by falling through to the next instruction or branching to skip code. For 'if (a == b) { x = 1; }', we want to execute 'x = 1' when a equals b, which means falling through. We want to SKIP 'x = 1' when a does NOT equal b, which means branching. So the assembly uses BNE (branch if not equal) to jump past the then-block. This inversion is universal in assembly programming: the branch guard tests the negation of the high-level condition. RISC-V does have BEQ; the issue is about control flow structure, not instruction availability."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In the recursive factorial example, we save register s0 to the stack even though s0 is a callee-saved register. Why must the factorial function save s0?",
+      "options": [
+        "Because s0 is caller-saved and the caller expects it to be preserved",
+        "Because factorial uses s0 to hold 'n' across the recursive call, and the recursive call (which is also factorial) will also modify s0 — each call level must preserve its own copy",
+        "Because the hardware requires all registers to be saved before any function call",
+        "Because s0 serves as the frame pointer and must always be saved"
+      ],
+      "correct": 1,
+      "explanation": "The key insight is that factorial calls itself recursively. Each invocation stores its own value of n in s0. Without saving s0, the recursive call factorial(n-1) would overwrite s0 with n-1, and when we return, the original n would be lost. By saving s0 to the stack in the prologue and restoring it in the epilogue, each recursion level maintains its own copy of n on the stack. This is the fundamental mechanism that makes recursion work: the stack provides per-invocation storage. s0 IS callee-saved (not caller-saved), meaning factorial promises to preserve it — but factorial itself uses it, so it must save the old value before overwriting."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "During the linking stage of compilation, a reference to 'printf' in your object file is resolved. What does the linker actually do?",
+      "options": [
+        "Compile the printf source code from scratch and insert it",
+        "Replace the symbolic reference 'printf' with the actual memory address of the printf implementation from the C standard library, adjusting the jump target in your code",
+        "Convert the printf call to inline assembly that directly performs I/O",
+        "Add a runtime interpreter that handles printf calls dynamically"
+      ],
+      "correct": 1,
+      "explanation": "The linker performs symbol resolution: it finds the definition of printf in the C standard library (libc.a or libc.so), determines what memory address printf will occupy in the final executable, and patches the call instruction in your code to jump to that address. This is called relocation — adjusting addresses to reflect the final memory layout. The linker does NOT recompile anything; it works with already-assembled object files. For dynamically linked executables, the actual address resolution may be deferred to runtime (lazy binding), but the linker still sets up the mechanism (PLT/GOT entries) that will resolve the address."
+    }
+  ]
+}

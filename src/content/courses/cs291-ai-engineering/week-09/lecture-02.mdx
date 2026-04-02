@@ -1,0 +1,619 @@
+---
+title: "AI System Design Framework"
+week: 9
+lecture: 2
+estimatedMinutes: 65
+---
+
+# AI System Design Framework
+
+In Lecture 1 we dissected five production AI systems and observed recurring patterns: retrieval-augmented generation as a universal component, latency budgets as architectural constraints, continuous evaluation, and multi-model routing. Now we formalize those observations into a systematic framework — a repeatable methodology for designing AI systems from requirements through architecture through deployment.
+
+Think of this as a system design interview framework, but for AI. In a traditional system design interview, you walk through requirements, API design, data model, scaling, and tradeoffs. AI system design adds new dimensions: model selection, prompt engineering, retrieval strategy, evaluation methodology, and the fundamental uncertainty of working with stochastic components. This lecture gives you a six-step framework, then walks through three complete designs to show how the framework operates in practice.
+
+---
+
+## The Six-Step Framework
+
+### Step 1: Requirements Analysis
+
+Every design starts with requirements. In AI systems, we split these into three categories:
+
+**Functional requirements**: What the system must do. "Given a user query and a knowledge base, produce a grounded answer with citations." Be specific. "Answer questions" is not a requirement — it is a wish.
+
+**Non-functional requirements**: The constraints on how the system does it. These are the four constraints that matter most for AI systems:
+
+- **Latency**: What is the acceptable time from request to response? This single number eliminates or enables entire architectural choices. Under 200ms, you need a small model. Under 2 seconds, you can afford a single LLM call with moderate context. Under 10 seconds, you can afford retrieval + synthesis. Over 10 seconds, you are in batch territory.
+- **Throughput**: How many requests per second must the system handle? This determines whether you need model serving infrastructure, batching, queuing, or can get away with direct API calls.
+- **Cost**: What is the per-request cost budget? At \$0.001 per request, you can afford a small model with minimal context. At \$0.01, you can afford a large model with retrieval. At \$0.10, you can afford multi-step agent workflows.
+- **Quality**: What is the minimum acceptable quality? Define this quantitatively. "Good enough" is not a quality metric. "95% factual accuracy as measured by human evaluation on a test set of 500 queries" is.
+
+**Quality metrics**: Define exactly how you will measure success. For every AI system, you need at minimum: (1) a primary quality metric tied to user value, (2) a safety/compliance metric, and (3) a cost metric. Example:
+
+$$\text{System Score} = w_1 \cdot \text{Accuracy} + w_2 \cdot \text{Safety} - w_3 \cdot \text{CostPerQuery}$$
+
+where the weights $w_1, w_2, w_3$ reflect business priorities.
+
+```python
+# Requirements specification as structured data
+from dataclasses import dataclass, field
+
+@dataclass
+class LatencyRequirement:
+    p50_ms: int
+    p99_ms: int
+    time_to_first_token_ms: int = 0  # For streaming responses
+
+@dataclass
+class QualityMetric:
+    name: str
+    target: float
+    measurement_method: str
+
+@dataclass
+class SystemRequirements:
+    """Structured requirements for an AI system."""
+    # Functional
+    description: str
+    input_types: list
+    output_types: list
+    capabilities: list
+
+    # Non-functional
+    latency: LatencyRequirement
+    throughput_rps: float
+    cost_per_request_usd: float
+    availability_target: float  # e.g., 0.999
+
+    # Quality
+    quality_metrics: list
+    safety_requirements: list
+
+    def validate(self) -> list:
+        """Check for common requirement conflicts."""
+        issues = []
+        if self.latency.p50_ms < 200 and self.cost_per_request_usd > 0.01:
+            issues.append("Low latency + high cost budget suggests model routing needed")
+        if self.throughput_rps > 100 and self.cost_per_request_usd > 0.05:
+            issues.append(f"At {self.throughput_rps} RPS and ${self.cost_per_request_usd}/req, "
+                         f"daily cost would be ${self.throughput_rps * 86400 * self.cost_per_request_usd:,.0f}")
+        if self.latency.p50_ms < 500 and any("retrieval" in c.lower() for c in self.capabilities):
+            issues.append("Sub-500ms latency with retrieval requires pre-computed indices")
+        return issues
+
+# Example: RAG customer support system
+reqs = SystemRequirements(
+    description="AI-powered customer support system with RAG",
+    input_types=["text_query", "conversation_history", "user_context"],
+    output_types=["text_response", "citations", "confidence_score"],
+    capabilities=["knowledge_base_retrieval", "multi_turn_conversation", "escalation_detection"],
+    latency=LatencyRequirement(p50_ms=1500, p99_ms=4000, time_to_first_token_ms=500),
+    throughput_rps=50.0,
+    cost_per_request_usd=0.02,
+    availability_target=0.999,
+    quality_metrics=[
+        QualityMetric("answer_accuracy", 0.92, "human_eval_weekly_sample"),
+        QualityMetric("citation_precision", 0.95, "automated_source_verification"),
+        QualityMetric("user_satisfaction", 4.2, "post_interaction_survey_1_to_5"),
+    ],
+    safety_requirements=["no_hallucinated_policies", "pii_redaction", "escalation_on_legal_topics"],
+)
+
+issues = reqs.validate()
+print(f"Requirements: {reqs.description}")
+print(f"Latency: p50={reqs.latency.p50_ms}ms, p99={reqs.latency.p99_ms}ms")
+print(f"Throughput: {reqs.throughput_rps} RPS")
+print(f"Quality metrics: {len(reqs.quality_metrics)}")
+print(f"Potential issues: {issues}")
+```
+
+<ConceptCheck id="cc-1" />
+
+### Step 2: Component Identification
+
+With requirements defined, identify the AI and infrastructure components needed. This is where pattern recognition from studying existing systems pays off. The common components:
+
+| Component | When to Use | Latency Impact |
+|-----------|------------|----------------|
+| LLM (large) | Complex reasoning, generation | 500-5000ms |
+| LLM (small/distilled) | Classification, routing, simple generation | 50-200ms |
+| Embedding model | Semantic search, similarity | 10-50ms per batch |
+| Vector database | Retrieval over large corpora | 10-100ms per query |
+| Cache (semantic) | Repeated/similar queries | 1-5ms |
+| Cache (exact) | Identical queries | <1ms |
+| Queue | Async processing, batch jobs | N/A (decouples) |
+| Reranker | Improving retrieval precision | 50-200ms |
+| Guardrail classifier | Safety, compliance checking | 20-100ms |
+
+The key decision is not which components to include — it is which components to **exclude**. Every component adds latency, cost, and operational complexity. If your latency budget is 500ms and you need an LLM call (300ms) + retrieval (50ms) + reranking (100ms), you have consumed your budget. Adding a guardrail classifier means removing the reranker or accepting slower p99.
+
+### Step 3: Data Flow Design
+
+Data flow is the backbone of the system. Map every path from user input to system output. For AI systems, there are three canonical data flow patterns:
+
+**Pattern 1: Single-pass.** User query → context assembly → single LLM call → response. Simplest, fastest, cheapest. Use when the task is straightforward and the context is small or pre-assembled.
+
+**Pattern 2: Retrieve-then-generate.** User query → retrieval → reranking → context assembly → LLM call → response. The standard RAG pattern. Use when the system needs external knowledge.
+
+**Pattern 3: Agent loop.** User query → planning LLM call → [tool call → observation → reasoning → tool call → ...]* → final response. Most flexible, most expensive, most unpredictable latency. Use when the task requires multiple steps or tool use.
+
+For each pattern, specify whether the response is streamed or batched. Streaming (sending tokens as they are generated) dramatically improves perceived latency — a response that starts appearing in 300ms but takes 3 seconds to complete feels much faster than a response that appears all at once after 3 seconds.
+
+```python
+# Data flow specification
+from dataclasses import dataclass
+
+@dataclass
+class DataFlowStep:
+    name: str
+    component: str
+    input_type: str
+    output_type: str
+    latency_ms: int
+    is_parallel: bool = False
+
+@dataclass
+class DataFlow:
+    name: str
+    steps: list
+    streaming: bool = False
+
+    def total_latency_ms(self) -> int:
+        """Calculate total latency accounting for parallelism."""
+        sequential_latency = 0
+        parallel_group = []
+        for step in self.steps:
+            if step.is_parallel:
+                parallel_group.append(step.latency_ms)
+            else:
+                if parallel_group:
+                    sequential_latency += max(parallel_group)
+                    parallel_group = []
+                sequential_latency += step.latency_ms
+        if parallel_group:
+            sequential_latency += max(parallel_group)
+        return sequential_latency
+
+    def total_cost_estimate(self, cost_per_llm_call=0.005, cost_per_retrieval=0.0001) -> float:
+        """Rough cost estimate per request."""
+        cost = 0.0
+        for step in self.steps:
+            if "llm" in step.component.lower():
+                cost += cost_per_llm_call
+            elif "retriev" in step.component.lower() or "vector" in step.component.lower():
+                cost += cost_per_retrieval
+        return cost
+
+# RAG Customer Support data flow
+rag_flow = DataFlow(
+    name="RAG Customer Support",
+    streaming=True,
+    steps=[
+        DataFlowStep("parse_query", "Query Parser", "raw_text", "parsed_query", 20),
+        DataFlowStep("classify_intent", "Small LLM", "parsed_query", "intent", 80),
+        DataFlowStep("embed_query", "Embedding Model", "parsed_query", "embedding", 30, is_parallel=True),
+        DataFlowStep("check_cache", "Semantic Cache", "embedding", "cached_response|miss", 5, is_parallel=True),
+        DataFlowStep("retrieve_docs", "Vector DB", "embedding", "candidate_docs", 40),
+        DataFlowStep("rerank", "Reranker", "candidate_docs", "ranked_docs", 100),
+        DataFlowStep("generate", "Large LLM", "ranked_docs+query", "response", 1200),
+        DataFlowStep("guardrail", "Safety Classifier", "response", "checked_response", 60),
+    ]
+)
+
+print(f"Flow: {rag_flow.name}")
+print(f"Total estimated latency: {rag_flow.total_latency_ms()}ms")
+print(f"Estimated cost per request: ${rag_flow.total_cost_estimate():.4f}")
+print(f"Streaming: {rag_flow.streaming}")
+print(f"\nStep breakdown:")
+for step in rag_flow.steps:
+    parallel_tag = " [PARALLEL]" if step.is_parallel else ""
+    print(f"  {step.name}: {step.latency_ms}ms ({step.component}){parallel_tag}")
+```
+
+### Step 4: API Design
+
+Design the external and internal APIs. For AI systems, the API design must handle:
+
+**Request schemas**: Include the query, conversation history, user context, and configuration parameters (temperature, model preference, streaming flag). Version the schema from day one.
+
+**Response schemas**: Include the generated content, confidence scores, source citations, token usage, and latency metadata. Always return metadata — you will need it for debugging and evaluation.
+
+**Streaming**: Design the streaming protocol. Server-Sent Events (SSE) is the standard for text generation streaming. Each event contains a chunk of the response plus metadata.
+
+**Versioning**: AI systems evolve rapidly. Version the API so you can change models, prompts, and retrieval strategies without breaking clients. Use header-based versioning (`X-API-Version: 2024-01`) rather than path-based versioning.
+
+### Step 5: Storage Design
+
+AI systems have distinct storage needs that differ from traditional applications:
+
+**Vector store**: For retrieval. Key decisions: embedding dimension, distance metric (cosine vs. L2 vs. inner product), index type (HNSW for speed, IVF for scale), and update strategy (real-time vs. batch).
+
+**Conversation store**: For multi-turn systems. Store the full conversation history with timestamps, model responses, tool calls, and metadata. This is both a product feature (users see history) and an evaluation asset.
+
+**Cache layers**: Two types. Exact-match cache for identical queries (cheap, simple, high hit rate for FAQ-style traffic). Semantic cache for similar queries (more complex, lower hit rate, but handles paraphrases).
+
+**Evaluation data store**: Store every request-response pair with metadata sufficient to reconstruct and re-evaluate. This is the most important storage decision you will make. Without evaluation data, you are flying blind.
+
+<ConceptCheck id="cc-2" />
+
+### Step 6: Evaluation Strategy
+
+The evaluation strategy is not the last step in priority — it is the last step in the framework because it depends on all previous decisions. But it is arguably the most important step.
+
+Define three levels of evaluation:
+
+**Level 1: Offline evaluation.** A fixed test set of (input, expected output) pairs evaluated on every model/prompt change. This catches regressions. Target: run in under 10 minutes, catch 80% of quality issues.
+
+**Level 2: Online evaluation.** Real-time metrics computed on production traffic. Includes: latency percentiles, error rates, user feedback signals (thumbs up/down, regeneration rate), and automated quality checks (hallucination detection, citation verification).
+
+**Level 3: Periodic human evaluation.** Weekly or bi-weekly human evaluation of a random sample of production responses. This is the ground truth. Automated metrics can drift; human evaluation is the anchor.
+
+The evaluation strategy must also define **quality gates** — thresholds that must be met before a change can ship:
+
+$$\text{Deploy if: } \text{Accuracy}_{\text{new}} \geq \text{Accuracy}_{\text{current}} - \epsilon \text{ AND } \text{Latency}_{\text{p99,new}} \leq \text{Latency}_{\text{p99,current}} \cdot (1 + \delta)$$
+
+where $\epsilon$ is the acceptable quality regression (typically 1-2%) and $\delta$ is the acceptable latency increase (typically 10-20%).
+
+---
+
+## Design Walkthrough 1: RAG Customer Support System
+
+Let us apply the framework to a complete design. The scenario: a SaaS company with 10,000 customers wants an AI-powered support system that handles Tier 1 queries automatically and escalates complex issues to human agents.
+
+### Requirements
+
+- **Functional**: Accept customer queries (text), retrieve relevant documentation, generate grounded responses, detect when escalation is needed, maintain conversation history.
+- **Latency**: p50 = 1.5s, p99 = 4s, time-to-first-token = 500ms (streaming).
+- **Throughput**: 50 RPS peak (5 RPS average).
+- **Cost**: \$0.02 per request (\$86k/year at average throughput).
+- **Quality**: 92% answer accuracy, 95% citation precision, <2% hallucination rate.
+- **Safety**: No hallucinated policies, PII redaction, escalation on legal/financial topics.
+
+### Component Architecture
+
+```
+User Query
+    │
+    ├─► Intent Classifier (small LLM, 80ms)
+    │       │
+    │       ├─► [billing/technical/account/general]
+    │       └─► [escalation_needed → Human Agent Queue]
+    │
+    ├─► Query Embedding (embedding model, 30ms, parallel with classifier)
+    │       │
+    │       ├─► Semantic Cache Check (5ms)
+    │       │       └─► [cache hit → return cached response]
+    │       │
+    │       └─► Vector Retrieval (40ms)
+    │               │
+    │               └─► Cross-Encoder Reranker (100ms)
+    │                       │
+    │                       └─► Top-5 passages
+    │
+    └─► Context Assembly
+            │
+            └─► LLM Generation (1200ms, streaming)
+                    │
+                    └─► Output Guardrail (60ms, parallel with streaming)
+                            │
+                            └─► Response + Citations
+```
+
+### Key Design Decisions
+
+1. **Intent classification before retrieval**: The intent determines which knowledge base partition to search, improving retrieval precision.
+2. **Semantic cache**: Support queries are highly repetitive. A semantic cache with 0.95 similarity threshold can serve 30-40% of queries without an LLM call.
+3. **Cross-encoder reranker**: Worth the 100ms because it dramatically improves citation precision — the difference between citing the right policy and citing a related-but-wrong policy.
+4. **Streaming with parallel guardrail**: Start streaming tokens to the user while the guardrail classifier checks the full response in parallel. If the guardrail flags an issue, truncate the stream and substitute a safe response.
+
+### Tradeoffs
+
+| Decision | Benefit | Cost |
+|----------|---------|------|
+| Semantic cache | 30-40% requests at <10ms | Stale answers if knowledge base changes |
+| Cross-encoder reranker | +15% citation precision | +100ms latency |
+| Parallel guardrail | No latency cost for safety | Must handle mid-stream interruption |
+| Intent-based routing | Better retrieval precision | More complex pipeline, intent errors cascade |
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## Design Walkthrough 2: Code Review Agent
+
+Scenario: a development platform wants an AI code review system that provides feedback on pull requests, checking for security vulnerabilities, style violations, and logic errors.
+
+### Requirements
+
+- **Functional**: Analyze pull request diffs, identify issues across security/style/logic categories, generate actionable review comments with code suggestions, prioritize findings.
+- **Latency**: 30-120 seconds total (batch process, not real-time). Background job triggered on PR creation.
+- **Throughput**: 10 reviews per minute peak.
+- **Cost**: \$0.10-0.50 per review (justified by engineering time saved).
+- **Quality**: 85% precision on identified issues (false positives are costly — developers hate noisy reviewers), 60% recall.
+
+### Multi-Agent Architecture
+
+This is a coordinator-specialist multi-agent design:
+
+**Coordinator Agent**: Receives the full PR diff, generates a review plan, dispatches work to specialist agents, aggregates results, resolves conflicts, and produces the final review.
+
+**Security Reviewer**: Specialized in identifying security vulnerabilities — SQL injection, XSS, hardcoded secrets, insecure deserialization, authentication bypasses. Uses a security-focused system prompt with common vulnerability patterns and the OWASP Top 10.
+
+**Style Reviewer**: Checks code style, naming conventions, documentation completeness, and adherence to project-specific style guides. Lighter-weight model since style checks are less complex.
+
+**Logic Reviewer**: Analyzes algorithmic correctness, edge cases, error handling, race conditions, and performance issues. The most demanding reviewer — needs strong reasoning capabilities.
+
+```python
+# Multi-agent code review architecture
+from dataclasses import dataclass
+
+@dataclass
+class ReviewFinding:
+    category: str  # "security", "style", "logic"
+    severity: str  # "critical", "warning", "suggestion"
+    file_path: str
+    line_range: tuple
+    description: str
+    suggestion: str
+
+@dataclass
+class ReviewPlan:
+    files_to_review: list
+    security_focus_files: list  # Files touching auth, DB, user input
+    style_focus_files: list     # All modified files
+    logic_focus_files: list     # Files with complex changes
+
+def create_review_plan(changed_files: list) -> ReviewPlan:
+    """Coordinator creates a review plan based on changed files."""
+    security_patterns = ["auth", "login", "password", "sql", "query", "api", "token", "session"]
+    logic_patterns = ["algorithm", "compute", "process", "calculate", "handler", "service"]
+
+    security_files = [f for f in changed_files
+                      if any(p in f.lower() for p in security_patterns)]
+    logic_files = [f for f in changed_files
+                   if any(p in f.lower() for p in logic_patterns)]
+
+    return ReviewPlan(
+        files_to_review=changed_files,
+        security_focus_files=security_files or changed_files[:3],
+        style_focus_files=changed_files,
+        logic_focus_files=logic_files or changed_files[:3],
+    )
+
+def aggregate_findings(all_findings: list) -> list:
+    """Coordinator aggregates and deduplicates findings from specialists."""
+    # Sort by severity (critical first)
+    severity_order = {"critical": 0, "warning": 1, "suggestion": 2}
+    sorted_findings = sorted(all_findings, key=lambda f: severity_order.get(f.severity, 3))
+
+    # Deduplicate: if two reviewers flag the same line range, keep the higher severity
+    deduplicated = []
+    seen_ranges = set()
+    for finding in sorted_findings:
+        key = (finding.file_path, finding.line_range)
+        if key not in seen_ranges:
+            seen_ranges.add(key)
+            deduplicated.append(finding)
+
+    return deduplicated
+
+# Example execution
+changed_files = [
+    "src/auth/login_handler.py",
+    "src/api/user_endpoint.py",
+    "src/utils/string_helpers.py",
+    "src/services/payment_processor.py",
+    "tests/test_login.py",
+]
+
+plan = create_review_plan(changed_files)
+print(f"Total files to review: {len(plan.files_to_review)}")
+print(f"Security focus: {plan.security_focus_files}")
+print(f"Logic focus: {plan.logic_focus_files}")
+
+# Simulated findings from specialists
+findings = [
+    ReviewFinding("security", "critical", "src/auth/login_handler.py", (45, 52),
+                  "SQL query constructed with string concatenation — vulnerable to injection",
+                  "Use parameterized queries with cursor.execute(query, params)"),
+    ReviewFinding("security", "warning", "src/api/user_endpoint.py", (23, 25),
+                  "API endpoint missing rate limiting",
+                  "Add @rate_limit(max_requests=100, window_seconds=60) decorator"),
+    ReviewFinding("style", "suggestion", "src/utils/string_helpers.py", (10, 15),
+                  "Function 'proc' has unclear naming",
+                  "Rename to 'process_template_string' for clarity"),
+    ReviewFinding("logic", "warning", "src/services/payment_processor.py", (78, 85),
+                  "Missing error handling for payment gateway timeout",
+                  "Wrap gateway call in try/except with retry logic"),
+    ReviewFinding("logic", "critical", "src/services/payment_processor.py", (78, 85),
+                  "Race condition: balance check and deduction are not atomic",
+                  "Use database transaction with SELECT FOR UPDATE"),
+]
+
+final_review = aggregate_findings(findings)
+print(f"\nFinal review: {len(final_review)} findings")
+for f in final_review:
+    print(f"  [{f.severity.upper()}] {f.category}: {f.file_path}:{f.line_range[0]} - {f.description[:60]}...")
+```
+
+### Key Design Decisions
+
+1. **Specialist agents over a single agent**: A single agent reviewing for security, style, and logic simultaneously performs worse than specialists because the system prompt is unfocused. Specialists have domain-specific instructions and few-shot examples.
+2. **Coordinator aggregation**: The coordinator resolves conflicts (e.g., the style reviewer suggests one approach, the logic reviewer suggests another) and deduplicates findings. This is essential for a usable review.
+3. **Parallel execution**: The three specialist agents run in parallel, so the total latency is the maximum of the three, not the sum. For a 10-file PR, each specialist takes 15-30 seconds, giving a total of 30-60 seconds.
+4. **High precision over high recall**: We target 85% precision and accept 60% recall. A code reviewer that flags 100 issues, 40 of which are false positives, will be ignored by developers. A reviewer that flags 20 issues, 17 of which are real, will be trusted.
+
+---
+
+## Design Walkthrough 3: Content Moderation Pipeline
+
+Scenario: a social media platform needs to moderate user-generated content (text posts, comments) for policy violations including hate speech, harassment, spam, misinformation, and self-harm content.
+
+### Requirements
+
+- **Functional**: Classify content against a policy taxonomy, provide moderation decisions (approve/flag/remove), generate explanations for moderators, support appeals.
+- **Latency**: p50 = 200ms, p99 = 1s. Content must be moderated before it becomes visible to other users.
+- **Throughput**: 10,000 posts per second peak. This is the hard constraint.
+- **Cost**: \$0.0005 per moderation decision (at 10K RPS, that is \$432K/day — content moderation is expensive at scale).
+- **Quality**: 99.5% accuracy on clear violations, <0.1% false positive rate on benign content. Asymmetric: removing innocent content is worse than briefly displaying borderline content.
+
+### Three-Tier Architecture
+
+The key insight is that most content is benign. You do not need an expensive LLM call for "Great photo!" — you need it for "This post is borderline and requires contextual judgment." The architecture uses three tiers of increasing cost and capability:
+
+**Tier 1: Fast Classifier (handles ~85% of traffic).** A fine-tuned small model (or even a traditional ML classifier) that makes binary approve/escalate decisions in <50ms. This handles the easy cases: clearly benign content and obvious violations. Cost: <\$0.0001 per decision.
+
+**Tier 2: LLM Reviewer (handles ~12% of traffic).** Borderline content from Tier 1 goes to a medium-sized LLM with the full content policy in its system prompt. This model outputs a structured decision with a confidence score and explanation. Cost: ~\$0.002 per decision.
+
+**Tier 3: Human Moderator (handles ~3% of traffic).** Content that the LLM reviewer is uncertain about, or that involves policy areas requiring human judgment (satire vs. hate speech, newsworthy violence, complex cultural context), goes to human moderators. The LLM provides a pre-analysis to speed up human review. Cost: ~\$0.05 per decision.
+
+```python
+# Content moderation pipeline with tiered architecture
+from dataclasses import dataclass
+
+@dataclass
+class ModerationResult:
+    content_id: str
+    tier_decided: int
+    decision: str  # "approve", "flag", "remove"
+    confidence: float
+    policy_violations: list
+    explanation: str
+
+def tier1_fast_classify(content: str) -> tuple:
+    """Fast classifier: keyword + pattern matching + small model.
+    Returns (decision, confidence).
+    """
+    content_lower = content.lower()
+
+    # Obvious violations (simplified - real system uses trained classifier)
+    severe_patterns = ["kill yourself", "bomb threat", "child exploitation"]
+    for pattern in severe_patterns:
+        if pattern in content_lower:
+            return "remove", 0.99, ["severe_violation"]
+
+    # Obvious approvals
+    if len(content_lower.split()) < 5 and not any(c in content_lower for c in ["hate", "die", "kill", "threat"]):
+        return "approve", 0.95, []
+
+    # Everything else → escalate
+    return "escalate", 0.0, []
+
+def tier2_llm_review(content: str) -> tuple:
+    """LLM-based review for borderline content.
+    Simulated - real system uses structured LLM output.
+    """
+    content_lower = content.lower()
+
+    # Simulated nuanced classification
+    harassment_signals = ["stupid", "idiot", "loser", "ugly", "dumb"]
+    misinformation_signals = ["fake", "hoax", "conspiracy", "they don't want you to know"]
+
+    harassment_score = sum(1 for s in harassment_signals if s in content_lower) / len(harassment_signals)
+    misinfo_score = sum(1 for s in misinformation_signals if s in content_lower) / len(misinformation_signals)
+
+    max_score = max(harassment_score, misinfo_score)
+    violations = []
+    if harassment_score > 0.3:
+        violations.append("potential_harassment")
+    if misinfo_score > 0.3:
+        violations.append("potential_misinformation")
+
+    if max_score > 0.6:
+        return "remove", max_score, violations
+    elif max_score > 0.3:
+        return "escalate_to_human", max_score, violations
+    else:
+        return "approve", 1.0 - max_score, violations
+
+def moderate_content(content_id: str, content: str) -> ModerationResult:
+    """Full moderation pipeline."""
+    # Tier 1
+    t1_decision, t1_confidence, t1_violations = tier1_fast_classify(content)
+
+    if t1_decision != "escalate":
+        return ModerationResult(
+            content_id=content_id,
+            tier_decided=1,
+            decision=t1_decision,
+            confidence=t1_confidence,
+            policy_violations=t1_violations,
+            explanation=f"Tier 1 auto-{'approved' if t1_decision == 'approve' else 'removed'}",
+        )
+
+    # Tier 2
+    t2_decision, t2_confidence, t2_violations = tier2_llm_review(content)
+
+    if t2_decision != "escalate_to_human":
+        return ModerationResult(
+            content_id=content_id,
+            tier_decided=2,
+            decision=t2_decision,
+            confidence=t2_confidence,
+            policy_violations=t2_violations,
+            explanation=f"Tier 2 LLM review: {', '.join(t2_violations) if t2_violations else 'no violations'}",
+        )
+
+    # Tier 3 (simulated - in reality, enters human review queue)
+    return ModerationResult(
+        content_id=content_id,
+        tier_decided=3,
+        decision="pending_human_review",
+        confidence=t2_confidence,
+        policy_violations=t2_violations,
+        explanation=f"Escalated to human review. LLM pre-analysis: {', '.join(t2_violations)}",
+    )
+
+# Test the pipeline
+test_posts = [
+    ("post-1", "Great weather today!"),
+    ("post-2", "This product is a hoax, the conspiracy goes deep, they don't want you to know the truth"),
+    ("post-3", "I think that policy proposal is stupid and anyone who supports it is an idiot and a loser"),
+    ("post-4", "Here's my analysis of the economic data from Q3"),
+    ("post-5", "kill yourself"),
+]
+
+print("Content Moderation Pipeline Results:")
+print("-" * 70)
+for content_id, content in test_posts:
+    result = moderate_content(content_id, content)
+    print(f"[Tier {result.tier_decided}] {result.decision.upper():>20s} "
+          f"(conf: {result.confidence:.2f}) | {content[:50]}...")
+```
+
+### Key Design Decisions
+
+1. **Tiered architecture for cost control**: At 10K RPS, you cannot afford an LLM call for every post. The fast classifier handles 85% of traffic at 1/20th the cost, saving roughly \$350K/day compared to LLM-for-everything.
+2. **Asymmetric error handling**: False positives (removing benign content) damage user trust more than brief exposure to borderline content. The system is tuned for high precision on removal decisions, accepting lower recall that is compensated by Tier 2 and Tier 3.
+3. **LLM pre-analysis for human moderators**: Human moderators reviewing 3% of 10K RPS is still 300 decisions per second. The LLM pre-analysis (highlighting likely violations, suggesting the relevant policy section) reduces human review time by 40-60%.
+4. **Appeals path**: Users whose content is removed can appeal, which triggers a Tier 3 human review regardless of which tier made the original decision. This is both a fairness requirement and a data collection mechanism — appeal outcomes improve the Tier 1 and Tier 2 models.
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## Applying the Framework: Decision Checklist
+
+When designing a new AI system, walk through these questions in order:
+
+**Requirements**: What is the latency budget? What is the cost budget? What quality metric will you optimize? What is the minimum acceptable quality?
+
+**Components**: Which components from the standard toolkit do you need? Which can you omit? What is the critical path latency with all components?
+
+**Data flow**: Is this single-pass, retrieve-then-generate, or agent-loop? Can any steps run in parallel? Is streaming needed?
+
+**API**: What does the request/response schema look like? How will you version it? What metadata will you return?
+
+**Storage**: Do you need a vector store? What is your caching strategy? How will you store evaluation data?
+
+**Evaluation**: What is your offline test set? What online metrics will you track? How often will you do human evaluation? What are your quality gates for deployment?
+
+The framework is deliberately sequential because each step constrains the next. Your latency budget determines your components. Your components determine your data flow. Your data flow determines your API design. Skip a step and you will redesign from scratch when you hit a constraint you ignored.
+
+---
+
+## Summary
+
+The six-step framework — requirements, components, data flow, API, storage, evaluation — provides a systematic approach to AI system design. The three walkthroughs illustrate how the framework adapts to very different systems (RAG support, multi-agent review, tiered moderation) while maintaining structural consistency. The framework is not a template to fill in mechanically — it is a thinking tool that ensures you address the dimensions that matter most: latency, cost, quality, and evaluation.
+
+In this week's problem set, you will apply this framework yourself, producing structured design documents for two systems. There is no single correct answer — there are good designs and bad designs, and the difference lies in whether you have addressed the constraints, identified the tradeoffs, and planned for evaluation.

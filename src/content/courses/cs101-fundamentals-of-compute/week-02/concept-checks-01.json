@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "The IEEE 754 single-precision bit pattern is `1 10000001 01000000000000000000000`. What decimal value does this represent?",
+      "options": [
+        "-5.0",
+        "-2.5",
+        "+5.0",
+        "-1.25"
+      ],
+      "correct": 0,
+      "explanation": "Sign bit $s = 1$ (negative). Exponent $E = 10000001_2 = 129$, so true exponent $e = 129 - 127 = 2$. Mantissa bits: $01000...0$, so significand = $1.01_2 = 1 + 0.25 = 1.25$. Value = $(-1)^1 \\times 2^2 \\times 1.25 = -1 \\times 4 \\times 1.25 = -5.0$. Note the implicit leading 1 in the significand — only the fractional part (01000...) is stored."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A 32-bit ripple-carry adder has a carry propagation delay of approximately 64 gate delays. At 5 ps per gate delay (representative of a 3nm process), what is the total addition time, and can this fit in one clock cycle at 4 GHz?",
+      "options": [
+        "320 ps — yes, it fits in a 250 ps cycle",
+        "320 ps — no, it exceeds the 250 ps cycle time",
+        "64 ps — yes, it easily fits",
+        "640 ps — no, it is far too slow"
+      ],
+      "correct": 1,
+      "explanation": "A 32-bit ripple-carry adder has delay $\\approx 2 \\times 32 = 64$ gate delays (2 gate delays per full adder carry path). At 5 ps/gate: $64 \\times 5 = 320$ ps. A 4 GHz clock has a period of $1/(4 \\times 10^9) = 250$ ps. Since 320 ps > 250 ps, the ripple-carry adder is too slow for a single cycle. This is precisely why modern processors use carry-lookahead or prefix adders, which reduce the 32-bit carry delay to approximately $2\\log_2(32) + 2 = 12$ gate delays $\\approx 60$ ps — well within the cycle time."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "In Booth's multiplication algorithm, the bit pair $(Q_0, Q_{-1}) = (1, 0)$ triggers the operation $A = A - M$. What is the physical meaning of this action?",
+      "options": [
+        "It corrects for an overflow in the previous step",
+        "It detects the start of a run of 1s in the multiplier, beginning the subtraction that replaces multiple additions",
+        "It handles the sign bit of the multiplier separately",
+        "It performs the final correction step of the algorithm"
+      ],
+      "correct": 1,
+      "explanation": "Booth's algorithm encodes runs of consecutive 1s in the multiplier as a subtraction at the start and an addition at the end. The bit pair $(Q_0, Q_{-1}) = (1, 0)$ means: the current bit is 1 and the previous bit was 0. This is the transition from 0 to 1 — the START of a run of 1s. For example, in multiplier $01110_2$, the run of 1s from positions 1-3 is equivalent to $10000_2 - 00010_2$. The subtraction at position 1 (where the run starts, transition $0 \\to 1$) and addition at position 4 (where the run ends, transition $1 \\to 0$) replaces three individual additions with one subtract and one add."
+    }
+  ]
+}

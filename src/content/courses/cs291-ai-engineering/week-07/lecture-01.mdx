@@ -1,0 +1,879 @@
+---
+title: "Deploying AI Applications"
+week: 7
+lecture: 1
+estimatedMinutes: 60
+---
+
+# Deploying AI Applications
+
+You have spent six weeks building increasingly sophisticated AI systems: RAG pipelines, agents that use tools, multi-agent orchestrations that solve complex problems. All of that work runs on your laptop. This week, we cross the chasm that separates a demo from a product. Deployment is where your elegant architecture meets the brutal reality of network partitions, cold starts, GPU scheduling, and the user who sends 10,000 requests per second because they wrapped your API in a `while True` loop.
+
+Deployment is not gluing a `flask run` onto an EC2 instance. It is a set of engineering decisions that determine whether your system handles 10 users or 10 million, whether a bad model update takes down production or gets caught by an automated gate, and whether you can debug a failure at 3 AM or spend the next four hours guessing. This lecture covers the full stack: containerization, serving frameworks, orchestration, deployment strategies, and the CI/CD pipelines that make it all repeatable.
+
+---
+
+## 1. Architecture Decisions: Monolith vs. Microservices
+
+The first question is structural. Do you deploy your AI application as a single service (monolith) or decompose it into multiple independently deployable services (microservices)?
+
+### 1.1 The Monolith
+
+A monolith packs everything into one deployable unit: the API layer, the LLM orchestration logic, the RAG retrieval, the vector database client, the prompt templates, and the business logic. For most AI applications in the first year of production, **this is the right choice**.
+
+Why? Because AI applications have tight coupling between components. Your prompt template depends on the retrieval format. Your agent's tool selection depends on the system prompt. Your output parser depends on the model's response format. When you change the model from GPT-4 to Claude, you often need to change the prompt, the parser, and the retry logic simultaneously. In a monolith, that is one pull request. In microservices, that is a coordinated deployment across three services with version compatibility matrices.
+
+The monolith also eliminates network hops. A typical RAG request involves: receive query, embed query, search vector DB, retrieve documents, construct prompt, call LLM, parse response. In a monolith, the embed-search-construct steps are function calls with microsecond overhead. In microservices, each becomes an HTTP or gRPC call with millisecond overhead, serialization costs, and failure modes.
+
+### 1.2 When Microservices Make Sense
+
+Decompose when you have genuinely independent scaling requirements. If your embedding service handles 100x the traffic of your generation service (because you batch-embed documents continuously), separate them. If your RAG retrieval needs GPUs but your API gateway does not, separate them to avoid paying for GPUs on every pod.
+
+Decompose when teams need independent deployment cadences. If the search team ships daily and the generation team ships weekly, a shared monolith creates friction.
+
+Decompose when you need fault isolation. If the code execution sandbox crashes, it should not take down the chat service.
+
+A practical middle ground is the **modular monolith**: a single deployable unit with clean internal boundaries (separate Python packages or modules) that can be split into services later if needed. Start here.
+
+```python
+# A modular monolith structure
+# src/
+#   api/          -- FastAPI routes
+#   retrieval/    -- RAG pipeline, vector DB clients
+#   generation/   -- LLM clients, prompt management
+#   evaluation/   -- Output validation, guardrails
+#   shared/       -- Models, config, utilities
+
+# Each module exposes a clean interface
+# api/ calls retrieval/ and generation/ through well-defined functions
+# No circular dependencies between modules
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+@dataclass
+class RetrievalResult:
+    """Clean boundary between retrieval and generation modules."""
+    documents: List[str]
+    scores: List[float]
+    query_embedding: List[float]
+    retrieval_time_ms: float
+
+@dataclass
+class GenerationRequest:
+    """What the generation module needs from the API layer."""
+    user_query: str
+    retrieved_context: List[str]
+    system_prompt: str
+    max_tokens: int = 1024
+    temperature: float = 0.7
+
+@dataclass
+class GenerationResult:
+    """What the generation module returns."""
+    response: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    latency_ms: float
+    cost_usd: float
+
+# The API layer composes these cleanly
+def handle_query(query: str) -> dict:
+    retrieval = retrieve_documents(query)  # retrieval module
+    generation = generate_response(        # generation module
+        GenerationRequest(
+            user_query=query,
+            retrieved_context=retrieval.documents,
+            system_prompt="You are a helpful assistant.",
+        )
+    )
+    return {
+        "response": generation.response,
+        "sources": retrieval.documents[:3],
+        "latency_ms": retrieval.retrieval_time_ms + generation.latency_ms,
+    }
+
+print("Modular monolith: clean interfaces, single deployment")
+print(f"RetrievalResult fields: {[f.name for f in RetrievalResult.__dataclass_fields__.values()]}")
+print(f"GenerationRequest fields: {[f.name for f in GenerationRequest.__dataclass_fields__.values()]}")
+```
+
+<ConceptCheck id="cc-1" />
+
+---
+
+## 2. Containerization: Docker for AI Applications
+
+Every production AI application should be containerized. Docker provides reproducible builds, consistent environments across dev/staging/production, and a standard deployment artifact.
+
+### 2.1 Multi-Stage Builds
+
+AI applications have heavy build dependencies (compilers, build tools) that should not ship in the production image. Multi-stage builds solve this:
+
+```python
+# Simulating a multi-stage Dockerfile as a Python data structure
+# (We'll build actual Dockerfiles in the problem set)
+
+dockerfile_stages = {
+    "stage_1_builder": {
+        "base": "python:3.11-slim",
+        "purpose": "Install dependencies with build tools",
+        "commands": [
+            "apt-get update && apt-get install -y gcc g++ --no-install-recommends",
+            "pip install --no-cache-dir --prefix=/install -r requirements.txt",
+            # Build tools (gcc, g++) available here for compiling C extensions
+            # numpy, scipy, etc. need compilation during install
+        ],
+        "artifacts": ["/install"],  # Only this gets copied to next stage
+    },
+    "stage_2_production": {
+        "base": "python:3.11-slim",
+        "purpose": "Minimal runtime image",
+        "commands": [
+            "COPY --from=builder /install /usr/local",
+            "COPY ./src /app/src",
+            "# No gcc, no build tools, no apt cache",
+            "# Image size: ~200MB vs ~1.2GB without multi-stage",
+        ],
+        "user": "nonroot",  # Never run as root in production
+        "expose": 8000,
+        "entrypoint": "uvicorn src.main:app --host 0.0.0.0 --port 8000",
+    },
+}
+
+for stage, config in dockerfile_stages.items():
+    print(f"\n{stage}:")
+    print(f"  Base: {config['base']}")
+    print(f"  Purpose: {config['purpose']}")
+```
+
+### 2.2 Layer Caching Strategy
+
+Docker builds images layer by layer. If a layer has not changed, Docker reuses the cached version. The key insight: **order your Dockerfile commands from least-frequently changed to most-frequently changed**.
+
+```python
+# Layer ordering matters enormously for build speed
+# Bad: copy all code, then install deps (deps reinstall on every code change)
+# Good: install deps first, then copy code
+
+layer_order_bad = [
+    "COPY . /app",                    # Changes every commit
+    "RUN pip install -r requirements.txt",  # Reinstalls every time!
+]
+
+layer_order_good = [
+    "COPY requirements.txt /app/",          # Changes rarely
+    "RUN pip install -r requirements.txt",  # Cached when requirements unchanged
+    "COPY . /app",                          # Only this layer rebuilds on code changes
+]
+
+# Impact analysis
+import math
+
+builds_per_day = 20
+dep_install_time_seconds = 120  # 2 minutes for pip install
+code_change_ratio = 0.95        # 95% of builds are code-only changes
+dep_change_ratio = 0.05         # 5% of builds change dependencies
+
+# Bad ordering: reinstall deps every build
+bad_wasted_time = builds_per_day * dep_install_time_seconds * code_change_ratio
+# Good ordering: reinstall deps only when they change
+good_wasted_time = builds_per_day * dep_install_time_seconds * dep_change_ratio
+
+print(f"Builds per day: {builds_per_day}")
+print(f"Bad layer order: {bad_wasted_time/60:.0f} min/day wasted on pip install")
+print(f"Good layer order: {good_wasted_time/60:.0f} min/day wasted on pip install")
+print(f"Savings: {(bad_wasted_time - good_wasted_time)/60:.0f} min/day")
+print(f"Annual savings: {(bad_wasted_time - good_wasted_time) * 250 / 3600:.0f} hours/year")
+```
+
+### 2.3 Image Size Reduction
+
+Smaller images mean faster pulls, faster scaling, and lower storage costs. Key techniques:
+
+1. **Use slim base images**: `python:3.11-slim` (~150MB) vs `python:3.11` (~900MB)
+2. **Multi-stage builds**: Build dependencies do not ship in production
+3. **No cache in pip**: `pip install --no-cache-dir` saves ~100MB
+4. **Combine RUN commands**: Each `RUN` creates a layer; combine with `&&` to reduce layers
+5. **Use .dockerignore**: Exclude `.git/`, `__pycache__/`, `.env`, test files
+
+For models that ship with the container (small models, embeddings), consider separating the model layer so code changes do not invalidate the model cache.
+
+---
+
+## 3. Serving with FastAPI
+
+FastAPI is the standard for serving AI applications in Python. It gives you async support, automatic OpenAPI docs, dependency injection, and Pydantic validation --- everything you need for a production API.
+
+### 3.1 Async Endpoints
+
+LLM calls are I/O-bound (waiting for network responses). Async endpoints let a single worker handle many concurrent requests instead of blocking on each one:
+
+```python
+import asyncio
+import time
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+@dataclass
+class Request:
+    query: str
+    model: str = "gpt-4"
+    max_tokens: int = 1024
+
+@dataclass
+class Response:
+    answer: str
+    latency_ms: float
+    model: str
+
+# Simulating async LLM call
+async def call_llm(prompt: str, model: str = "gpt-4") -> str:
+    """Simulate an async LLM API call with network latency."""
+    await asyncio.sleep(0.1)  # Simulate 100ms network call
+    return f"Response to: {prompt[:50]}..."
+
+# Simulating async retrieval
+async def retrieve_context(query: str) -> List[str]:
+    """Simulate async vector DB search."""
+    await asyncio.sleep(0.05)  # Simulate 50ms search
+    return [f"Document about {query}"]
+
+# The key pattern: parallelize independent I/O operations
+async def handle_request(request: Request) -> Response:
+    start = time.time()
+
+    # BAD: Sequential (150ms)
+    # context = await retrieve_context(request.query)
+    # response = await call_llm(f"Context: {context}\nQuery: {request.query}")
+
+    # GOOD: Parallel where possible, then sequential where needed
+    context_task = retrieve_context(request.query)
+    # Start retrieval, do other prep work while waiting
+    context = await context_task  # 50ms
+
+    # Generation depends on retrieval, so this must be sequential
+    answer = await call_llm(
+        f"Context: {context}\nQuery: {request.query}",
+        model=request.model,
+    )  # 100ms, but started after retrieval completed
+
+    latency = (time.time() - start) * 1000
+
+    return Response(answer=answer, latency_ms=latency, model=request.model)
+
+# Demonstrate concurrent request handling
+async def simulate_concurrent_load():
+    """Show how async handles multiple requests concurrently."""
+    requests = [
+        Request(query=f"Question {i}", model="gpt-4")
+        for i in range(5)
+    ]
+
+    start = time.time()
+    # All 5 requests run concurrently
+    responses = await asyncio.gather(*[handle_request(r) for r in requests])
+    total_time = (time.time() - start) * 1000
+
+    print(f"Handled {len(responses)} requests concurrently")
+    print(f"Total wall time: {total_time:.0f}ms")
+    print(f"Sequential would take: {sum(r.latency_ms for r in responses):.0f}ms")
+    print(f"Speedup: {sum(r.latency_ms for r in responses) / total_time:.1f}x")
+
+asyncio.run(simulate_concurrent_load())
+```
+
+### 3.2 Dependency Injection for Configuration
+
+FastAPI's dependency injection system is perfect for managing AI application configuration --- model clients, vector DB connections, feature flags:
+
+```python
+from dataclasses import dataclass
+from typing import Dict, Any
+
+@dataclass
+class AppConfig:
+    """Application configuration injected into route handlers."""
+    model_name: str = "gpt-4"
+    temperature: float = 0.7
+    max_tokens: int = 1024
+    vector_db_url: str = "http://localhost:6333"
+    cache_ttl_seconds: int = 3600
+    rate_limit_rpm: int = 60
+
+@dataclass
+class ModelClient:
+    """Simulated LLM client that would be injected as a dependency."""
+    config: AppConfig
+    request_count: int = 0
+
+    def generate(self, prompt: str) -> str:
+        self.request_count += 1
+        return f"[{self.config.model_name}] Response to: {prompt[:30]}..."
+
+# In FastAPI, you would use Depends() for injection:
+# async def get_model_client(config: AppConfig = Depends(get_config)):
+#     return ModelClient(config=config)
+#
+# @app.post("/generate")
+# async def generate(request: Request, client: ModelClient = Depends(get_model_client)):
+#     return client.generate(request.prompt)
+
+# Demonstrate the pattern
+config = AppConfig(model_name="claude-3-opus", temperature=0.3)
+client = ModelClient(config=config)
+
+for i in range(3):
+    result = client.generate(f"Query number {i+1}")
+    print(result)
+
+print(f"\nTotal requests served: {client.request_count}")
+print(f"Config: model={config.model_name}, temp={config.temperature}")
+```
+
+### 3.3 Middleware for Cross-Cutting Concerns
+
+Logging, authentication, and request tracing should be middleware, not scattered through route handlers:
+
+```python
+import time
+import json
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+import math
+
+@dataclass
+class RequestLog:
+    method: str
+    path: str
+    status_code: int
+    latency_ms: float
+    request_id: str
+    user_id: Optional[str] = None
+    token_count: Optional[int] = None
+
+@dataclass
+class MiddlewareStack:
+    """Simulates a middleware pipeline for AI application requests."""
+    logs: List[RequestLog] = field(default_factory=list)
+    request_counter: int = 0
+
+    def process_request(self, method: str, path: str, user_id: str = None) -> Dict:
+        self.request_counter += 1
+        request_id = f"req-{self.request_counter:04d}"
+        start = time.time()
+
+        # Simulate processing
+        status_code = 200
+        token_count = 150  # Simulated
+
+        latency = (time.time() - start) * 1000 + 45.0  # Add simulated latency
+
+        log = RequestLog(
+            method=method,
+            path=path,
+            status_code=status_code,
+            latency_ms=latency,
+            request_id=request_id,
+            user_id=user_id,
+            token_count=token_count,
+        )
+        self.logs.append(log)
+
+        return {
+            "request_id": request_id,
+            "status": status_code,
+            "latency_ms": round(latency, 2),
+        }
+
+    def get_metrics(self) -> Dict:
+        if not self.logs:
+            return {}
+        latencies = [log.latency_ms for log in self.logs]
+        return {
+            "total_requests": len(self.logs),
+            "avg_latency_ms": round(sum(latencies) / len(latencies), 2),
+            "p99_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.99)], 2),
+            "error_rate": sum(1 for l in self.logs if l.status_code >= 400) / len(self.logs),
+        }
+
+stack = MiddlewareStack()
+
+# Simulate traffic
+paths = ["/api/chat", "/api/search", "/api/embed", "/api/chat", "/api/chat"]
+for i, path in enumerate(paths):
+    result = stack.process_request("POST", path, user_id=f"user-{i % 3}")
+    print(f"  {result['request_id']}: {path} -> {result['status']} ({result['latency_ms']}ms)")
+
+print(f"\nMetrics: {json.dumps(stack.get_metrics(), indent=2)}")
+```
+
+<ConceptCheck id="cc-2" />
+
+---
+
+## 4. Kubernetes for AI Workloads
+
+For applications that need to scale beyond a single machine, Kubernetes is the standard orchestration platform. The core abstractions you need to understand:
+
+### 4.1 Pods, Deployments, and Services
+
+A **Pod** is the smallest deployable unit --- one or more containers that share networking and storage. For AI apps, a pod typically contains your application container and possibly a sidecar for logging or metrics.
+
+A **Deployment** declares the desired state: "I want 3 replicas of my app running at all times." Kubernetes ensures this is true, replacing failed pods automatically.
+
+A **Service** provides a stable network endpoint for a set of pods. When pods scale up/down or restart, the service IP stays the same.
+
+### 4.2 Horizontal Pod Autoscaler (HPA)
+
+The HPA automatically scales the number of pods based on observed metrics. For AI workloads, CPU utilization is a poor scaling signal because LLM calls are I/O-bound (the CPU sits idle while waiting for the API response). Better signals:
+
+- **Request rate** (requests per second per pod)
+- **Request queue depth** (how many requests are waiting)
+- **Custom metrics** like token throughput or inference latency
+
+```python
+# Simulating an HPA controller for an AI application
+from dataclasses import dataclass
+import math
+
+@dataclass
+class HPAConfig:
+    min_replicas: int = 2
+    max_replicas: int = 20
+    target_rps_per_pod: int = 50       # Target requests/sec per pod
+    scale_up_threshold: float = 0.8     # Scale up at 80% target
+    scale_down_threshold: float = 0.3   # Scale down at 30% target
+    cooldown_seconds: int = 60          # Prevent flapping
+
+@dataclass
+class HPAState:
+    current_replicas: int
+    current_rps: float
+    config: HPAConfig
+
+    def compute_desired_replicas(self) -> int:
+        """Calculate desired replica count based on current load."""
+        rps_per_pod = self.current_rps / max(self.current_replicas, 1)
+        utilization = rps_per_pod / self.config.target_rps_per_pod
+
+        if utilization > self.config.scale_up_threshold:
+            # Scale up: ceil to handle the load
+            desired = math.ceil(self.current_rps / self.config.target_rps_per_pod)
+        elif utilization < self.config.scale_down_threshold:
+            # Scale down: floor but keep minimum
+            desired = max(
+                math.ceil(self.current_rps / self.config.target_rps_per_pod),
+                self.config.min_replicas,
+            )
+        else:
+            desired = self.current_replicas
+
+        # Clamp to min/max
+        return max(self.config.min_replicas, min(desired, self.config.max_replicas))
+
+# Simulate traffic patterns
+config = HPAConfig(min_replicas=2, max_replicas=20, target_rps_per_pod=50)
+traffic_pattern = [100, 200, 500, 1200, 800, 300, 100, 50, 500, 200]
+current_replicas = 2
+
+print(f"HPA Config: min={config.min_replicas}, max={config.max_replicas}, "
+      f"target={config.target_rps_per_pod} rps/pod\n")
+print(f"{'Time':>6} | {'RPS':>6} | {'Pods':>5} | {'RPS/Pod':>8} | {'Action':>12}")
+print("-" * 55)
+
+for t, rps in enumerate(traffic_pattern):
+    state = HPAState(current_replicas=current_replicas, current_rps=rps, config=config)
+    desired = state.compute_desired_replicas()
+    action = "scale up" if desired > current_replicas else (
+        "scale down" if desired < current_replicas else "steady"
+    )
+    rps_per_pod = rps / max(current_replicas, 1)
+    print(f"  t={t:>2}  | {rps:>5} | {current_replicas:>5} | {rps_per_pod:>7.1f} | {action:>12} -> {desired}")
+    current_replicas = desired
+```
+
+### 4.3 GPU Scheduling
+
+If you are serving models locally (not via API), GPU scheduling is critical. Kubernetes supports GPU resources via device plugins:
+
+```yaml
+# GPU resource request in a Kubernetes pod spec
+resources:
+  requests:
+    nvidia.com/gpu: 1
+    memory: "16Gi"
+  limits:
+    nvidia.com/gpu: 1
+    memory: "32Gi"
+```
+
+Key considerations:
+- GPUs cannot be shared between pods by default (one pod = one GPU)
+- Use **NVIDIA MPS** or **MIG** (Multi-Instance GPU) for GPU sharing on A100s
+- GPU nodes are expensive; use **node affinity** and **taints/tolerations** to ensure only GPU workloads land on GPU nodes
+- Consider **spot/preemptible instances** for batch inference, reserved instances for serving
+
+---
+
+## 5. Serverless Deployment
+
+Serverless (AWS Lambda, Google Cloud Functions, Azure Functions) eliminates infrastructure management but introduces challenges for AI applications.
+
+### 5.1 The Cold Start Problem
+
+The fundamental tension: serverless functions start from zero when idle. Loading a model or initializing an LLM client takes time. A cold start for a Python function with numpy, an embedding model, and an API client can exceed 10 seconds --- far too slow for user-facing applications.
+
+Mitigations:
+- **Provisioned concurrency**: Keep N instances warm (defeats the cost benefit of serverless)
+- **Lazy initialization**: Load the model on first request, keep warm for subsequent ones
+- **Model size**: Use quantized or distilled models that load in <1 second
+- **Package size**: Lambda has a 250MB deployment package limit; AI dependencies often exceed this (use Lambda layers or container images)
+
+### 5.2 When Serverless Works for AI
+
+Serverless is well-suited for:
+- **Lightweight API proxies**: Forward requests to an LLM API (no model loading)
+- **Batch processing triggers**: Process uploaded documents, generate embeddings on file upload
+- **Webhook handlers**: Respond to events from external services
+- **Low-traffic endpoints**: Internal tools used a few times per day
+
+Serverless is a poor fit for:
+- **High-throughput serving**: Connection pooling and warm caches matter
+- **Streaming responses**: Many serverless platforms have limited streaming support
+- **Local model inference**: Cold start + model loading is prohibitive
+
+<ConceptCheck id="cc-3" />
+
+---
+
+## 6. Health Checks: Liveness vs. Readiness
+
+Production services need health checks so the orchestration layer (Kubernetes, load balancer, etc.) knows when a pod is healthy.
+
+### 6.1 Liveness Probes
+
+"Is the process alive?" If the liveness probe fails, the orchestrator **restarts** the container. This catches deadlocks, memory leaks that freeze the process, and infinite loops.
+
+### 6.2 Readiness Probes
+
+"Can this instance handle traffic?" If the readiness probe fails, the orchestrator **stops sending traffic** to this instance but does **not** restart it. This is crucial for AI applications during:
+
+- **Model loading**: The process is alive but the model is not yet loaded
+- **Warmup**: The first inference is slow (JIT compilation, cache warming)
+- **Dependency failures**: The vector DB is down, but the app itself is fine
+
+```python
+from dataclasses import dataclass, field
+from typing import Dict, Optional
+import time
+
+@dataclass
+class HealthStatus:
+    """Comprehensive health check for an AI application."""
+    is_alive: bool = True
+    is_ready: bool = False
+    model_loaded: bool = False
+    vector_db_connected: bool = False
+    llm_api_reachable: bool = False
+    startup_time: float = 0.0
+    checks: Dict[str, bool] = field(default_factory=dict)
+
+    def liveness_check(self) -> Dict:
+        """Liveness: Is the process running and responsive?"""
+        return {
+            "status": "ok" if self.is_alive else "fail",
+            "uptime_seconds": round(time.time() - self.startup_time, 1),
+        }
+
+    def readiness_check(self) -> Dict:
+        """Readiness: Can we handle requests?"""
+        self.checks = {
+            "model_loaded": self.model_loaded,
+            "vector_db": self.vector_db_connected,
+            "llm_api": self.llm_api_reachable,
+        }
+        self.is_ready = all(self.checks.values())
+        return {
+            "status": "ok" if self.is_ready else "not_ready",
+            "checks": self.checks,
+        }
+
+# Simulate startup sequence
+health = HealthStatus(startup_time=time.time())
+print("=== Application Startup ===\n")
+
+startup_steps = [
+    ("Process started", {"is_alive": True}),
+    ("Model loading...", {}),
+    ("Model loaded", {"model_loaded": True}),
+    ("Connecting to vector DB...", {}),
+    ("Vector DB connected", {"vector_db_connected": True}),
+    ("Checking LLM API...", {}),
+    ("LLM API reachable", {"llm_api_reachable": True}),
+]
+
+for step_name, updates in startup_steps:
+    for key, value in updates.items():
+        setattr(health, key, value)
+    liveness = health.liveness_check()
+    readiness = health.readiness_check()
+    print(f"  [{step_name}]")
+    print(f"    Liveness: {liveness['status']}")
+    print(f"    Readiness: {readiness['status']} - {readiness['checks']}")
+    print()
+```
+
+---
+
+## 7. Deployment Strategies for AI Systems
+
+Deploying a new version of an AI application is riskier than deploying a traditional web app. A bad prompt change or model swap can degrade output quality in ways that automated tests do not catch. This calls for careful deployment strategies.
+
+### 7.1 Blue-Green Deployment
+
+Maintain two identical environments (blue and green). At any time, one is live and one is idle. To deploy, update the idle environment, run tests, then switch traffic.
+
+**Pros**: Instant rollback (switch back). Full production testing before going live.
+**Cons**: Double the infrastructure cost. Database schema changes require extra care.
+
+### 7.2 Canary Deployment
+
+Route a small percentage of traffic (1-5%) to the new version. Monitor quality metrics. Gradually increase if metrics hold.
+
+This is **the most important strategy for AI deployments** because it lets you detect quality regressions with real user traffic before full rollout. Quality metrics to monitor during canary:
+
+- **Latency**: P50, P95, P99 of end-to-end response time
+- **Error rate**: Failed requests, timeouts, malformed responses
+- **LLM quality scores**: Human ratings, automated eval scores, thumbs-up/down rates
+- **Cost per request**: Token usage, API costs
+- **Engagement metrics**: User follow-up rate, session length
+
+### 7.3 Shadow Deployment
+
+Route 100% of traffic to both old and new versions. Serve the old version's response to the user. Log the new version's response for comparison. This is the gold standard for testing AI changes because you get a head-to-head comparison on real traffic with zero user impact.
+
+```python
+from dataclasses import dataclass, field
+from typing import Dict, List
+import json
+
+@dataclass
+class CanaryController:
+    """Controls gradual rollout of a new AI model version."""
+    canary_percentage: float = 5.0
+    metrics: Dict[str, List[float]] = field(default_factory=lambda: {
+        "canary_latency": [],
+        "stable_latency": [],
+        "canary_quality": [],
+        "stable_quality": [],
+    })
+
+    def route_request(self, request_id: int) -> str:
+        """Deterministic routing based on request ID."""
+        if (request_id % 100) < self.canary_percentage:
+            return "canary"
+        return "stable"
+
+    def record_metric(self, version: str, latency: float, quality: float):
+        self.metrics[f"{version}_latency"].append(latency)
+        self.metrics[f"{version}_quality"].append(quality)
+
+    def should_promote(self) -> Dict:
+        """Decide whether canary should be promoted to 100%."""
+        if len(self.metrics["canary_quality"]) < 10:
+            return {"decision": "wait", "reason": "Insufficient data"}
+
+        avg_canary_quality = sum(self.metrics["canary_quality"]) / len(self.metrics["canary_quality"])
+        avg_stable_quality = sum(self.metrics["stable_quality"]) / len(self.metrics["stable_quality"])
+        avg_canary_latency = sum(self.metrics["canary_latency"]) / len(self.metrics["canary_latency"])
+        avg_stable_latency = sum(self.metrics["stable_latency"]) / len(self.metrics["stable_latency"])
+
+        quality_ok = avg_canary_quality >= avg_stable_quality * 0.95  # Within 5% quality
+        latency_ok = avg_canary_latency <= avg_stable_latency * 1.20  # Within 20% latency
+
+        if quality_ok and latency_ok:
+            return {"decision": "promote", "canary_quality": round(avg_canary_quality, 3),
+                    "stable_quality": round(avg_stable_quality, 3)}
+        else:
+            reasons = []
+            if not quality_ok:
+                reasons.append(f"quality regression: {avg_canary_quality:.3f} vs {avg_stable_quality:.3f}")
+            if not latency_ok:
+                reasons.append(f"latency regression: {avg_canary_latency:.0f}ms vs {avg_stable_latency:.0f}ms")
+            return {"decision": "rollback", "reasons": reasons}
+
+# Simulate canary deployment
+import math
+canary = CanaryController(canary_percentage=5.0)
+
+# Simulate 200 requests
+for i in range(200):
+    version = canary.route_request(i)
+    # Simulate: canary is slightly faster but similar quality
+    if version == "canary":
+        latency = 150 + (i % 30)  # 150-180ms
+        quality = 0.85 + (i % 10) * 0.01  # 0.85-0.94
+    else:
+        latency = 180 + (i % 40)  # 180-220ms
+        quality = 0.84 + (i % 10) * 0.01  # 0.84-0.93
+    canary.record_metric(version, latency, quality)
+
+print("=== Canary Deployment Report ===\n")
+print(f"Canary traffic: {canary.canary_percentage}%")
+print(f"Canary requests: {len(canary.metrics['canary_quality'])}")
+print(f"Stable requests: {len(canary.metrics['stable_quality'])}")
+decision = canary.should_promote()
+print(f"\nDecision: {json.dumps(decision, indent=2)}")
+```
+
+<ConceptCheck id="cc-4" />
+
+---
+
+## 8. CI/CD with Eval Quality Gates
+
+The most important innovation in AI deployment pipelines is the **eval quality gate**: an automated evaluation suite that runs before every deployment and blocks releases that degrade quality.
+
+### 8.1 The Eval Pipeline
+
+A production CI/CD pipeline for AI applications looks like this:
+
+1. **Code tests**: Unit tests, integration tests (fast, run on every commit)
+2. **Eval suite**: Run a curated set of prompts through the system, score outputs against expected results (slower, run on PR merge)
+3. **Quality gate**: Compare eval scores against baseline. Block deployment if scores drop below threshold.
+4. **Canary deploy**: If evals pass, deploy to canary
+5. **Canary monitoring**: Watch metrics for N minutes
+6. **Full rollout**: If canary holds, promote to 100%
+
+### 8.2 Prompt Versioning in CI
+
+Treat prompts as code artifacts with version control:
+
+```python
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+import json
+import hashlib
+
+@dataclass
+class PromptVersion:
+    """A versioned prompt with metadata for CI/CD tracking."""
+    name: str
+    template: str
+    version: str
+    model: str
+    temperature: float
+    eval_score: Optional[float] = None
+
+    @property
+    def content_hash(self) -> str:
+        """Content-addressable hash for change detection."""
+        content = f"{self.template}|{self.model}|{self.temperature}"
+        return hashlib.sha256(content.encode()).hexdigest()[:12]
+
+@dataclass
+class EvalResult:
+    prompt_version: str
+    total_cases: int
+    passed: int
+    failed: int
+    score: float
+    regression_detected: bool
+
+@dataclass
+class QualityGate:
+    """CI/CD quality gate that blocks deploys on eval regression."""
+    baseline_scores: Dict[str, float] = field(default_factory=dict)
+    threshold: float = 0.95  # Block if score drops below 95% of baseline
+
+    def check(self, prompt_name: str, current_score: float) -> Dict:
+        baseline = self.baseline_scores.get(prompt_name, 0.0)
+        min_acceptable = baseline * self.threshold
+        passed = current_score >= min_acceptable
+
+        return {
+            "prompt": prompt_name,
+            "baseline": baseline,
+            "current": current_score,
+            "minimum": round(min_acceptable, 3),
+            "passed": passed,
+            "verdict": "DEPLOY" if passed else "BLOCKED",
+        }
+
+# Simulate CI/CD pipeline
+gate = QualityGate(
+    baseline_scores={
+        "chat_system_prompt": 0.92,
+        "rag_answer_prompt": 0.88,
+        "code_gen_prompt": 0.85,
+    },
+    threshold=0.95,
+)
+
+# New version eval results
+eval_results = {
+    "chat_system_prompt": 0.93,   # Improved
+    "rag_answer_prompt": 0.87,    # Slight dip but above threshold
+    "code_gen_prompt": 0.78,      # Significant regression!
+}
+
+print("=== CI/CD Quality Gate Results ===\n")
+all_passed = True
+for prompt_name, score in eval_results.items():
+    result = gate.check(prompt_name, score)
+    status = "PASS" if result["passed"] else "FAIL"
+    print(f"  [{status}] {prompt_name}")
+    print(f"    Baseline: {result['baseline']:.3f} | Current: {result['current']:.3f} | "
+          f"Min: {result['minimum']:.3f}")
+    if not result["passed"]:
+        all_passed = False
+        print(f"    *** DEPLOYMENT BLOCKED: score below minimum threshold ***")
+    print()
+
+print(f"Pipeline verdict: {'ALL GATES PASSED - deploy' if all_passed else 'BLOCKED - fix regressions'}")
+```
+
+### 8.3 The Eval Set
+
+Your eval set should cover:
+
+- **Golden examples**: Hand-curated input/output pairs that must always work
+- **Edge cases**: Unusual inputs, adversarial prompts, boundary conditions
+- **Regression tests**: Previous failures that were fixed (ensure they stay fixed)
+- **Statistical tests**: A larger set scored by automated metrics (ROUGE, BERTScore, custom rubrics)
+
+The golden rule: **an eval suite that does not block a deployment is theater**. If evals never fail, they are not testing the right things. If failures are routinely overridden, the gate has no teeth.
+
+---
+
+## 9. Putting It All Together
+
+A complete deployment architecture for a production AI application:
+
+1. **Code** lives in a monorepo with prompt templates versioned alongside application code
+2. **Docker** multi-stage builds produce minimal images with layer caching
+3. **CI** runs unit tests, then eval suite, with quality gates that block regressions
+4. **Kubernetes** runs the application with HPA based on request rate, readiness probes that check model and dependency health
+5. **Canary deployment** routes 5% of traffic to the new version, monitors quality metrics
+6. **Observability** (next week's topic) provides the telemetry needed to make promotion/rollback decisions
+
+The gap between a working demo and a production system is enormous. But it is not mysterious. It is a series of well-understood engineering practices, applied thoughtfully to the specific challenges of AI applications --- model loading, quality regression, cost management, and the fundamental unpredictability of natural language.
+
+Build the scaffold now. You will thank yourself when something breaks at 3 AM.
+
+---
+
+## Summary
+
+| Topic | Key Takeaway |
+|-------|-------------|
+| Architecture | Start with a modular monolith; decompose when you have clear scaling or team boundaries |
+| Docker | Multi-stage builds, layer caching (deps before code), slim base images |
+| FastAPI | Async endpoints for I/O-bound LLM calls, dependency injection for config |
+| Kubernetes | HPA on request rate (not CPU), readiness probes for model loading |
+| Serverless | Good for proxies and batch jobs, bad for serving and streaming |
+| Health checks | Liveness = restart, Readiness = stop traffic. Readiness checks model health |
+| Deployment | Canary is essential for AI. Shadow deployments for zero-risk comparison |
+| CI/CD | Eval quality gates that actually block deploys. Prompt versioning |

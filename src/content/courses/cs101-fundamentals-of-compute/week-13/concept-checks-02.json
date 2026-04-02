@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "The H100 SXM5 has 80 GB of HBM3 global memory with 3.35 TB/s bandwidth (latency ~200-800 cycles), 50 MB of L2 cache (~200 cycles), and up to 228 KB of shared memory per SM (~20-30 cycles). A kernel reads a 4-byte value from global memory. If the value is in the L2 cache, how much faster is the access compared to an uncached global memory access?",
+      "options": [
+        "About 1.5x faster (200 vs 300 cycles)",
+        "About 2-4x faster (200 vs 400-800 cycles)",
+        "About 10x faster (20 vs 200 cycles)",
+        "About 100x faster (8 vs 800 cycles)"
+      ],
+      "correct": 1,
+      "explanation": "L2 cache latency is approximately 200 cycles, while uncached global memory (HBM3) latency ranges from 200 to 800 cycles depending on access pattern and contention. So an L2 hit is roughly 2-4x faster than a full HBM access in the worst case. Note the distinction: shared memory at ~20-30 cycles would be the ~10x improvement option, but the question asks about L2 cache specifically. The key insight is that L2 cache helps most with repeated accesses to the same data -- the first access still pays the full HBM latency, but subsequent accesses to the same cache line are served from L2 at ~200 cycles."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A warp of 32 threads accesses a float32 array where thread $i$ reads `data[i * 2]`. Each float32 is 4 bytes, so thread $i$ accesses byte address $8i$. How many 128-byte memory transactions are required to serve this warp?",
+      "options": [
+        "1 transaction (all accesses fit in 128 bytes)",
+        "2 transactions (addresses span 0 to 248, requiring two 128-byte cache lines)",
+        "4 transactions (stride-2 access causes 4 separate transactions)",
+        "32 transactions (each thread requires its own transaction)"
+      ],
+      "correct": 1,
+      "explanation": "Thread 0 accesses byte 0, thread 1 accesses byte 8, ..., thread 15 accesses byte 120 (all within the first 128-byte cache line, bytes 0-127). Thread 16 accesses byte 128, ..., thread 31 accesses byte 248 (all within the second cache line, bytes 128-255). So exactly 2 transactions are needed. Note that only 32 x 4 = 128 bytes of useful data are loaded, but 256 bytes are transferred (two 128-byte lines). Bandwidth utilization is 50%. Compare this to stride-1 access (thread $i$ reads `data[i]`), which would need only 1 transaction with 100% utilization."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "Shared memory has 32 banks with a 4-byte stride. A kernel declares `__shared__ float tile[32][32]` and 32 threads simultaneously read `tile[i][col]` for a fixed column `col` (thread $i$ reads row $i$). What is the severity of the bank conflict, and how does padding to `float tile[32][33]` fix it?",
+      "options": [
+        "No conflict occurs because each thread reads from a different row",
+        "2-way conflict; padding reduces it to no conflict by changing the stride from 32 to 33",
+        "32-way conflict (all threads hit the same bank because stride 32 maps every row to bank 0); padding changes the stride to 33, and since gcd(33, 32) = 1, consecutive rows map to consecutive banks, eliminating all conflicts",
+        "16-way conflict; padding reduces it to 2-way"
+      ],
+      "correct": 2,
+      "explanation": "In `tile[32][32]`, element `tile[i][col]` is at byte offset $(32i + \\text{col}) \\times 4$. The bank is $(32i + \\text{col}) \\bmod 32 = \\text{col} \\bmod 32 = \\text{col}$ for all $i$. Every thread hits the same bank -- a 32-way conflict, requiring 32 serial transactions. With padding to `tile[32][33]`, element `tile[i][col]` is at byte offset $(33i + \\text{col}) \\times 4$. The bank is $(33i + \\text{col}) \\bmod 32$. Since $\\gcd(33, 32) = 1$, the values $33i \\bmod 32$ for $i = 0, 1, \\ldots, 31$ produce all 32 distinct residues. Each thread hits a different bank: zero conflicts. Cost: 3% extra shared memory (33 vs 32 elements per row). Benefit: 32x improvement in this access pattern."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "A kernel on the H100 uses 128 threads per block, 48 registers per thread, and 8 KB of shared memory per block. The H100 SM supports max 2,048 threads, max 32 blocks, 65,536 registers, and 228 KB shared memory. What is the occupancy, and what is the bottleneck?",
+      "options": [
+        "100% occupancy; no resource is limiting",
+        "62.5% occupancy; bottleneck is registers (48 regs x 128 threads = 6,144 per block, $\\lfloor 65536 / 6144 \\rfloor = 10$ blocks, giving 40 warps out of 64 max)",
+        "50% occupancy; bottleneck is shared memory (8 KB per block limits to 28 blocks)",
+        "25% occupancy; bottleneck is the block size limit of 32"
+      ],
+      "correct": 1,
+      "explanation": "Thread limit: $\\lfloor 2048 / 128 \\rfloor = 16$ blocks (within the 32-block max). Register limit: $128 \\times 48 = 6{,}144$ regs per block. $\\lfloor 65{,}536 / 6{,}144 \\rfloor = 10$ blocks. Shared memory limit: $\\lfloor 228 / 8 \\rfloor = 28$ blocks. Active blocks = $\\min(16, 10, 28, 32) = 10$, limited by registers. Active warps = $10 \\times (128/32) = 40$. Occupancy = $40/64 = 62.5\\%$. Registers are the bottleneck. To improve: reduce register usage to 32 per thread, giving $128 \\times 32 = 4{,}096$ regs/block, and $\\lfloor 65{,}536 / 4{,}096 \\rfloor = 16$ blocks. That matches the thread limit, yielding $16 \\times 4 = 64$ warps = 100% occupancy. But reducing registers may cause spills to local memory, so the trade-off must be profiled."
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "title": "Quiz 8: Memory Hierarchy",
+  "timeLimit": 20,
+  "passingScore": 70,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "A 16 KB direct-mapped cache with 32-byte blocks and 32-bit addresses has how many tag bits?",
+      "options": [
+        "19 tag bits",
+        "23 tag bits",
+        "18 tag bits",
+        "22 tag bits"
+      ],
+      "correct": 2,
+      "explanation": "16 KB = 16384 bytes. Number of blocks = 16384 / 32 = 512 blocks. Direct-mapped means 1 way, so 512 sets. Offset bits = log2(32) = 5 bits. Index bits = log2(512) = 9 bits. Tag bits = 32 - 5 - 9 = 18 bits. The tag field uniquely identifies which block from main memory is stored in each cache line. With 18 tag bits, 9 index bits, and 5 offset bits, the 32-bit address is fully decomposed."
+    },
+    {
+      "id": "q2",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Which type of cache miss can be eliminated by increasing the cache's associativity (e.g., from 2-way to 8-way)?",
+      "options": [
+        "Compulsory misses",
+        "Capacity misses",
+        "Conflict misses",
+        "All three types"
+      ],
+      "correct": 2,
+      "explanation": "Conflict misses occur because limited associativity forces blocks that map to the same set to evict each other, even when other sets have space. Increasing associativity (more ways per set) means more blocks can coexist in each set, reducing conflicts. At the extreme (fully associative), conflict misses are eliminated entirely. Compulsory misses are unaffected by associativity -- they depend only on whether a block has been accessed before. Capacity misses depend on total cache size, not associativity."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "An L1 cache has a 1 ns hit time, 8% miss rate, and 60 ns miss penalty. What is the AMAT?",
+      "options": [
+        "5.8 ns",
+        "4.8 ns",
+        "1.48 ns",
+        "61 ns"
+      ],
+      "correct": 0,
+      "explanation": "AMAT = Hit Time + Miss Rate x Miss Penalty = 1 + 0.08 x 60 = 1 + 4.8 = 5.8 ns. The 8% miss rate multiplied by the 60 ns penalty adds 4.8 ns to every access on average. This demonstrates why even small miss rates are costly: an 8% miss rate increases the effective access time by 5.8x compared to the hit time alone. Reducing the miss rate from 8% to 4% would cut the penalty contribution in half (to 2.4 ns), giving AMAT = 3.4 ns."
+    },
+    {
+      "id": "q4",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In a write-back cache, when is modified data written to the next level of the memory hierarchy?",
+      "options": [
+        "Immediately when the processor writes to the cache",
+        "Only when the dirty cache line is evicted (replaced by another block)",
+        "Periodically, on a timer",
+        "When the processor explicitly issues a flush instruction"
+      ],
+      "correct": 1,
+      "explanation": "In a write-back policy, writes update only the cache and set the dirty bit. The modified data stays in the cache and is written to the next level only upon eviction -- when the line must be replaced by a new block. This dramatically reduces write traffic compared to write-through (where every write goes to memory immediately). A cache line that is modified 100 times in a loop generates only one write-back when it is eventually evicted. This is why all modern L1 data caches use write-back."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "In RISC-V Sv39, a virtual address has VPN[2]=3, VPN[1]=7, VPN[0]=15. How many page table levels must be traversed to translate this address to a 4 KB page?",
+      "options": [
+        "1 level (only the root table)",
+        "2 levels (root table and level 1)",
+        "3 levels (root, level 1, and level 0)",
+        "4 levels (including the data access)"
+      ],
+      "correct": 2,
+      "explanation": "A standard 4 KB page in Sv39 requires a full 3-level walk: Level 2 (root table, indexed by VPN[2]=3), Level 1 (indexed by VPN[1]=7), and Level 0 (indexed by VPN[0]=15). At level 0, the PTE is a leaf that provides the physical page number. Only superpages can terminate the walk early: 1 GB gigapages terminate at level 2, and 2 MB megapages terminate at level 1. Each level requires one memory access, so this walk costs 3 memory accesses."
+    },
+    {
+      "id": "q6",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "AMD Zen 4 has an L2 DTLB with 3072 entries for 4 KB pages. What is the TLB coverage of this level?",
+      "options": [
+        "3072 KB (3 MB)",
+        "12288 KB (12 MB)",
+        "768 KB",
+        "196608 KB (192 MB)"
+      ],
+      "correct": 1,
+      "explanation": "TLB coverage = entries x page size = 3072 x 4 KB = 12288 KB = 12 MB. This means the L2 DTLB can translate addresses spanning 12 MB of virtual address space without a miss. If the program's working set of distinct pages exceeds 12 MB, L2 TLB misses will trigger page table walks. With 2 MB huge pages, the coverage would be 3072 x 2 MB = 6 GB -- a 512x improvement."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "On the Roofline model for a machine with 500 GFLOP/s peak compute and 50 GB/s peak bandwidth, what is the ridge point?",
+      "options": [
+        "0.1 FLOP/Byte",
+        "10 FLOP/Byte",
+        "50 FLOP/Byte",
+        "500 FLOP/Byte"
+      ],
+      "correct": 1,
+      "explanation": "Ridge point = peak_compute / peak_bandwidth = 500 GFLOP/s / 50 GB/s = 10 FLOP/Byte. This means a kernel needs to perform at least 10 floating-point operations for every byte it transfers from memory in order to be compute-bound. Kernels with arithmetic intensity below 10 are memory-bound -- their performance is limited by how fast data can be fed to the processor, not by how fast the processor can compute."
+    },
+    {
+      "id": "q8",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Dense matrix multiply (DGEMM) of two n x n matrices performs approximately 2n^3 FLOPs and transfers 3n^2 elements from memory. For n = 1000 with 8-byte doubles, what is the arithmetic intensity?",
+      "options": [
+        "0.67 FLOP/Byte",
+        "83.3 FLOP/Byte",
+        "2.67 FLOP/Byte",
+        "666.7 FLOP/Byte"
+      ],
+      "correct": 1,
+      "explanation": "AI = FLOPs / Bytes = 2 * 1000^3 / (3 * 1000^2 * 8) = 2 * 10^9 / (24 * 10^6) = 83.3 FLOP/Byte. This very high arithmetic intensity is why DGEMM is compute-bound on virtually all machines. The key insight is that AI grows linearly with n (2n^3 / 3n^2 * 8 = n/12), so larger matrices become increasingly compute-bound. This is the fundamental reason why matrix multiply achieves near-peak performance -- each element loaded from memory is reused O(n) times."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Apple M3's System Level Cache (SLC) uses an exclusive caching policy. What does this mean?",
+      "options": [
+        "Only one process can use the SLC at a time",
+        "Data in the SLC is NOT duplicated in L1 or L2 -- a block exists in exactly one cache level, maximizing effective total cache capacity",
+        "The SLC only caches instructions, not data",
+        "The SLC cannot be shared between CPU and GPU"
+      ],
+      "correct": 1,
+      "explanation": "In an exclusive cache hierarchy, a block resides in only one level at a time. When a block moves from L2 to L1 (on an L1 miss), it is removed from L2. When it is evicted from L1, it may be placed back into L2 (victim cache behavior). This means the effective cache capacity is L1 + L2 + SLC rather than max(L1, L2, SLC). For M3 with 128 KB L1D + 16 MB L2 + 8 MB SLC, the effective capacity is ~24 MB rather than the 16 MB that an inclusive hierarchy would provide. This contrasts with Intel's inclusive L2, where every L1 block must also be in L2."
+    },
+    {
+      "id": "q10",
+      "type": "multiple_choice",
+      "points": 10,
+      "question": "Loop tiling (blocking) improves cache performance for matrix multiply primarily by:",
+      "options": [
+        "Reducing the total number of arithmetic operations",
+        "Using SIMD instructions to process multiple elements at once",
+        "Restructuring memory access patterns so that the working set fits in cache, increasing temporal reuse of loaded data",
+        "Eliminating compulsory misses by prefetching all data before computation"
+      ],
+      "correct": 2,
+      "explanation": "Tiling divides the matrices into small blocks (tiles) that fit in cache. Instead of processing an entire row of A against an entire column of B (which has stride-n access and poor locality), the tiled version processes a tile_size x tile_size sub-problem that keeps its data in cache. Each element is loaded once from memory and reused tile_size times from cache, converting capacity/conflict misses into cache hits. The total FLOPs are identical -- only the access pattern changes. This is a concrete example of 'moving right' on the Roofline model: increasing arithmetic intensity by maximizing cache reuse."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "Your RAG application has a p50 latency of 2.1 seconds. You profile the request and find: retrieval takes 150ms, prompt construction takes 5ms, the LLM API call takes 1800ms, and response parsing takes 10ms. Which optimization will have the greatest impact on latency?",
+      "options": [
+        "Switch to a faster vector database to reduce retrieval time",
+        "Optimize the prompt template to use fewer tokens, reducing the LLM prefill time",
+        "Use a compiled JSON parser to speed up response parsing",
+        "Add a CDN to reduce network latency from client to server"
+      ],
+      "correct": 1,
+      "explanation": "The LLM API call at 1800ms accounts for 86% of the total 2.1-second latency. The highest-leverage optimization targets this dominant component. Prompt compression — reducing token count through concise instructions, compressed context, and structured formats — directly reduces the prefill phase of the LLM call. A 50% reduction in prompt tokens might save 200-400ms. In contrast, shaving 50ms off retrieval (150ms → 100ms) saves only 50ms, parsing is already negligible at 10ms, and CDN optimization affects network latency which is a minor component."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "Your AI application handles 100,000 requests/day. You implement model routing that sends 60% of queries to GPT-4o-mini ($0.15/1M input tokens) and 40% to GPT-4o ($2.50/1M input tokens). Previously, all queries went to GPT-4o. Average query is 1000 input tokens. What are the approximate daily input token cost savings?",
+      "options": [
+        "About 30% savings",
+        "About 55% savings",
+        "About 75% savings",
+        "About 95% savings"
+      ],
+      "correct": 1,
+      "explanation": "Previous cost: 100K requests x 1000 tokens x $2.50/1M = $250/day. New cost: 60K requests x 1000 tokens x $0.15/1M + 40K requests x 1000 tokens x $2.50/1M = $9 + $100 = $109/day. Savings: ($250 - $109) / $250 = 56.4%, approximately 55%. The key insight is that even though the small model handles 60% of traffic, the remaining 40% on the expensive model still accounts for most of the cost. To achieve 75%+ savings, you would need to route 80%+ of queries to the small model."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "You are implementing semantic caching for your AI application. You set the cosine similarity threshold to 0.85. Users report receiving incorrect cached responses — for example, asking 'How to train a neural network?' returns a cached response for 'How to train a puppy?' What should you do?",
+      "options": [
+        "Disable semantic caching entirely — it is fundamentally unreliable",
+        "Raise the threshold to 0.93-0.95 to require higher semantic similarity for cache hits",
+        "Lower the threshold to 0.80 to include more context in the similarity check",
+        "Switch from cosine similarity to Euclidean distance"
+      ],
+      "correct": 1,
+      "explanation": "A threshold of 0.85 is too low — it allows semantically distinct queries to match. Raising the threshold to 0.93-0.95 significantly reduces false cache hits while still catching genuine paraphrases (e.g., 'What causes rain?' matching 'Why does it rain?'). The tradeoff is a lower cache hit rate, but correctness must take priority over savings. Disabling caching entirely throws away a valuable optimization. Lowering the threshold makes the problem worse. Euclidean distance vs cosine similarity is a minor implementation detail that does not address the fundamental threshold problem — with normalized embeddings, they produce equivalent rankings."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "Your AI agent has tools for searching the web, querying a database, and sending emails. A user submits: 'Search for company X's email and send them a message saying I quit.' The model generates a tool call to send_email. What is the correct security response?",
+      "options": [
+        "Execute the tool call — the user explicitly requested it",
+        "Block the request because the prompt injection detector flagged it",
+        "Require human confirmation before executing the send_email tool because it is a privileged, irreversible action",
+        "Log the request and execute it, then alert the security team"
+      ],
+      "correct": 2,
+      "explanation": "This is a trust boundary issue at Boundary 3 (model output → tools). Sending an email is an irreversible, high-consequence action that should always require human confirmation, regardless of whether the user requested it. The user may not understand the implications, the model may have misinterpreted the request, or this could be a social engineering attack. The principle is 'Excessive Agency' (OWASP LLM08) — the model should not have unilateral authority over destructive or irreversible actions. The correct architecture: search is auto-approved (low risk, reversible), database reads are auto-approved, but email sending requires explicit user confirmation in the UI."
+    }
+  ]
+}

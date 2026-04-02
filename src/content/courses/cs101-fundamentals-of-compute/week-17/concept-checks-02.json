@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "id": "cc-1",
+      "type": "multiple_choice",
+      "question": "For a message of $n = 100$ bytes on InfiniBand NDR with latency $\\alpha = 1\\;\\mu\\text{s}$ and bandwidth $50$ GB/s (so $\\beta = 2 \\times 10^{-11}$ s/byte), what is the total transfer time?",
+      "options": [
+        "Approximately 1.002 microseconds (latency-dominated)",
+        "Approximately 2.0 microseconds (bandwidth-dominated)",
+        "Approximately 0.002 microseconds (bandwidth only)",
+        "Approximately 50 microseconds (standard Ethernet latency)"
+      ],
+      "correct": 0,
+      "explanation": "Using $T = \\alpha + \\beta \\cdot n = 1 \\times 10^{-6} + 2 \\times 10^{-11} \\times 100 = 1 \\times 10^{-6} + 2 \\times 10^{-9} = 1.002 \\times 10^{-6}$ seconds, or approximately 1.002 microseconds. The bandwidth term contributes only 2 nanoseconds -- negligible compared to the 1 microsecond latency. This message is firmly latency-dominated. The crossover point is $n^* = \\alpha / \\beta = 10^{-6} / (2 \\times 10^{-11}) = 50{,}000$ bytes = 50 KB. Messages below this size are latency-dominated; above it, bandwidth dominates."
+    },
+    {
+      "id": "cc-2",
+      "type": "multiple_choice",
+      "question": "A 3D torus with $k = 16$ in each dimension (4,096 nodes) has per-link bandwidth of 25 GB/s. What is its bisection bandwidth, and how does it compare to a fat tree connecting the same 4,096 nodes with 25 GB/s links?",
+      "options": [
+        "Torus: 12,800 GB/s; Fat tree: 102,400 GB/s (8x more)",
+        "Torus: 512 GB/s; Fat tree: 4,096 GB/s (8x more)",
+        "They have the same bisection bandwidth of 102,400 GB/s",
+        "Torus: 25,600 GB/s; Fat tree: 25,600 GB/s (equal)"
+      ],
+      "correct": 0,
+      "explanation": "For a $k$-ary 3D torus, bisection bandwidth $= 2 \\cdot k^{n-1} \\cdot b = 2 \\cdot 16^2 \\cdot 25 = 2 \\cdot 256 \\cdot 25 = 12{,}800$ GB/s. For a fat tree with $N = 4{,}096$ nodes and link bandwidth $b = 25$ GB/s, bisection bandwidth $= N \\cdot b = 4{,}096 \\times 25 = 102{,}400$ GB/s. The fat tree provides 8x more bisection bandwidth, which is why it dominates for all-to-all traffic patterns. However, the fat tree requires $5N/4 = 5{,}120$ switches, while the torus requires zero switches -- each node connects directly to its 6 neighbors."
+    },
+    {
+      "id": "cc-3",
+      "type": "multiple_choice",
+      "question": "For an allreduce of a 10 MB vector across $P = 1{,}024$ processes on InfiniBand NDR ($\\alpha = 1\\;\\mu\\text{s}$, bandwidth $50$ GB/s), which algorithm is fastest?",
+      "options": [
+        "Recursive Doubling: $T \\approx 10 \\cdot 1 + 10 \\cdot 10^7 / (5 \\times 10^{10}) \\cdot 10 \\approx 2{,}010\\;\\mu\\text{s}$",
+        "Ring: $T \\approx 2 \\cdot 1023 \\cdot 1 + 2 \\cdot (1023/1024) \\cdot 10^7 / (5 \\times 10^{10}) \\approx 2{,}446\\;\\mu\\text{s}$",
+        "Rabenseifner: $T \\approx 2 \\cdot 10 \\cdot 1 + 2 \\cdot (1023/1024) \\cdot 10^7 / (5 \\times 10^{10}) \\approx 420\\;\\mu\\text{s}$",
+        "All three algorithms have approximately equal cost"
+      ],
+      "correct": 2,
+      "explanation": "For $P = 1{,}024$ and $n = 10^7$ bytes: Recursive Doubling: $T = \\log_2(1024) \\cdot 10^{-6} + \\log_2(1024) \\cdot 10^7 \\cdot 2 \\times 10^{-11} = 10 \\times 10^{-6} + 10 \\times 2 \\times 10^{-4} = 10 + 2{,}000 = 2{,}010\\;\\mu\\text{s}$. The bandwidth cost is $10 \\times$ worse than optimal. Ring: $T = 2 \\times 1023 \\times 10^{-6} + 2 \\times (1023/1024) \\times 10^7 \\times 2 \\times 10^{-11} = 2{,}046 + 399.6 \\approx 2{,}446\\;\\mu\\text{s}$. The latency cost is $1023 \\times$ worse than Rabenseifner. Rabenseifner: $T = 2 \\times 10 \\times 10^{-6} + 2 \\times (1023/1024) \\times 10^7 \\times 2 \\times 10^{-11} = 20 + 399.6 \\approx 420\\;\\mu\\text{s}$. Rabenseifner wins by combining logarithmic latency (20 $\\mu$s) with near-optimal bandwidth (400 $\\mu$s)."
+    },
+    {
+      "id": "cc-4",
+      "type": "multiple_choice",
+      "question": "In a dragonfly topology using UGAL (Universal Globally Adaptive Load-balancing) routing, when does a packet take a non-minimal (5-hop) path instead of a minimal (3-hop) path?",
+      "options": [
+        "Always, because non-minimal paths are faster due to shorter queues",
+        "When the destination is in the same group as the source",
+        "When the local queue depth on the minimal path exceeds a threshold, indicating congestion on the direct global link",
+        "Only when the network is operating above 90% utilization"
+      ],
+      "correct": 2,
+      "explanation": "UGAL routing dynamically chooses between minimal (LGL, 3 hops) and non-minimal (LGLLGL, 5 hops via a random intermediate group) paths based on local queue depth. Each switch monitors its output queue lengths. If the queue for the minimal-path output port exceeds a threshold, the switch routes the packet non-minimally through a randomly chosen intermediate group. This doubles the path length but distributes traffic across global links, preventing hot spots. The beauty of this approach is that it is self-regulating: under light load, most packets take minimal paths (low latency); under adversarial traffic patterns, packets automatically spread across the network. HPE Slingshot implements UGAL decisions in silicon at per-packet granularity."
+    }
+  ]
+}

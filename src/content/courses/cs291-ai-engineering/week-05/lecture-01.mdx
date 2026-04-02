@@ -1,0 +1,703 @@
+---
+title: "From Basic RAG to Agentic RAG"
+week: 5
+lecture: 1
+estimatedMinutes: 50
+---
+
+# From Basic RAG to Agentic RAG
+
+In Weeks 2 and 3, you built RAG systems that follow a rigid pipeline: embed query, retrieve top-$k$ chunks, stuff them into a prompt, generate an answer. That architecture works surprisingly well for simple factual questions over clean corpora. But it fails — often silently — on the kinds of queries real users actually ask. "Compare the trade-offs between RLHF and DPO for aligning models under 7B parameters, citing recent benchmarks." That query demands decomposition, multi-hop retrieval, quality assessment, and synthesis. The basic RAG pipeline will dutifully retrieve five vaguely relevant chunks and hallucinate a confident but wrong comparison.
+
+This lecture traces the evolution from that basic pipeline to **agentic RAG** — systems where the retriever is no longer a static function call but an intelligent agent that plans, evaluates, retries, and adapts. We will cover Self-RAG, Corrective RAG, query decomposition, adaptive and iterative retrieval, human-in-the-loop patterns, fault tolerance, and the Model Context Protocol (MCP). By the end, you will understand not just the what but the why: the mathematical frameworks that justify each architectural decision.
+
+## The Failure Modes That Motivated Change
+
+Before we build anything new, let us be precise about what fails. Consider a basic RAG pipeline with retriever $R$, generator $G$, and a corpus $\mathcal{C}$ of $N$ chunks. The pipeline computes:
+
+$$\hat{a} = G\bigl(q, R(q, \mathcal{C}, k)\bigr)$$
+
+where $R(q, \mathcal{C}, k)$ returns the top-$k$ chunks by cosine similarity. There are at least five distinct failure modes:
+
+1. **Retrieval miss**: The relevant chunk exists in $\mathcal{C}$ but is not in the top-$k$. The cosine similarity between the query embedding $\mathbf{e}_q$ and the chunk embedding $\mathbf{e}_c$ falls below the threshold, often because of vocabulary mismatch.
+
+2. **Retrieval noise**: Irrelevant chunks score highly, diluting the context window. The generator hallucinates from the noise.
+
+3. **Query-document gap**: The query is complex or multi-hop, requiring information from chunks that are individually insufficient. No single chunk contains the answer.
+
+4. **Stale retrieval**: The query would be better answered from the model's parametric knowledge. Retrieval adds noise rather than signal.
+
+5. **Synthesis failure**: All relevant chunks are retrieved, but the generator fails to correctly synthesize them — it misattributes, contradicts, or omits key details.
+
+Basic RAG has no mechanism to detect any of these. The system has no self-awareness. Self-RAG, Corrective RAG, and agentic RAG each address a subset of these failures.
+
+## Self-RAG: Teaching the Model to Reflect
+
+Asai et al. (2023) introduced **Self-RAG** in their paper "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection." The core insight is disarmingly simple: train the language model itself to emit **reflection tokens** that assess retrieval quality and generation faithfulness, then use those assessments to control the pipeline.
+
+### Reflection Token Types
+
+Self-RAG introduces four special tokens:
+
+| Token | Meaning | Values |
+|-------|---------|--------|
+| `[Retrieve]` | Should I retrieve for this query? | `yes`, `no`, `continue` |
+| `[IsREL]` | Is the retrieved passage relevant? | `relevant`, `irrelevant` |
+| `[IsSUP]` | Is the generation supported by evidence? | `fully_supported`, `partially_supported`, `no_support` |
+| `[IsUSE]` | Is the response useful overall? | 1-5 scale |
+
+The model is trained on a dataset where a critic model (GPT-4 in the original paper) provides these annotations. At inference time, the model generates these tokens inline — they are part of its vocabulary.
+
+### The Self-RAG Decision Process
+
+Formally, let $x$ be the input, $d$ a retrieved document, and $y$ a candidate generation. Self-RAG computes:
+
+$$\text{score}(y) = \underbrace{P(\text{IsREL} = \text{rel} \mid x, d)}_{\text{relevance}} \cdot \underbrace{P(\text{IsSUP} = \text{sup} \mid x, d, y)}_{\text{support}} \cdot \underbrace{P(\text{IsUSE} = s \mid x, y)}_{\text{utility}}$$
+
+The system generates multiple candidate outputs (with and without retrieval), scores each, and selects the best. This is a form of **best-of-N sampling** where the ranking function incorporates retrieval quality.
+
+Here is a simplified implementation:
+
+```python
+import math
+import json
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
+
+@dataclass
+class Document:
+    id: str
+    content: str
+    relevance_score: float = 0.0
+
+@dataclass
+class ReflectionScores:
+    relevance: float  # P(IsREL = relevant | x, d)
+    support: float    # P(IsSUP = fully_supported | x, d, y)
+    utility: float    # P(IsUSE >= 4 | x, y)
+
+    def composite_score(self, weights: Tuple[float, float, float] = (0.4, 0.4, 0.2)) -> float:
+        """Weighted composite of reflection dimensions."""
+        w_rel, w_sup, w_use = weights
+        return w_rel * self.relevance + w_sup * self.support + w_use * self.utility
+
+@dataclass
+class CandidateResponse:
+    text: str
+    used_retrieval: bool
+    documents: List[Document]
+    reflection: ReflectionScores
+    score: float = 0.0
+
+def simulate_reflection(query: str, docs: List[Document], response: str) -> ReflectionScores:
+    """
+    In a real Self-RAG system, the LLM itself produces reflection tokens.
+    Here we simulate with heuristic scoring.
+    """
+    # Relevance: average document relevance
+    avg_relevance = sum(d.relevance_score for d in docs) / max(len(docs), 1)
+
+    # Support: check keyword overlap between docs and response
+    doc_words = set()
+    for d in docs:
+        doc_words.update(d.content.lower().split())
+    response_words = set(response.lower().split())
+    overlap = len(doc_words & response_words) / max(len(response_words), 1)
+    support = min(overlap * 2, 1.0)
+
+    # Utility: length and specificity heuristic
+    utility = min(len(response.split()) / 50, 1.0)
+
+    return ReflectionScores(
+        relevance=avg_relevance,
+        support=support,
+        utility=utility
+    )
+
+def self_rag_generate(query: str, corpus: List[Document], k: int = 3) -> CandidateResponse:
+    """Self-RAG: generate candidates with and without retrieval, score, select best."""
+    # Step 1: Decide whether to retrieve
+    # In real Self-RAG, the model emits [Retrieve] token
+    should_retrieve = len(query.split()) > 3  # Simple heuristic
+
+    candidates = []
+
+    if should_retrieve:
+        # Retrieve top-k
+        sorted_docs = sorted(corpus, key=lambda d: d.relevance_score, reverse=True)
+        retrieved = sorted_docs[:k]
+
+        # Generate with retrieval (simulated)
+        context = " ".join(d.content for d in retrieved)
+        response_with_retrieval = f"Based on retrieved evidence: {context[:100]}..."
+
+        reflection = simulate_reflection(query, retrieved, response_with_retrieval)
+        candidates.append(CandidateResponse(
+            text=response_with_retrieval,
+            used_retrieval=True,
+            documents=retrieved,
+            reflection=reflection,
+            score=reflection.composite_score()
+        ))
+
+    # Generate without retrieval (parametric knowledge)
+    response_no_retrieval = f"From parametric knowledge about: {query}"
+    reflection_no_ret = simulate_reflection(query, [], response_no_retrieval)
+    candidates.append(CandidateResponse(
+        text=response_no_retrieval,
+        used_retrieval=False,
+        documents=[],
+        reflection=reflection_no_ret,
+        score=reflection_no_ret.composite_score()
+    ))
+
+    # Select best candidate
+    best = max(candidates, key=lambda c: c.score)
+    return best
+
+# Example usage
+corpus = [
+    Document("d1", "RLHF uses reward models trained on human preferences", 0.85),
+    Document("d2", "DPO directly optimizes policy without reward model", 0.80),
+    Document("d3", "The weather today is sunny", 0.1),
+    Document("d4", "Small models under 7B show different alignment dynamics", 0.75),
+]
+
+result = self_rag_generate("Compare RLHF and DPO for small models", corpus)
+print(f"Used retrieval: {result.used_retrieval}")
+print(f"Score: {result.score:.3f}")
+print(f"Reflection - Relevance: {result.reflection.relevance:.2f}, "
+      f"Support: {result.reflection.support:.2f}, "
+      f"Utility: {result.reflection.utility:.2f}")
+```
+
+The key contribution of Self-RAG is that the reflection is **intrinsic to the model**, not an external classifier. The model learns when retrieval helps and when it hurts. On knowledge-intensive benchmarks, Self-RAG outperforms vanilla RAG by 10-20% on factual accuracy while using retrieval less often — it learns to be selective.
+
+<ConceptCheck id="cc-1" />
+
+## Corrective RAG: When Retrieval Goes Wrong
+
+If Self-RAG asks "should I retrieve?", **Corrective RAG** (CRAG) by Yan et al. (2024) asks "was my retrieval good enough?" CRAG introduces an explicit **retrieval evaluator** that runs after retrieval and before generation, triggering corrective actions when quality is low.
+
+### The CRAG Decision Framework
+
+CRAG classifies retrieval results into three categories based on a confidence score $\sigma$:
+
+$$\text{action} = \begin{cases} \text{CORRECT} & \text{if } \sigma \geq \tau_{\text{upper}} \\ \text{AMBIGUOUS} & \text{if } \tau_{\text{lower}} \leq \sigma < \tau_{\text{upper}} \\ \text{INCORRECT} & \text{if } \sigma < \tau_{\text{lower}} \end{cases}$$
+
+where $\tau_{\text{upper}}$ and $\tau_{\text{lower}}$ are thresholds (typically 0.7 and 0.3). Each action triggers a different downstream behavior:
+
+- **CORRECT**: Proceed with retrieved documents. Optionally decompose and strip irrelevant sentences.
+- **AMBIGUOUS**: Augment retrieved documents with web search results. Combine both knowledge sources.
+- **INCORRECT**: Discard retrieved documents entirely. Fall back to web search or parametric knowledge.
+
+The retrieval evaluator itself can be a lightweight classifier (a fine-tuned T5 or even a cross-encoder). What matters is that the evaluation happens at inference time, creating a feedback loop:
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+from typing import List, Callable
+
+class RetrievalQuality(Enum):
+    CORRECT = "correct"
+    AMBIGUOUS = "ambiguous"
+    INCORRECT = "incorrect"
+
+@dataclass
+class CRAGConfig:
+    upper_threshold: float = 0.7
+    lower_threshold: float = 0.3
+    max_retries: int = 2
+
+def evaluate_retrieval(query: str, documents: List[Document]) -> float:
+    """
+    Score retrieval quality. In production, this is a fine-tuned
+    cross-encoder or an LLM-as-judge call.
+    """
+    if not documents:
+        return 0.0
+    # Simulate: average relevance with query-doc overlap boost
+    query_terms = set(query.lower().split())
+    scores = []
+    for doc in documents:
+        doc_terms = set(doc.content.lower().split())
+        term_overlap = len(query_terms & doc_terms) / max(len(query_terms), 1)
+        combined = 0.6 * doc.relevance_score + 0.4 * term_overlap
+        scores.append(combined)
+    return sum(scores) / len(scores)
+
+def corrective_rag(
+    query: str,
+    corpus: List[Document],
+    web_search: Callable[[str], List[Document]],
+    config: CRAGConfig = CRAGConfig()
+) -> dict:
+    """CRAG pipeline with quality-based corrective actions."""
+    # Initial retrieval
+    sorted_docs = sorted(corpus, key=lambda d: d.relevance_score, reverse=True)
+    retrieved = sorted_docs[:3]
+
+    confidence = evaluate_retrieval(query, retrieved)
+
+    if confidence >= config.upper_threshold:
+        quality = RetrievalQuality.CORRECT
+        final_docs = retrieved
+        action = "Used retrieved documents directly"
+    elif confidence >= config.lower_threshold:
+        quality = RetrievalQuality.AMBIGUOUS
+        web_docs = web_search(query)
+        final_docs = retrieved + web_docs
+        action = "Augmented with web search"
+    else:
+        quality = RetrievalQuality.INCORRECT
+        final_docs = web_search(query)
+        action = "Discarded retrieval, used web search only"
+
+    return {
+        "quality": quality.value,
+        "confidence": round(confidence, 3),
+        "action": action,
+        "num_documents": len(final_docs),
+        "documents": final_docs
+    }
+
+# Simulated web search
+def mock_web_search(query: str) -> List[Document]:
+    return [Document("web-1", f"Web result for: {query}", 0.65)]
+
+result = corrective_rag(
+    "Compare RLHF and DPO for small models",
+    corpus,
+    mock_web_search
+)
+print(f"Quality: {result['quality']}")
+print(f"Confidence: {result['confidence']}")
+print(f"Action: {result['action']}")
+```
+
+The crucial difference between Self-RAG and CRAG is architectural: Self-RAG integrates reflection into the generator model itself, while CRAG uses an external evaluator. In practice, you can combine both — use Self-RAG's retrieve/no-retrieve decision, then apply CRAG's quality-based correction on the retrieval results.
+
+## Query Decomposition: Breaking Complex Queries Apart
+
+Many retrieval failures stem from query complexity, not retrieval quality. "What are the key differences between RLHF and DPO in terms of training stability, computational cost, and empirical performance on models under 7B parameters?" contains at least three sub-questions. A single embedding cannot capture all of them.
+
+**Query decomposition** breaks a complex query $q$ into sub-queries $\{q_1, q_2, \ldots, q_m\}$, retrieves for each, and synthesizes:
+
+$$\hat{a} = G\Bigl(q, \bigcup_{i=1}^{m} R(q_i, \mathcal{C}, k)\Bigr)$$
+
+This is a well-studied technique. Peng et al. (2024) showed that even simple LLM-based decomposition improves multi-hop QA by 15-25% over single-query retrieval. The decomposition itself can be done with a lightweight model — the quality of the sub-questions matters more than the model generating them.
+
+```python
+from dataclasses import dataclass
+from typing import List, Dict, Set
+
+@dataclass
+class SubQuery:
+    text: str
+    focus: str  # What aspect this sub-query targets
+    retrieved_docs: List[Document] = None
+
+    def __post_init__(self):
+        if self.retrieved_docs is None:
+            self.retrieved_docs = []
+
+def decompose_query(query: str) -> List[SubQuery]:
+    """
+    Decompose a complex query into sub-queries.
+    In production, this uses an LLM. Here we use pattern matching.
+    """
+    # Detect comparison patterns
+    comparison_markers = ["compare", "difference", "versus", "vs", "between"]
+    aspect_markers = ["in terms of", "regarding", "for", "with respect to"]
+
+    sub_queries = []
+
+    # Simple heuristic decomposition
+    words = query.lower().split()
+    is_comparison = any(m in query.lower() for m in comparison_markers)
+
+    if is_comparison:
+        # Extract entities being compared
+        sub_queries.append(SubQuery(
+            text=f"What is RLHF and how does it work?",
+            focus="entity_1"
+        ))
+        sub_queries.append(SubQuery(
+            text=f"What is DPO and how does it work?",
+            focus="entity_2"
+        ))
+
+        # Extract aspects
+        for marker in aspect_markers:
+            if marker in query.lower():
+                idx = query.lower().index(marker) + len(marker)
+                aspects_text = query[idx:].strip()
+                # Split on commas/and
+                aspects = [a.strip().strip("?.,") for a in aspects_text.replace(" and ", ",").split(",")]
+                for aspect in aspects:
+                    if aspect:
+                        sub_queries.append(SubQuery(
+                            text=f"How does {aspect} compare between methods?",
+                            focus=f"aspect_{aspect}"
+                        ))
+    else:
+        sub_queries.append(SubQuery(text=query, focus="original"))
+
+    return sub_queries
+
+def retrieve_for_subqueries(sub_queries: List[SubQuery], corpus: List[Document], k: int = 2) -> List[Document]:
+    """Retrieve for each sub-query and deduplicate."""
+    seen_ids: Set[str] = set()
+    all_docs = []
+
+    for sq in sub_queries:
+        # In production: embed sub_query, search vector DB
+        # Here: simple keyword matching
+        query_terms = set(sq.text.lower().split())
+        scored = []
+        for doc in corpus:
+            doc_terms = set(doc.content.lower().split())
+            overlap = len(query_terms & doc_terms)
+            scored.append((doc, overlap + doc.relevance_score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        for doc, _ in scored[:k]:
+            if doc.id not in seen_ids:
+                seen_ids.add(doc.id)
+                all_docs.append(doc)
+                sq.retrieved_docs.append(doc)
+
+    return all_docs
+
+# Demo
+query = "Compare RLHF and DPO in terms of training stability and computational cost"
+sub_queries = decompose_query(query)
+print(f"Decomposed into {len(sub_queries)} sub-queries:")
+for sq in sub_queries:
+    print(f"  [{sq.focus}] {sq.text}")
+
+docs = retrieve_for_subqueries(sub_queries, corpus)
+print(f"\nRetrieved {len(docs)} unique documents across all sub-queries")
+```
+
+<ConceptCheck id="cc-2" />
+
+## Adaptive Retrieval: To Retrieve or Not to Retrieve
+
+Not every query benefits from retrieval. "What is 2 + 2?" does not need a vector database lookup. More subtly, "Explain the intuition behind attention mechanisms" may be better served by parametric knowledge than by retrieved chunks that might be inconsistent or overly specific.
+
+**Adaptive retrieval** formalizes this decision. Let $U_R(q)$ be the expected utility of retrieving for query $q$ and $U_P(q)$ the expected utility of using parametric knowledge alone. We retrieve if and only if:
+
+$$U_R(q) - U_P(q) > c$$
+
+where $c$ is a cost term accounting for latency, token usage, and potential noise introduction. Mallen et al. (2023) showed that LLMs with over 100B parameters can reliably answer questions about "popular" entities from parametric knowledge, while "long-tail" entities require retrieval. Their popularity metric is simply Wikipedia page view count — a delightfully practical proxy.
+
+In practice, adaptive retrieval can be implemented via:
+1. **Query classification**: Train a lightweight classifier to predict whether retrieval will help.
+2. **Confidence thresholding**: Let the model attempt a parametric answer, measure confidence (e.g., token log-probabilities), retrieve only if confidence is below a threshold.
+3. **Self-RAG's `[Retrieve]` token**: Let the model decide inline.
+
+The confidence-based approach is particularly elegant because it requires no additional training:
+
+$$P(\text{retrieve} \mid q) = \begin{cases} 1 & \text{if } \max_y P(y \mid q) < \tau \\ 0 & \text{otherwise} \end{cases}$$
+
+where $\tau$ is typically calibrated on a held-out set.
+
+## Iterative Retrieval: Multi-Hop Reasoning Over Documents
+
+Some questions cannot be answered in a single retrieval step. "Who was the doctoral advisor of the person who invented transformers?" requires first identifying Ashish Vaswani, then retrieving information about his doctoral advisor. This is **multi-hop retrieval**.
+
+The iterative retrieval pattern interleaves retrieval and reasoning:
+
+```
+Step 1: Retrieve for q → get docs D₁ → reason → extract intermediate answer a₁
+Step 2: Formulate q₂ from (q, a₁) → retrieve → get docs D₂ → reason → extract a₂
+...
+Step n: Synthesize final answer from {a₁, ..., aₙ}
+```
+
+This is precisely what IRCoT (Trivedi et al., 2023) formalizes: interleaving chain-of-thought reasoning with retrieval at each step. The key challenge is **termination**: when should the system stop retrieving? IRCoT uses the model's own generation — if the model produces a final answer token without requesting more information, the loop terminates.
+
+The mathematical structure here is a **fixed-point iteration**. Define the knowledge state $K_t$ at step $t$ as the set of facts accumulated so far. The system converges when $K_{t+1} = K_t$ — no new relevant information is being added:
+
+$$K_{t+1} = K_t \cup \text{extract}\bigl(G(q, K_t, R(q_t, \mathcal{C}, k))\bigr)$$
+
+In practice, you also need a maximum iteration count to prevent infinite loops on unanswerable queries.
+
+## Human-in-the-Loop Patterns for RAG
+
+Production agentic RAG systems do not operate in a vacuum. There are queries where the system should not act autonomously — sensitive decisions, ambiguous requirements, high-stakes outputs. **Human-in-the-loop (HITL) patterns** integrate human judgment into the agent loop.
+
+### Approval Gates
+
+An approval gate pauses execution before critical actions and requests human approval:
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Optional
+
+class ApprovalStatus(Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    MODIFIED = "modified"
+
+@dataclass
+class ApprovalRequest:
+    action: str
+    description: str
+    risk_level: str  # "low", "medium", "high", "critical"
+    context: dict
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    human_feedback: Optional[str] = None
+
+class ApprovalGate:
+    def __init__(self, auto_approve_threshold: str = "low"):
+        self.thresholds = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        self.auto_threshold = self.thresholds[auto_approve_threshold]
+        self.pending_requests: list = []
+
+    def request_approval(self, action: str, description: str,
+                         risk_level: str, context: dict) -> ApprovalRequest:
+        request = ApprovalRequest(
+            action=action,
+            description=description,
+            risk_level=risk_level,
+            context=context
+        )
+        risk_value = self.thresholds.get(risk_level, 3)
+        if risk_value <= self.auto_threshold:
+            request.status = ApprovalStatus.APPROVED
+        else:
+            self.pending_requests.append(request)
+        return request
+
+    def process_approval(self, request: ApprovalRequest,
+                         approved: bool, feedback: str = "") -> ApprovalRequest:
+        request.status = ApprovalStatus.APPROVED if approved else ApprovalStatus.REJECTED
+        request.human_feedback = feedback
+        if request in self.pending_requests:
+            self.pending_requests.remove(request)
+        return request
+
+gate = ApprovalGate(auto_approve_threshold="low")
+
+# Low-risk action: auto-approved
+req1 = gate.request_approval(
+    "search", "Search internal docs for product specs",
+    "low", {"query": "product spec v2"}
+)
+print(f"Search: {req1.status.value}")  # approved
+
+# High-risk action: requires approval
+req2 = gate.request_approval(
+    "external_api_call", "Send data to external API",
+    "high", {"endpoint": "api.external.com"}
+)
+print(f"External API: {req2.status.value}")  # pending
+print(f"Pending requests: {len(gate.pending_requests)}")
+```
+
+### Feedback Loops
+
+Beyond binary approval, humans can provide richer feedback that improves the system over time:
+- **Preference feedback**: "Answer A is better than Answer B" — directly applicable to reward modeling or DPO-style training of the retrieval evaluator.
+- **Correction feedback**: "The answer is wrong because X" — can be used to update the knowledge base or fine-tune the generator.
+- **Query refinement**: "What I actually meant was Y" — improves the query decomposition model.
+
+<ConceptCheck id="cc-3" />
+
+## Fault Tolerance for Agentic RAG
+
+Agentic RAG systems have more moving parts than basic RAG — retriever, evaluator, decomposer, web search, LLM generator — and each can fail. Production systems need fault tolerance patterns borrowed from distributed systems engineering.
+
+### Retry with Exponential Backoff
+
+When a retrieval service or LLM API fails transiently, retry with increasing delays:
+
+$$\text{delay}(n) = \min\bigl(b^n + \epsilon, d_{\max}\bigr)$$
+
+where $b$ is the base (typically 2), $n$ is the attempt number, $\epsilon \sim \text{Uniform}(0, 1)$ is jitter to prevent thundering herd, and $d_{\max}$ caps the maximum delay.
+
+### Circuit Breaker
+
+If a component fails repeatedly, stop calling it temporarily. The circuit breaker pattern tracks failure rate over a sliding window and "opens" (stops calls) when failures exceed a threshold:
+
+```python
+import time
+from dataclasses import dataclass, field
+
+@dataclass
+class CircuitBreaker:
+    failure_threshold: int = 5
+    recovery_timeout: float = 30.0  # seconds
+    failures: int = 0
+    last_failure_time: float = 0.0
+    state: str = "closed"  # closed, open, half-open
+
+    def call(self, func, *args, **kwargs):
+        if self.state == "open":
+            if time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = "half-open"
+            else:
+                raise RuntimeError("Circuit breaker is open")
+
+        try:
+            result = func(*args, **kwargs)
+            if self.state == "half-open":
+                self.state = "closed"
+                self.failures = 0
+            return result
+        except Exception as e:
+            self.failures += 1
+            self.last_failure_time = time.time()
+            if self.failures >= self.failure_threshold:
+                self.state = "open"
+            raise
+
+breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=10.0)
+print(f"Initial state: {breaker.state}")
+print(f"Failure threshold: {breaker.failure_threshold}")
+```
+
+### Checkpoint and Resume
+
+For multi-step agentic workflows, checkpoint intermediate results so that failures in step $n$ do not require re-executing steps $1$ through $n-1$. This is especially important for deep research agents that may execute dozens of retrieval and reasoning steps.
+
+## The Model Context Protocol (MCP)
+
+The **Model Context Protocol** is an open standard, published by Anthropic in late 2024, that defines how AI applications connect to external data sources and tools. Think of it as USB-C for AI — a universal interface that replaces bespoke integrations.
+
+### Architecture
+
+MCP follows a client-server architecture with three roles:
+
+1. **Host**: The application the user interacts with (e.g., Claude Desktop, an IDE, your custom app).
+2. **Client**: A protocol client maintained by the host. Each client has a 1:1 relationship with a server.
+3. **Server**: A lightweight program that exposes capabilities via the MCP standard.
+
+The protocol defines three core primitives:
+
+| Primitive | Description | Direction |
+|-----------|-------------|-----------|
+| **Resources** | Data the server exposes (files, DB rows, API responses). Like GET endpoints. | Server → Client |
+| **Tools** | Functions the server exposes that the model can invoke. Like POST endpoints. | Client → Server |
+| **Prompts** | Pre-built prompt templates the server provides. | Server → Client |
+
+### Why MCP Matters for Agentic RAG
+
+Without MCP, every tool integration is bespoke: you write a custom function, parse its output, handle errors, manage authentication. With $n$ tools and $m$ AI applications, you need $n \times m$ integrations. MCP reduces this to $n + m$ — each tool implements the MCP server interface once, and each application implements the MCP client once.
+
+For agentic RAG specifically, MCP enables:
+- **Dynamic tool discovery**: The agent can discover available tools at runtime, not just compile time.
+- **Standardized resources**: The retriever, web search, database, and file system all expose data through the same interface.
+- **Composability**: You can swap retrieval backends, add new data sources, or change the search strategy without modifying the agent's core logic.
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Callable
+
+@dataclass
+class MCPResource:
+    uri: str
+    name: str
+    description: str
+    mime_type: str = "text/plain"
+
+@dataclass
+class MCPTool:
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+    handler: Callable = None
+
+@dataclass
+class MCPServer:
+    name: str
+    version: str
+    resources: List[MCPResource] = field(default_factory=list)
+    tools: List[MCPTool] = field(default_factory=list)
+
+    def add_resource(self, resource: MCPResource):
+        self.resources.append(resource)
+
+    def add_tool(self, tool: MCPTool):
+        self.tools.append(tool)
+
+    def list_tools(self) -> List[Dict[str, Any]]:
+        return [{"name": t.name, "description": t.description,
+                 "parameters": t.parameters} for t in self.tools]
+
+    def list_resources(self) -> List[Dict[str, Any]]:
+        return [{"uri": r.uri, "name": r.name,
+                 "description": r.description} for r in self.resources]
+
+# Example: build an MCP server for a RAG system
+rag_server = MCPServer(name="rag-server", version="1.0.0")
+
+rag_server.add_resource(MCPResource(
+    uri="rag://corpus/cs291",
+    name="CS 291 Course Corpus",
+    description="All lecture notes and readings for CS 291",
+    mime_type="application/json"
+))
+
+rag_server.add_tool(MCPTool(
+    name="semantic_search",
+    description="Search the corpus using semantic similarity",
+    parameters={"query": "string", "top_k": "integer", "threshold": "float"}
+))
+
+rag_server.add_tool(MCPTool(
+    name="keyword_search",
+    description="Search the corpus using BM25 keyword matching",
+    parameters={"query": "string", "top_k": "integer"}
+))
+
+print(f"Server: {rag_server.name} v{rag_server.version}")
+print(f"Resources: {len(rag_server.resources)}")
+print(f"Tools: {len(rag_server.tools)}")
+for t in rag_server.list_tools():
+    print(f"  - {t['name']}: {t['description']}")
+```
+
+<ConceptCheck id="cc-4" />
+
+## Putting It All Together: The Agentic RAG Architecture
+
+An agentic RAG system combines all of these patterns into a coherent architecture. The agent operates in a loop:
+
+1. **Receive query** → Decide if decomposition is needed.
+2. **For each sub-query** → Decide if retrieval is needed (adaptive retrieval).
+3. **If retrieving** → Execute retrieval → Evaluate quality (CRAG) → Correct if needed.
+4. **Generate candidate response** → Self-assess (Self-RAG reflection).
+5. **If quality is insufficient** → Re-plan, re-retrieve, or escalate (HITL).
+6. **If quality is sufficient** → Return response.
+
+This is not a pipeline — it is a **graph** with cycles. The agent can loop back to any previous step based on its self-assessment. The termination condition is either quality convergence or a maximum iteration count.
+
+The mathematical formulation is a **Markov Decision Process** (MDP) where:
+- **State** $s_t = (q, K_t, h_t)$: the query, accumulated knowledge, and interaction history.
+- **Actions** $a_t \in \{\text{retrieve}, \text{decompose}, \text{search\_web}, \text{generate}, \text{escalate}\}$.
+- **Transition** $T(s_{t+1} \mid s_t, a_t)$: determined by the action's outcome.
+- **Reward** $r_t$: based on response quality metrics (relevance, faithfulness, completeness).
+
+The agent's policy $\pi(a_t \mid s_t)$ is the LLM itself, conditioned on the current state encoded as a prompt. Training this policy is the frontier of agentic RAG research — Asai et al.'s Self-RAG is one approach, but we are far from optimal policies for the full agentic loop.
+
+## Summary
+
+We have traveled from a static pipeline to an intelligent agent. The key ideas:
+
+| Technique | Addresses | Core Mechanism |
+|-----------|-----------|----------------|
+| Self-RAG | When to retrieve, response quality | Reflection tokens in the model |
+| Corrective RAG | Bad retrieval results | External evaluator + corrective actions |
+| Query decomposition | Complex multi-aspect queries | Break into sub-queries |
+| Adaptive retrieval | Unnecessary retrieval | Confidence thresholding |
+| Iterative retrieval | Multi-hop reasoning | Interleaved retrieval + reasoning |
+| HITL | High-stakes decisions | Approval gates, feedback loops |
+| Fault tolerance | Component failures | Retry, circuit breaker, checkpoint |
+| MCP | Tool integration | Standardized protocol |
+
+In the next lecture, we will build on this foundation to construct **deep research agents** — systems that go beyond single-turn Q&A to conduct multi-step research over large document collections, with source verification and structured synthesis.
